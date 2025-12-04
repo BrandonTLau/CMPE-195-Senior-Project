@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 
-const UploadPage = () => {
+const UploadPage = ({onBack}) => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [dragActive, setDragActive] = useState(false);
 
@@ -66,7 +66,8 @@ const UploadPage = () => {
             </svg>
             <span style={styles.logoText}>NoteScan</span>
           </div>
-          <button style={styles.backButton}>← Back</button>
+          <button style={styles.backButton} onClick={onBack}>← Back</button>
+
         </div>
 
         {/* Upload Box */}
