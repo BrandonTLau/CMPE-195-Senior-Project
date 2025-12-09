@@ -1,40 +1,56 @@
 import { useState } from "react";
 import LandingPage from "./LandingPage";
-import UploadPage from "./UploadPage";
-import ProcessingScreen from "./ProcessingPage"; 
-import ResultsScreen from "./ResultsPage";
+import LoginPage from "./LoginPage";
+import UserDashboard from "./UserDashboard";
+import ProcessingPage from "./ProcessingPage";
+import ResultsPage from "./ResultsPage";
 
 function App() {
   const [screen, setScreen] = useState("landing");
 
   return (
     <>
-      {/* Landing Page */}
       {screen === "landing" && (
-        <LandingPage onStart={() => setScreen("upload")} />
+        <LandingPage
+          onStart={() => setScreen("login")}
+          onSignIn={() => setScreen("login")}
+        />
       )}
 
-      {/* Upload Page */}
-      {screen === "upload" && (
-        <UploadPage
+      {screen === "login" && (
+        <LoginPage
           onBack={() => setScreen("landing")}
+          onLoginSuccess={() => setScreen("dashboard")}
+        />
+      )}
+
+      
+      {screen === "dashboard" && (
+        <UserDashboard
+          showUploadPage={false}
+          onLogout={() => setScreen("landing")}
+          onNewScan={() => setScreen("dashboard_upload")}
+        />
+      )}
+
+      
+      {screen === "dashboard_upload" && (
+        <UserDashboard
+          showUploadPage={true}
+          onLogout={() => setScreen("landing")}
+          onNewScan={() => setScreen("dashboard_upload")}
           onProcess={() => setScreen("processing")}
         />
       )}
 
-      {/* Processing Page */}
+      
       {screen === "processing" && (
-        <ProcessingScreen
-          onSkip={() => setScreen("results")}
-          onAutoFinish={() => setScreen("results")}
-        />
+        <ProcessingPage onFinish={() => setScreen("results")} />
       )}
 
-      {/* Results Page */}
+      
       {screen === "results" && (
-        <ResultsScreen
-          onBack={() => setScreen("processing")}
-        />
+        <ResultsPage onBack={() => setScreen("dashboard")} />
       )}
     </>
   );
