@@ -203,7 +203,7 @@ Applications include image recognition, natural language processing, and predict
   );
 };
 
-// Inline styles
+
 const styles = {
   container: {
     minHeight: '100vh',

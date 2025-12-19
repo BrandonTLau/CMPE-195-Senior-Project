@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from "react";
 import UploadPage from "./UploadPage";
+import ProcessingScreen from "./ProcessingPage";
+import ResultsPage from "./ResultsPage";
+import NotesLibrary from "./NotesLibrary";
 
-const UserDashboard = ({ onLogout, onProcess, onNewScan, showUploadPage }) => {
+const UserDashboard = ({
+  onLogout,
+  onProcess,
+  onFinishProcessing,
+  onNewScan,
+  showUploadPage = false,
+  showProcessingPage = false,
+  showResultsPage = false,
+}) => {
   const [activeTab, setActiveTab] = useState("dashboard");
 
-  // Auto-open Upload tab when coming from App.jsx
-  useEffect(() => {
-    if (showUploadPage) {
-      setActiveTab("upload");
-    }
-  }, [showUploadPage]);
-
-  // Remove body margins (your layout fix)
+  // Keep layout flush (same as your other pages)
   useEffect(() => {
     const body = document.body;
     const html = document.documentElement;
@@ -34,7 +38,24 @@ const UserDashboard = ({ onLogout, onProcess, onNewScan, showUploadPage }) => {
     };
   }, []);
 
-  const handleNewScanClick = () => {
+  // Sync internal view with App.jsx
+  useEffect(() => {
+    if (showProcessingPage) {
+      setActiveTab("processing");
+      return;
+    }
+    if (showResultsPage) {
+      setActiveTab("results");
+      return;
+    }
+    if (showUploadPage) {
+      setActiveTab("upload");
+      return;
+    }
+    setActiveTab("dashboard");
+  }, [showUploadPage, showProcessingPage, showResultsPage]);
+
+  const handleNewScan = () => {
     setActiveTab("upload");
     if (onNewScan) onNewScan();
   };
@@ -42,57 +63,140 @@ const UserDashboard = ({ onLogout, onProcess, onNewScan, showUploadPage }) => {
   return (
     <div style={styles.container}>
       <div style={styles.layout}>
-        
         {/* SIDEBAR */}
         <aside style={styles.sidebar}>
           <div style={styles.sidebarContent}>
-
             {/* Logo */}
             <div style={styles.logo}>
               <div style={styles.logoIcon}>
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: "24px", height: "24px" }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                <svg
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  style={{ width: "24px", height: "24px" }}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
                 </svg>
               </div>
               <span style={styles.logoText}>NoteScan</span>
             </div>
 
-            {/* NAVIGATION */}
+            {/* Navigation */}
             <nav style={styles.nav}>
               <button
-                style={{ ...styles.navItem, ...(activeTab === "dashboard" ? styles.navItemActive : {}) }}
+                style={{
+                  ...styles.navItem,
+                  ...(activeTab === "dashboard" ? styles.navItemActive : {}),
+                }}
                 onClick={() => setActiveTab("dashboard")}
               >
+                <svg style={styles.navIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                  />
+                </svg>
                 Dashboard
               </button>
 
               <button
-                style={{ ...styles.navItem, ...(activeTab === "upload" ? styles.navItemActive : {}) }}
-                onClick={handleNewScanClick}
+                style={{
+                  ...styles.navItem,
+                  ...(activeTab === "upload" ? styles.navItemActive : {}),
+                }}
+                onClick={handleNewScan}
               >
+                <svg style={styles.navIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  />
+                </svg>
                 New Scan
               </button>
 
               <button
-                style={{ ...styles.navItem, ...(activeTab === "notes" ? styles.navItemActive : {}) }}
+                style={{
+                  ...styles.navItem,
+                  ...(activeTab === "notes" ? styles.navItemActive : {}),
+                }}
                 onClick={() => setActiveTab("notes")}
               >
+                <svg style={styles.navIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                  />
+                </svg>
                 My Notes
               </button>
 
               <button
-                style={{ ...styles.navItem, ...(activeTab === "favorites" ? styles.navItemActive : {}) }}
+                style={{
+                  ...styles.navItem,
+                  ...(activeTab === "favorites" ? styles.navItemActive : {}),
+                }}
                 onClick={() => setActiveTab("favorites")}
               >
+                <svg style={styles.navIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+                  />
+                </svg>
                 Favorites
               </button>
+
+              {/* Optional: show Processing/Results states as highlighted too */}
+              {activeTab === "processing" && (
+                <button style={{ ...styles.navItem, ...styles.navItemActive }} disabled>
+                  <svg style={styles.navIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6l4 2" />
+                  </svg>
+                  Processing…
+                </button>
+              )}
+
+              {activeTab === "results" && (
+                <button style={{ ...styles.navItem, ...styles.navItemActive }} disabled>
+                  <svg style={styles.navIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  Results
+                </button>
+              )}
             </nav>
 
             <div style={{ flexGrow: 1 }} />
 
-            {/* LOGOUT */}
+            {/* Logout */}
             <button style={styles.logoutButton} onClick={onLogout}>
+              <svg style={styles.navIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                />
+              </svg>
               Logout
             </button>
           </div>
@@ -101,22 +205,20 @@ const UserDashboard = ({ onLogout, onProcess, onNewScan, showUploadPage }) => {
         {/* MAIN CONTENT */}
         <main style={styles.main}>
           <div style={styles.wrapper}>
-
-            {/* DASHBOARD TAB */}
             {activeTab === "dashboard" && (
               <>
                 <div style={styles.header}>
                   <div>
                     <h1 style={styles.title}>Welcome back!</h1>
-                    <p style={styles.subtitle}>Transform your handwritten notes into searchable text</p>
+                    <p style={styles.subtitle}>
+                      Transform your handwritten notes into searchable digital text
+                    </p>
                   </div>
-
-                  <button style={styles.newScanButton} onClick={handleNewScanClick}>
+                  <button style={styles.newScanButton} onClick={handleNewScan}>
                     New Scan
                   </button>
                 </div>
 
-                {/* STATS GRID */}
                 <div style={styles.statsGrid}>
                   <div style={{ ...styles.statCard, ...styles.statCardTeal }}>
                     <div style={styles.statLabel}>Total Scans</div>
@@ -134,27 +236,45 @@ const UserDashboard = ({ onLogout, onProcess, onNewScan, showUploadPage }) => {
                   </div>
                 </div>
 
-                {/* CALL TO ACTION */}
                 <div style={styles.actionCard}>
                   <h2 style={styles.actionTitle}>Ready to scan a new note?</h2>
                   <p style={styles.actionSubtitle}>
-                    Upload your handwritten notes and get instant digital transcription with AI-powered accuracy.
+                    Upload your handwritten notes and get instant digital transcription.
                   </p>
-                  <button style={styles.actionButton} onClick={handleNewScanClick}>
+                  <button style={styles.actionButton} onClick={handleNewScan}>
                     Start New Scan →
                   </button>
                 </div>
               </>
             )}
 
-            {/* UPLOAD TAB */}
+            {/* UPLOAD (embedded) */}
             {activeTab === "upload" && (
-              <UploadPage onProcess={onProcess} />
+              <UploadPage
+                onProcess={() => {
+                  setActiveTab("processing");
+                  if (onProcess) onProcess();
+                }}
+              />
             )}
 
-            {activeTab === "notes" && <h2>My Notes (Coming Soon)</h2>}
-            {activeTab === "favorites" && <h2>Favorites (Coming Soon)</h2>}
+            {/* PROCESSING (embedded) */}
+            {activeTab === "processing" && (
+              <ProcessingScreen
+                onAutoFinish={() => {
+                  setActiveTab("results");
+                  if (onFinishProcessing) onFinishProcessing();
+                }}
+              />
+            )}
 
+            {/* RESULTS (embedded) */}
+            {activeTab === "results" && <ResultsPage />}
+
+            {/* ✅ NOTES LIBRARY (embedded) */}
+            {activeTab === "notes" && <NotesLibrary onNewScan={handleNewScan} />}
+
+            {activeTab === "favorites" && <h2>Favorites (Coming Soon)</h2>}
           </div>
         </main>
       </div>
@@ -162,14 +282,11 @@ const UserDashboard = ({ onLogout, onProcess, onNewScan, showUploadPage }) => {
   );
 };
 
-
-/* FULL STYLES (unchanged from your version) */
 const styles = {
   container: {
     minHeight: "100vh",
     backgroundColor: "#E8EEF5",
-    fontFamily:
-      "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
   },
 
   layout: {
@@ -239,6 +356,11 @@ const styles = {
 
   navItemActive: {
     background: "rgba(255,255,255,0.25)",
+  },
+
+  navIcon: {
+    width: "20px",
+    height: "20px",
   },
 
   logoutButton: {

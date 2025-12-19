@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const ProcessingScreen = ({ onSkip, onAutoFinish }) => {
+const ProcessingPage = ({ onSkip, onAutoFinish }) => {
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState(1);
 
@@ -193,4 +193,4 @@ const styles = {
   },
 };
 
-export default ProcessingScreen;
+export default ProcessingPage;

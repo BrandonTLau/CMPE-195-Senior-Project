@@ -28,7 +28,7 @@ const LandingPage = ({ onStart, onSignIn }) => {
   return (
     <div style={styles.container}>
 
-      {/* nav bar */}
+      
       <nav style={styles.nav}>
         <div style={styles.logo}>
           <svg style={styles.logoIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">

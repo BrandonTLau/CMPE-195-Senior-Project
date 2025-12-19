@@ -2,8 +2,6 @@ import { useState } from "react";
 import LandingPage from "./LandingPage";
 import LoginPage from "./LoginPage";
 import UserDashboard from "./UserDashboard";
-import ProcessingPage from "./ProcessingPage";
-import ResultsPage from "./ResultsPage";
 
 function App() {
   const [screen, setScreen] = useState("landing");
@@ -24,33 +22,50 @@ function App() {
         />
       )}
 
-      
+      {/* Dashboard Home */}
       {screen === "dashboard" && (
         <UserDashboard
           showUploadPage={false}
+          showProcessingPage={false}
+          showResultsPage={false}
           onLogout={() => setScreen("landing")}
           onNewScan={() => setScreen("dashboard_upload")}
         />
       )}
 
-      
+      {/* Dashboard Upload (embedded) */}
       {screen === "dashboard_upload" && (
         <UserDashboard
           showUploadPage={true}
+          showProcessingPage={false}
+          showResultsPage={false}
           onLogout={() => setScreen("landing")}
           onNewScan={() => setScreen("dashboard_upload")}
           onProcess={() => setScreen("processing")}
         />
       )}
 
-      
+      {/* Dashboard Processing (embedded) */}
       {screen === "processing" && (
-        <ProcessingPage onFinish={() => setScreen("results")} />
+        <UserDashboard
+          showUploadPage={false}
+          showProcessingPage={true}
+          showResultsPage={false}
+          onLogout={() => setScreen("landing")}
+          onNewScan={() => setScreen("dashboard_upload")}
+          onFinishProcessing={() => setScreen("results")}
+        />
       )}
 
-      
+      {/* Dashboard Results (embedded) */}
       {screen === "results" && (
-        <ResultsPage onBack={() => setScreen("dashboard")} />
+        <UserDashboard
+          showUploadPage={false}
+          showProcessingPage={false}
+          showResultsPage={true}
+          onLogout={() => setScreen("landing")}
+          onNewScan={() => setScreen("dashboard_upload")}
+        />
       )}
     </>
   );
