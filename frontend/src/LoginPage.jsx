@@ -34,7 +34,7 @@ const LoginPage = ({ onBack, onLoginSuccess }) => {
     };
   }, []);
 
-  const handleLogin = (e) => {
+  /** const handleLogin = (e) => {
     e.preventDefault();
 
     if (email === MOCK_EMAIL && password === MOCK_PASSWORD) {
@@ -42,6 +42,42 @@ const LoginPage = ({ onBack, onLoginSuccess }) => {
       onLoginSuccess();
     } else {
       setError("Invalid email or password.");
+    }
+  }; */
+
+  // replaced the mock login
+  // now posts to localhost:5000/api/auth/login
+  // async request -> store returned JWT token
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError("");
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data?.msg || "Login failed.");
+        return;
+      }
+
+      // returns { token } from backend
+      if (data?.token) {
+        if (rememberMe) {
+          localStorage.setItem("token", data.token);
+        } else {
+          sessionStorage.setItem("token", data.token);
+        }
+      }
+
+      onLoginSuccess(); 
+    } catch (err) {
+      setError("Could not connect to server. Is the backend running on port 5000?");
     }
   };
 

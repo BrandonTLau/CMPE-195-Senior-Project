@@ -1,8 +1,36 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 const ResultsPage = () => {
   const [activeTab, setActiveTab] = useState('summary');
   const [isSaved, setIsSaved] = useState(false);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [fileDoc, setFileDoc] = useState(null);
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        setError("");
+        const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+        const res = await fetch("/api/files", {
+          headers: token ? { "x-auth-token": token } : {},
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.msg || "Failed to load files");
+
+        // pick last uploaded (if we stored it), else most recent
+        const lastId = sessionStorage.getItem("lastUploadId");
+        const picked = lastId ? data.find((f) => f._id === lastId) : data?.[0];
+        setFileDoc(picked || null);
+      } catch (e) {
+        setError(e.message || "Failed to load results");
+      } finally {
+        setLoading(false);
+      }
+    };
+    run();
+  }, []);
 
   //need to add save logic
   const handleSaveNotes = () => {
@@ -15,7 +43,26 @@ const ResultsPage = () => {
     console.log(`Exporting as ${format}`);
   };
 
-  const recognizedText = `Introduction to Machine Learning
+  if (loading) return <div style={{ padding: 24 }}>Loading…</div>;
+  if (error) return <div style={{ padding: 24, color: "crimson" }}>{error}</div>;
+  if (!fileDoc) return <div style={{ padding: 24 }}>No uploads found.</div>;
+
+  const recognizedText =
+    fileDoc?.userEdits?.editedText ??
+    fileDoc?.extractionData?.rawText ??
+    "No extracted text yet.";
+
+  const aiSummary =
+    fileDoc?.userEdits?.editedSummary ??
+    fileDoc?.extractionData?.summary ??
+    "No summary yet.";
+
+  const flashcards =
+    fileDoc?.userEdits?.editedFlashCards ??
+    fileDoc?.extractionData?.flashCards ??
+    [];
+
+  /** const recognizedText = `Introduction to Machine Learning
 
 Machine learning is a subset of artificial intelligence that focuses on the development of algorithms and statistical models that enable computer systems to improve their performance on a specific task through experience.
 
@@ -41,7 +88,7 @@ Applications include image recognition, natural language processing, and predict
       question: 'What is supervised learning?',
       answer: 'Training machine learning models with labeled data'
     }
-  ];
+  ]; */
 
   return (
     <div style={styles.container}>

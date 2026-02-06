@@ -60,6 +60,29 @@ const UserDashboard = ({
     if (onNewScan) onNewScan();
   };
 
+  // Fetch to display uploaded files in user's dashboard
+  const [files, setFiles] = useState([]);
+  const [filesError, setFilesError] = useState("");
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setFilesError("");
+        const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+        const res = await fetch("/api/files", {
+          headers: token ? { "x-auth-token": token } : {},
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.msg || "Failed to load files");
+        setFiles(Array.isArray(data) ? data : []);
+      } catch (e) {
+        setFilesError(e.message || "Failed to load files");
+      }
+    };
+
+    load();
+  }, []);
+
   return (
     <div style={styles.container}>
       <div style={styles.layout}>
