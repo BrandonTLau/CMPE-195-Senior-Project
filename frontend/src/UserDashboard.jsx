@@ -15,7 +15,7 @@ const UserDashboard = ({
 }) => {
   const [activeTab, setActiveTab] = useState("dashboard");
 
-  // Keep layout flush (same as your other pages)
+ 
   useEffect(() => {
     const body = document.body;
     const html = document.documentElement;
@@ -38,7 +38,7 @@ const UserDashboard = ({
     };
   }, []);
 
-  // Sync internal view with App.jsx
+  
   useEffect(() => {
     if (showProcessingPage) {
       setActiveTab("processing");
@@ -63,10 +63,10 @@ const UserDashboard = ({
   return (
     <div style={styles.container}>
       <div style={styles.layout}>
-        {/* SIDEBAR */}
+       
         <aside style={styles.sidebar}>
           <div style={styles.sidebarContent}>
-            {/* Logo */}
+          
             <div style={styles.logo}>
               <div style={styles.logoIcon}>
                 <svg
@@ -86,7 +86,7 @@ const UserDashboard = ({
               <span style={styles.logoText}>NoteScan</span>
             </div>
 
-            {/* Navigation */}
+            
             <nav style={styles.nav}>
               <button
                 style={{
@@ -160,7 +160,7 @@ const UserDashboard = ({
                 Favorites
               </button>
 
-              {/* Optional: show Processing/Results states as highlighted too */}
+             
               {activeTab === "processing" && (
                 <button style={{ ...styles.navItem, ...styles.navItemActive }} disabled>
                   <svg style={styles.navIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -187,7 +187,7 @@ const UserDashboard = ({
 
             <div style={{ flexGrow: 1 }} />
 
-            {/* Logout */}
+           
             <button style={styles.logoutButton} onClick={onLogout}>
               <svg style={styles.navIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -202,7 +202,7 @@ const UserDashboard = ({
           </div>
         </aside>
 
-        {/* MAIN CONTENT */}
+        
         <main style={styles.main}>
           <div style={styles.wrapper}>
             {activeTab === "dashboard" && (
@@ -248,7 +248,7 @@ const UserDashboard = ({
               </>
             )}
 
-            {/* UPLOAD (embedded) */}
+            
             {activeTab === "upload" && (
               <UploadPage
                 onProcess={() => {
@@ -258,7 +258,7 @@ const UserDashboard = ({
               />
             )}
 
-            {/* PROCESSING (embedded) */}
+           
             {activeTab === "processing" && (
               <ProcessingScreen
                 onAutoFinish={() => {
@@ -268,10 +268,10 @@ const UserDashboard = ({
               />
             )}
 
-            {/* RESULTS (embedded) */}
+           
             {activeTab === "results" && <ResultsPage />}
 
-            {/* ✅ NOTES LIBRARY (embedded) */}
+            
             {activeTab === "notes" && <NotesLibrary onNewScan={handleNewScan} />}
 
             {activeTab === "favorites" && <h2>Favorites (Coming Soon)</h2>}

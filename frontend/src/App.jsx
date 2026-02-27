@@ -2,6 +2,7 @@ import { useState } from "react";
 import LandingPage from "./LandingPage";
 import LoginPage from "./LoginPage";
 import UserDashboard from "./UserDashboard";
+import SignUp from "./SignUp";
 
 function App() {
   const [screen, setScreen] = useState("landing");
@@ -16,13 +17,15 @@ function App() {
       )}
 
       {screen === "login" && (
-        <LoginPage
-          onBack={() => setScreen("landing")}
-          onLoginSuccess={() => setScreen("dashboard")}
-        />
-      )}
+  <LoginPage
+    onBack={() => setScreen("landing")}
+    onLoginSuccess={() => setScreen("dashboard")}
+    onGoToSignUp={() => setScreen("signup")}
+  />
+)}
 
-      {/* Dashboard Home */}
+
+      
       {screen === "dashboard" && (
         <UserDashboard
           showUploadPage={false}
@@ -33,7 +36,7 @@ function App() {
         />
       )}
 
-      {/* Dashboard Upload (embedded) */}
+      
       {screen === "dashboard_upload" && (
         <UserDashboard
           showUploadPage={true}
@@ -45,7 +48,7 @@ function App() {
         />
       )}
 
-      {/* Dashboard Processing (embedded) */}
+      
       {screen === "processing" && (
         <UserDashboard
           showUploadPage={false}
@@ -57,7 +60,7 @@ function App() {
         />
       )}
 
-      {/* Dashboard Results (embedded) */}
+      
       {screen === "results" && (
         <UserDashboard
           showUploadPage={false}
@@ -67,6 +70,15 @@ function App() {
           onNewScan={() => setScreen("dashboard_upload")}
         />
       )}
+
+      {screen === "signup" && (
+        <SignUp
+        onBack={() => setScreen("login")}
+        onSignUpSuccess={() => setScreen("dashboard")}
+        />
+      )}
+
+
     </>
   );
 }
