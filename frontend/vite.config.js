@@ -9,7 +9,7 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:5000', // The backend server address
         changeOrigin: true, // Changes the origin header to the target URL
-        rewrite: (path) => path.replace(/^\/api/, ''), // Rewrites the path from '/api/...' to '/...'
+        //rewrite: (path) => path.replace(/^\/api/, ''), // Rewrites the path from '/api/...' to '/...'
       },
     },
   },

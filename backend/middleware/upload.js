@@ -8,11 +8,11 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Configure storage
+// Storage configurator
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     // Create a folder for the specific user if it doesn't exist
-    // Note: req.user is populated by the auth middleware
+    // Note >> req.user is populated by the auth middleware
     const userId = req.user ? req.user.id : 'guest'; 
     const dir = `./uploads/${userId}`;
 
@@ -22,12 +22,11 @@ const storage = multer.diskStorage({
     cb(null, dir);
   },
   filename: function (req, file, cb) {
-    // Save with timestamp to prevent overwrites
-    cb(null, `${Date.now()}-${file.originalname}`);
+    cb(null, `${Date.now()}-${file.originalname}`); // Save w timestamp to prevent overwrites
   }
 });
 
-// File type validation
+// File type validation (pdf + image types >> arbitrary for now)
 const fileFilter = (req, file, cb) => {
   const allowedTypes = [
     'application/pdf', 
@@ -47,7 +46,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({ 
   storage: storage,
   fileFilter: fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit example
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit (arbitrary)
 });
 
 module.exports = upload;
