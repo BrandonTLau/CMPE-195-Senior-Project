@@ -65,7 +65,7 @@ function PreviewCard({ card }) {
   );
 }
 
-const ResultsPage = () => {
+const ResultsPage = ({ onBack }) => {
   const [page, setPage] = useState('results');
   const [isSaved, setIsSaved] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -103,9 +103,19 @@ Applications include image recognition, natural language processing, and predict
   return (
     <div style={styles.container}>
       <div style={styles.wrapper}>
-       
+
+        {/* Header */}
         <div style={styles.header}>
           <div>
+            {/* Back button */}
+            {onBack && (
+              <button style={styles.backButton} onClick={onBack}>
+                <svg style={styles.backIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back to My Notes
+              </button>
+            )}
             <div style={styles.logo}>
               <svg style={styles.logoIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -152,7 +162,7 @@ Applications include image recognition, natural language processing, and predict
           </div>
         </div>
 
-       
+        {/* Content grid */}
         <div style={styles.contentGrid}>
           <div style={styles.card}>
             <h3 style={styles.cardTitle}>
@@ -188,7 +198,7 @@ Applications include image recognition, natural language processing, and predict
           </div>
         </div>
 
-       
+        {/* AI section */}
         <div style={styles.aiSection}>
           <h2 style={styles.aiSectionTitle}>AI-Powered Features</h2>
           <div style={styles.aiGrid}>
@@ -228,7 +238,6 @@ Applications include image recognition, natural language processing, and predict
                 </button>
               </div>
 
-             
               <div style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#9CA3AF', marginBottom: 5 }}>
                   <span>{learnedCount}/{cards.length} learned</span>
@@ -239,12 +248,10 @@ Applications include image recognition, natural language processing, and predict
                 </div>
               </div>
 
-            
               <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8, marginBottom: 18, scrollbarWidth: 'thin' }}>
                 {cards.map(c => <PreviewCard key={c.id} card={c} />)}
               </div>
 
-             
               <button onClick={() => setPage('flashcards')} style={styles.studyButton}>
                 <svg style={{ width: 18, height: 18 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -292,6 +299,17 @@ const styles = {
   container: { minHeight: '100vh', backgroundColor: '#F9FAFB', padding: '2rem' },
   wrapper: { maxWidth: '1400px', margin: '0 auto' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' },
+  backButton: {
+    display: 'inline-flex', alignItems: 'center', gap: '0.375rem',
+    marginBottom: '1rem',
+    padding: '0.5rem 1rem',
+    backgroundColor: 'white', color: '#4F46E5',
+    border: '1px solid #E5E7EB', borderRadius: '0.625rem',
+    fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.07)',
+  },
+  backIcon: { width: '16px', height: '16px' },
   logo: { display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' },
   logoIcon: { width: '28px', height: '28px', color: '#4F46E5' },
   logoText: { fontSize: '1.25rem', fontWeight: '700', color: '#1F2937' },
