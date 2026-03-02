@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from 'react';
 
-const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
+const SignUp = ({ onBack, onSignUpSuccess }) => {
+  const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    password: '',
+    confirmPassword: ''
+  });
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
 
-  // mock login
-  const MOCK_EMAIL = "test@example.com";
-  const MOCK_PASSWORD = "password123";
-
-  
   useEffect(() => {
     const body = document.body;
     const html = document.documentElement;
@@ -34,57 +33,46 @@ const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
     };
   }, []);
 
-  /** const handleLogin = (e) => {
-    e.preventDefault();
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
 
-    if (email === MOCK_EMAIL && password === MOCK_PASSWORD) {
-      setError("");
-      onLoginSuccess();
-    } else {
-      setError("Invalid email or password.");
-    }
-  }; */
-
-  // replaced the mock login
-  // now posts to localhost:5000/api/auth/login
-  // async request -> store returned JWT token
-  const handleLogin = async (e) => {
+  const handleSignUp = (e) => {
     e.preventDefault();
     setError("");
 
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data?.msg || "Login failed.");
-        return;
-      }
-
-      // returns { token } from backend
-      if (data?.token) {
-        if (rememberMe) {
-          localStorage.setItem("token", data.token);
-        } else {
-          sessionStorage.setItem("token", data.token);
-        }
-      }
-
-      onLoginSuccess(); 
-    } catch (err) {
-      setError("Could not connect to server. Is the backend running on port 5000?");
+    // Validation
+    if (!formData.fullName.trim()) {
+      setError("Please enter your full name.");
+      return;
     }
+
+    if (!formData.email.trim()) {
+      setError("Please enter your email address.");
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      setError("Password must be at least 8 characters long.");
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    // Mock success
+    onSignUpSuccess();
   };
 
   return (
     <div style={styles.container}>
-      
-      
+      {/* Branding Side */}
       <div style={styles.brandingSide}>
         <div style={styles.brandingContent}>
           <div style={styles.logo}>
@@ -102,47 +90,60 @@ const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
         </div>
       </div>
 
-      {/*login form*/}
+      {/* Sign Up Form */}
       <div style={styles.formSide}>
         <button style={styles.backButton} onClick={onBack}>
-        ← Back
+          ← Back
         </button>
 
         <div style={styles.formContainer}>
           <div style={styles.formHeader}>
-            <h2 style={styles.formTitle}>Welcome back</h2>
-            <p style={styles.formSubtitle}>Sign in to your account to continue</p>
+            <h2 style={styles.formTitle}>Create your account</h2>
+            <p style={styles.formSubtitle}>Get started with NoteScan today</p>
           </div>
 
-          <form style={styles.form} onSubmit={handleLogin}>
-
-            {/* email */}
+          <form style={styles.form} onSubmit={handleSignUp}>
+            {/* Full Name */}
             <div style={styles.inputGroup}>
-              <label style={styles.label}>Email address</label>
+              <label style={styles.label}>Full name</label>
               <input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                name="fullName"
+                placeholder="John Doe"
+                value={formData.fullName}
+                onChange={handleInputChange}
                 style={styles.input}
                 required
               />
             </div>
 
-            {/* password */}
+            {/* Email */}
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Email address</label>
+              <input
+                type="email"
+                name="email"
+                placeholder="you@example.com"
+                value={formData.email}
+                onChange={handleInputChange}
+                style={styles.input}
+                required
+              />
+            </div>
+
+            {/* Password */}
             <div style={styles.inputGroup}>
               <label style={styles.label}>Password</label>
-
               <div style={styles.passwordWrapper}>
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  name="password"
+                  placeholder="Create a password"
+                  value={formData.password}
+                  onChange={handleInputChange}
                   style={{ ...styles.input, ...styles.passwordInput }}
                   required
                 />
-
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
@@ -163,52 +164,71 @@ const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
                   )}
                 </button>
               </div>
+              <p style={styles.passwordHint}>Must be at least 8 characters</p>
             </div>
 
-            {/* options */}
-            <div style={styles.formOptions}>
-              <label style={styles.checkboxLabel}>
+            {/* Confirm Password */}
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Confirm password</label>
+              <div style={styles.passwordWrapper}>
                 <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  style={styles.checkbox}
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  name="confirmPassword"
+                  placeholder="Re-enter your password"
+                  value={formData.confirmPassword}
+                  onChange={handleInputChange}
+                  style={{ ...styles.input, ...styles.passwordInput }}
+                  required
                 />
-                <span>Remember me</span>
-              </label>
-
-              <a href="#" style={styles.forgotLink}>Forgot password?</a>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={styles.showPasswordButton}
+                >
+                  {showConfirmPassword ? (
+                    <svg style={styles.eyeIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  ) : (
+                    <svg style={styles.eyeIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
 
-            {/* error message */}
+            {/* Error Message */}
             {error && (
-              <p style={{ textAlign: "center", color: "red", marginTop: 5 }}>{error}</p>
+              <p style={styles.errorMessage}>{error}</p>
             )}
 
-            {/* sign in button */}
+            {/* Sign Up Button */}
             <button type="submit" style={styles.submitButton}>
-              Sign in
+              Create account
             </button>
           </form>
 
-          {/* sign up */}
-          <p style={styles.signupPrompt}>
-            Don’t have an account?{" "}
-            <span
-  style={{ ...styles.signupLink, cursor: "pointer" }}
-  onClick={onGoToSignUp}
->
-  Sign up
-</span>
+          {/* Sign In Link */}
+          <p style={styles.signinPrompt}>
+  Already have an account?{" "}
+  <span
+    style={{ ...styles.signinLink, cursor: "pointer" }}
+    onClick={onBack}
+  >
+    Sign in
+  </span>
+</p>
 
-          </p>
         </div>
       </div>
     </div>
   );
 };
-
-
 
 const styles = {
   container: {
@@ -218,19 +238,19 @@ const styles = {
     overflow: "hidden",
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif',
   },
-  backButton: {
-  position: "absolute",
-  top: "1.5rem",
-  left: "1.5rem",
-  background: "none",
-  border: "none",
-  color: "#4F46E5",
-  fontSize: "1rem",
-  fontWeight: "600",
-  cursor: "pointer",
-  padding: 0,
-},
 
+  backButton: {
+    position: "absolute",
+    top: "1.5rem",
+    left: "1.5rem",
+    background: "none",
+    border: "none",
+    color: "#4F46E5",
+    fontSize: "1rem",
+    fontWeight: "600",
+    cursor: "pointer",
+    padding: 0,
+  },
 
   brandingSide: {
     flex: 1,
@@ -287,7 +307,7 @@ const styles = {
     justifyContent: "center",
     overflowY: "auto",
     boxSizing: "border-box",
-    position: "relative",   
+    position: "relative",
   },
 
   formContainer: {
@@ -338,6 +358,7 @@ const styles = {
     width: "100%",
     outline: "none",
     fontFamily: "inherit",
+    boxSizing: "border-box",
   },
 
   passwordWrapper: {
@@ -346,7 +367,7 @@ const styles = {
   },
 
   passwordInput: {
-    paddingRight: "1rem",
+    paddingRight: "2.5rem",
   },
 
   showPasswordButton: {
@@ -357,6 +378,7 @@ const styles = {
     background: "none",
     border: "none",
     cursor: "pointer",
+    padding: "0.25rem",
   },
 
   eyeIcon: {
@@ -365,28 +387,17 @@ const styles = {
     color: "#6B7280",
   },
 
-  formOptions: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
+  passwordHint: {
+    fontSize: "0.75rem",
+    color: "#6B7280",
+    margin: 0,
+  },
+
+  errorMessage: {
+    textAlign: "center",
+    color: "#DC2626",
     fontSize: "0.875rem",
-  },
-
-  checkboxLabel: {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.5rem",
-  },
-
-  checkbox: {
-    width: "16px",
-    height: "16px",
-  },
-
-  forgotLink: {
-    color: "#4F46E5",
-    textDecoration: "none",
-    fontWeight: "500",
+    margin: 0,
   },
 
   submitButton: {
@@ -398,20 +409,21 @@ const styles = {
     fontSize: "1rem",
     fontWeight: "600",
     cursor: "pointer",
+    transition: "background-color 0.2s",
   },
 
-  signupPrompt: {
+  signinPrompt: {
     textAlign: "center",
     marginTop: "1.5rem",
     color: "#6B7280",
     fontSize: "0.875rem",
   },
 
-  signupLink: {
+  signinLink: {
     color: "#4F46E5",
     textDecoration: "none",
     fontWeight: "600",
   },
 };
 
-export default LoginPage;
+export default SignUp;
