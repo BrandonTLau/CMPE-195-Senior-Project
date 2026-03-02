@@ -41,7 +41,8 @@ const SignUp = ({ onBack, onSignUpSuccess }) => {
     }));
   };
 
-  const handleSignUp = (e) => {
+  // COMMENTED OUT INITIAL SIGNUP HANDLER; MODIFIED VERSION BELOW
+  /* const handleSignUp = (e) => {
     e.preventDefault();
     setError("");
 
@@ -68,6 +69,34 @@ const SignUp = ({ onBack, onSignUpSuccess }) => {
 
     // Mock success
     onSignUpSuccess();
+  }; */
+
+  // MODIFIED SIGNUP HANDLER: NOW TALKS TO BACKEND
+  const handleSignUp = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!formData.fullName.trim()) { setError('Please enter your full name.'); return; }
+    if (!formData.email.trim()) { setError('Please enter your email address.'); return; }
+    if (formData.password.length < 8) { setError('Password must be at least 8 characters long.'); return; }
+    if (formData.password !== formData.confirmPassword) { setError('Passwords do not match.'); return; }
+
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: formData.fullName,
+          email:    formData.email,
+          password: formData.password,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data?.msg || 'Registration failed.'); return; }
+      if (data?.token) sessionStorage.setItem('token', data.token);
+      onSignUpSuccess();
+    } catch (err) {
+      setError('Could not connect to server. Is the backend running on port 5000?');
+    }
   };
 
   return (

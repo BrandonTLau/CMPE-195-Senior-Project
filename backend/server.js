@@ -1,57 +1,54 @@
 /**
- * MAIN SERVER
- */
+ * MAIN SERVER */
 
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 
-// Middleware
-// Allow frontend to communicate
+// MIDDLEWARE BRIDGE
 app.use(cors({
-  origin: ["http://localhost:5173"],
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "x-auth-token"],
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'x-auth-token'],
 }));
+
 app.use(express.json()); // Parse JSON bodies
 
-// Database Connection
-// Connect to local MongoDB instance
-/** mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/notes_app_local', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log('MongoDB Connected Locally'))
-.catch(err => console.log(err)); */
+// To display original image (statically serving uploaded files)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-const uri =
-  process.env.MONGO_URI || "mongodb://127.0.0.1:27017/notes_app_local";
+// ROUTES
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/files', require('./routes/files'));
+
+app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
+
+/**
+ * ---------------------------------------------------------
+ * FUTURE INTEGRATIONS: 
+ * app.use('/api/process', require('./routes/process'));  
+ * --------------------------------------------------------- */
+
+//const uri = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/notes_app_local";
 
 async function start() {
   try {
-    await mongoose.connect(uri); 
-    console.log("MongoDB Connected");
-
-    app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+    const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/notescan_db';
+    await mongoose.connect(uri);
+    console.log('MongoDB connected');
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   } catch (err) {
-    console.error("MongoDB connection error:", err);
+    console.error('Startup error:', err.message);
     process.exit(1);
   }
 }
 
+
 start();
 
-
-// Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/files', require('./routes/files'));
-
-// Serve uploaded files statically (optional, if you want to display the original image)
-app.use('/uploads', express.static('uploads'));
-
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+//app.use('/uploads', express.static('uploads'));

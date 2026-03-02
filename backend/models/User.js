@@ -1,34 +1,40 @@
 /**
- * User schema:
- * User uploads storage with a link to the upload location.
- */
+ * User MongoDB doc/schema:
+ * User uploads storage with a link to the upload location. */
 
 const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
-  email: { 
-    type: String, 
-    required: true, 
+  fullName: { type: String, trim: true, default: '' },
+  email: {
+    type: String,
+    required: true,
     unique: true,
     trim: true,
-    lowercase: true 
+    lowercase: true,
+    index: true,
   },
-  password: { 
-    type: String, 
-    required: true 
+  password: { type: String, required: true },
+  role: {
+    type: String,
+    enum: ['user', 'guest', 'admin'],
+    default: 'user',
   },
-  ipAddress: { 
-    type: String 
+  ipAddress: { type: String, default: '' },
+  dateJoined: { type: Date, default: Date.now },
+  lastLogin: { type: Date },
+  isActive: { type: Boolean, default: true },
+  fileUploads: [{ type: mongoose.Schema.Types.ObjectId, ref: 'UploadedFile' }],
+  /** 
+   * ----------------------------------------------------------------------
+   * FUTURE ADDITIONS:
+   * "guest-to-user" flag, notifications, darkmode...
+   * ----------------------------------------------------------------------
+   */
+  settings: {
+    defaultView: { type: String, default: 'grid' },
+    emailNotifications: { type: Boolean, default: false },
   },
-  dateJoined: { 
-    type: Date, 
-    default: Date.now 
-  },
-  // Array of references to the UploadedFile model
-  fileUploads: [{ 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'UploadedFile' 
-  }]
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('User', UserSchema);

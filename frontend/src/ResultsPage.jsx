@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import FlashcardsPage from './FlashcardsPage';
 
 const INITIAL_CARDS = [
@@ -65,8 +65,100 @@ function PreviewCard({ card }) {
   );
 }
 
+// ------------------------------------------------
+// HANDLE INLINE TEXT EDITS; TALKS TO BACKEND
+// ------------------------------------------------
+function InlineEditableText({ text, onSave }) {
+  const [isEditing, setIsEditing]     = useState(false);
+  const [editValue, setEditValue]     = useState('');
+  const [selection, setSelection]     = useState({ start: 0, end: 0, selected: '' });
+  const [showIcon, setShowIcon]       = useState(false);
+  const [iconPos, setIconPos]         = useState({ x: 0, y: 0 });
+  const containerRef = useRef(null);
+  const textareaRef  = useRef(null);
+
+  const handleMouseUp = () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) { setShowIcon(false); return; }
+    const selected = sel.toString().trim();
+    if (!selected) { setShowIcon(false); return; }
+
+    const range = sel.getRangeAt(0);
+    const rRect = range.getBoundingClientRect();
+    const cRect = containerRef.current.getBoundingClientRect();
+    const start = text.indexOf(selected);
+
+    setSelection({ start, end: start + selected.length, selected });
+    setShowIcon(true);
+    setIconPos({ x: rRect.right - cRect.left, y: rRect.top - cRect.top - 34 });
+  };
+
+  const handleEditClick = () => {
+    setShowIcon(false);
+    setEditValue(selection.selected);
+    setIsEditing(true);
+    setTimeout(() => textareaRef.current?.focus(), 40);
+  };
+
+  const commitEdit = () => {
+    if (!editValue.trim()) return;
+    const updated = text.slice(0, selection.start) + editValue + text.slice(selection.end);
+    onSave({ previousText: text, newText: updated, selectionStart: selection.start, selectionEnd: selection.end });
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); }
+    if (e.key === 'Escape') setIsEditing(false);
+  };
+
+  if (isEditing) return (
+    <div>
+      <p style={{ color: '#888', fontSize: '0.82em', marginBottom: 4 }}>
+        Editing: &ldquo;...{selection.selected}...&rdquo;
+      </p>
+      <textarea
+        ref={textareaRef}
+        value={editValue}
+        rows={3}
+        onChange={e => setEditValue(e.target.value)}
+        onKeyDown={handleKeyDown}
+        style={{ width: '100%', padding: 8, borderRadius: 6, border: '1.5px solid #4f8ef7', fontSize: '0.95em', boxSizing: 'border-box' }}
+      />
+      <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+        <button onClick={commitEdit}
+          style={{ background: '#4f8ef7', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 14px', cursor: 'pointer' }}>
+          Save Changes
+        </button>
+        <button onClick={() => setIsEditing(false)}
+          style={{ background: '#eee', border: 'none', borderRadius: 4, padding: '4px 14px', cursor: 'pointer' }}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }} onMouseUp={handleMouseUp}>
+      <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.75, userSelect: 'text', margin: 0 }}>{text}</p>
+      {showIcon && (
+        <div onClick={handleEditClick}
+          style={{
+            position: 'absolute', left: iconPos.x, top: iconPos.y,
+            background: '#fff', border: '1px solid #ccc', borderRadius: 6,
+            padding: '2px 10px', cursor: 'pointer', fontSize: '0.78em',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)', zIndex: 200,
+            display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap',
+          }}>
+          ✎ Make a quick edit
+        </div>
+      )}
+    </div>
+  );
+}
+
 const ResultsPage = ({ onBack }) => {
-  const [page, setPage] = useState('results');
+  /* const [page, setPage] = useState('results');
   const [isSaved, setIsSaved] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const { cards, addCard } = useCards();
@@ -98,7 +190,46 @@ Key Concepts:
 
 Applications include image recognition, natural language processing, and predictive analytics.`;
 
-  const aiSummary = `Machine learning is a branch of AI focused on developing algorithms that allow computers to learn from experience. It includes three main types: supervised learning (using labeled data), unsupervised learning (finding patterns), and reinforcement learning (trial and error). Common applications are image recognition, NLP, and predictive analytics.`;
+  const aiSummary = `Machine learning is a branch of AI focused on developing algorithms that allow computers to learn from experience. It includes three main types: supervised learning (using labeled data), unsupervised learning (finding patterns), and reinforcement learning (trial and error). Common applications are image recognition, NLP, and predictive analytics.`; */
+
+  const fileId = sessionStorage.getItem('lastUploadId');
+  const token  = localStorage.getItem('token') || sessionStorage.getItem('token');
+  const headers = token ? { 'Content-Type': 'application/json', 'x-auth-token': token } : { 'Content-Type': 'application/json' };
+
+  const [fileData, setFileData]               = useState(null);
+  const [recognizedText, setRecognizedText]   = useState('OCR output will appear here once processing is complete.');
+  const [aiSummary, setAiSummary]             = useState('AI summary will appear here once processing is complete.');
+  const [studyGuideText, setStudyGuideText]   = useState('');
+  const [transcriptionEdited, setTranscriptionEdited] = useState(false);
+  const [summaryEdited, setSummaryEdited]     = useState(false);
+
+  useEffect(() => {
+    if (!fileId) return;
+    fetch(`/api/files/${fileId}`, { headers })
+      .then(r => r.json())
+      .then(data => {
+        setFileData(data);
+        if (data.currentContent?.transcribedText) setRecognizedText(data.currentContent.transcribedText);
+        if (data.currentContent?.summary)         setAiSummary(data.currentContent.summary);
+        if (data.currentContent?.studyGuide)      setStudyGuideText(data.currentContent.studyGuide);
+      })
+      .catch(err => console.error('Failed to load file data:', err));
+  }, [fileId]);
+
+  const saveEdit = async (endpoint, payload, onSuccess, setEdited) => {
+    if (!fileId) return;
+    try {
+      const res  = await fetch(`/api/files/${fileId}/${endpoint}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (res.ok && data.currentContent) { onSuccess(data.currentContent); if (setEdited) setEdited(true); }
+    } catch (err) { console.error('Save edit error:', err); }
+  };
+
+  const requestRegenerate = async (contentType) => {
+    if (!fileId) return;
+    await fetch(`/api/files/${fileId}/regenerate`, { method: 'POST', headers, body: JSON.stringify({ contentType }) });
+  };
+
 
   return (
     <div style={styles.container}>
@@ -186,12 +317,36 @@ Applications include image recognition, natural language processing, and predict
               </svg>
               Recognized Text
             </h3>
-            <div style={styles.textContent}>
+            {/* <div style={styles.textContent}>
               <pre style={styles.textPre}>{recognizedText}</pre>
             </div>
             <div style={styles.confidenceBadge}>
               <svg style={styles.badgeIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span style={styles.badgeText}>87% Confidence Score</span>
+            </div> */}
+            <div style={styles.textContent}>
+              <InlineEditableText
+                text={recognizedText}
+                onSave={(payload) => saveEdit(
+                  'edit/transcription',
+                  payload,
+                  (c) => { setRecognizedText(c.transcribedText); setTranscriptionEdited(true); },
+                  setTranscriptionEdited
+                )}
+              />
+            </div>
+            {transcriptionEdited && (
+              <button onClick={() => requestRegenerate('all')}
+                style={{ marginTop: 10, padding: '6px 16px', background: '#4f8ef7', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+                Regenerate Summary & Study Guides
+              </button>
+            )}
+            <div style={styles.confidenceBadge}>
+              <svg style={styles.badgeIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <span style={styles.badgeText}>87% Confidence Score</span>
             </div>
@@ -217,9 +372,26 @@ Applications include image recognition, natural language processing, and predict
                   Regenerate
                 </button>
               </div>
-              <div style={styles.summaryBox}>
+              {/* <div style={styles.summaryBox}>
                 <p style={styles.summaryText}>{aiSummary}</p>
+              </div> */}
+              <div style={styles.summaryBox}>
+                <InlineEditableText
+                  text={aiSummary}
+                  onSave={(payload) => saveEdit(
+                    'edit/summary',
+                    payload,
+                    (c) => setAiSummary(c.summary),
+                    setSummaryEdited
+                  )}
+                />
               </div>
+              {summaryEdited && (
+                <button onClick={() => requestRegenerate('summary')}
+                  style={{ marginTop: 10, padding: '6px 16px', background: '#4f8ef7', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+                  Regenerate Summary
+                </button>
+              )}
             </div>
 
             <div style={styles.aiCard}>
