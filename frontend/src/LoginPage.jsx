@@ -8,8 +8,8 @@ const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
   const [error, setError] = useState("");
 
   // mock login
-  const MOCK_EMAIL = "test@example.com";
-  const MOCK_PASSWORD = "password123";
+  //const MOCK_EMAIL = "test@example.com";
+  //const MOCK_PASSWORD = "password123";
 
   
   useEffect(() => {
@@ -77,7 +77,7 @@ const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
 
       onLoginSuccess(); 
     } catch (err) {
-      setError("Could not connect to server. Is the backend running on port 5000?");
+      setError("Failed ot connect to server. Verify that it's running.");
     }
   };
 
