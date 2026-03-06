@@ -8,8 +8,8 @@ const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
   const [error, setError] = useState("");
 
   // mock login
-  const MOCK_EMAIL = "test@example.com";
-  const MOCK_PASSWORD = "password123";
+  //const MOCK_EMAIL = "test@example.com";
+  //const MOCK_PASSWORD = "password123";
 
   
   useEffect(() => {
@@ -34,7 +34,7 @@ const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
     };
   }, []);
 
-  const handleLogin = (e) => {
+  /** const handleLogin = (e) => {
     e.preventDefault();
 
     if (email === MOCK_EMAIL && password === MOCK_PASSWORD) {
@@ -42,6 +42,42 @@ const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
       onLoginSuccess();
     } else {
       setError("Invalid email or password.");
+    }
+  }; */
+
+  // replaced the mock login
+  // now posts to localhost:5000/api/auth/login
+  // async request -> store returned JWT token
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError("");
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data?.msg || "Login failed.");
+        return;
+      }
+
+      // returns { token } from backend
+      if (data?.token) {
+        if (rememberMe) {
+          localStorage.setItem("token", data.token);
+        } else {
+          sessionStorage.setItem("token", data.token);
+        }
+      }
+
+      onLoginSuccess(); 
+    } catch (err) {
+      setError("Failed ot connect to server. Verify that it's running.");
     }
   };
 

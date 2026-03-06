@@ -13,13 +13,22 @@ const UploadPage = ({ onBack, onProcess }) => {
       return "Unknown";
     };
 
-    const newFiles = files.map(file => ({
+    /**const newFiles = files.map(file => ({
+      file,
       name: file.name,
       size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
       type: getFileType(file)
-    }));
+    })); 
 
-    setUploadedFiles([...uploadedFiles, ...newFiles]);
+    setUploadedFiles([...uploadedFiles, ...newFiles]); */
+
+    const newFiles = files.map((file) => ({
+      file,
+      name: file.name,
+      size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+      type: file.type.startsWith("image/") ? "Image" : file.type === "application/pdf" ? "PDF" : "Unknown",
+    }));
+    setUploadedFiles((prev) => [...prev, ...newFiles]);
   };
 
   const handleDrag = (e) => {
@@ -40,22 +49,79 @@ const UploadPage = ({ onBack, onProcess }) => {
 
     if (e.dataTransfer.files?.length > 0) {
       const files = Array.from(e.dataTransfer.files);
-      const newFiles = files.map(file => ({
+
+      /** const newFiles = files.map(file => ({
         name: file.name,
         size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
         type: file.type.includes("image") ? "Image" : "PDF"
       }));
 
-      setUploadedFiles([...uploadedFiles, ...newFiles]);
+      setUploadedFiles([...uploadedFiles, ...newFiles]); */
+
+      const newFiles = files.map((file) => ({
+        file,
+        name: file.name,
+        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+        type: file.type.startsWith("image/") ? "Image" : file.type === "application/pdf" ? "PDF" : "Unknown",
+      }));
+      setUploadedFiles((prev) => [...prev, ...newFiles]);
     }
   };
 
-  const handleProcessNotes = () => {
-    if (onProcess) onProcess();   
+  /** const handleProcessNotes = () => {
+    if (onProcess) onProcess(); // doesn't handle uploads, only moves to next screen   
+  }; */
+
+  const handleProcessNotes = async () => {
+    setError("");
+
+    if (uploadedFiles.length === 0) {
+      setError("Please add at least one file.");
+      return;
+    }
+
+    try {
+      setUploading(true);
+
+      // Upload only the first file
+      // to handle uploading more, add a loop + save _id
+      const saved = await uploadOne(uploadedFiles[0]);
+
+      // Memorize what was uploaded to display in Results
+      sessionStorage.setItem("lastUploadId", saved._id);
+
+      if (onProcess) onProcess();
+    } catch (e) {
+      setError(e.message || "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
   };
+
 
   const removeFile = (index) => {
     setUploadedFiles(uploadedFiles.filter((_, i) => i !== index));
+  };
+
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+
+  // Upload fx to send formData + error handling
+  const uploadOne = async (fileObj) => {
+    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+
+    const form = new FormData();
+    form.append("file", fileObj.file); // field name must match backend
+
+    const res = await fetch("/api/files/upload", {
+      method: "POST",
+      headers: token ? { "x-auth-token": token } : {}, // adjust header name if your backend differs
+      body: form,
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.msg || "Upload failed");
+    return data; // expected: saved file doc (includes _id)
   };
 
   return (
