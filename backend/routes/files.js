@@ -25,7 +25,7 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
     const userId   = req.user.id;
     const uploadId = req.uploadId;
 
-    const newFile = new File({
+    const newFile = new UploadedFile({
       uploadId,
       userID:       userId,
       originalName: req.file.originalname,
@@ -40,7 +40,8 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
       currentContent: { transcribedText: '', summary: '', studyGuide: '', flashCards: [], quiz: [] },
     });
 
-    const saved = await newFile.save();
+    //const saved = await newFile.save();
+    const saved = await UploadedFile.findById(req.params.id);
     await User.findByIdAndUpdate(userId, { $push: { fileUploads: saved._id } });
 
     /** >>> FUTURE INTEGRATIONS GO HERE: 
@@ -63,7 +64,7 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
 // ____________________________________________________
 router.get('/', auth, async (req, res) => {
   try {
-    const files = await File.find({ userID: req.user.id })
+    const files = await UploadedFile.find({ userID: req.user.id })
       .sort({ uploadDate: -1 })
       .select('-editHistory -extractionData.rawText -aiGeneratedContent');
     res.json(files);
@@ -80,7 +81,7 @@ router.get('/', auth, async (req, res) => {
 // ____________________________________________________
 router.get('/:id', auth, async (req, res) => {
   try {
-    const file = await File.findById(req.params.id);
+    const file = await UploadedFile.findById(req.params.id);
     if (!file) return res.status(404).json({ msg: 'File not found' });
     if (file.userID.toString() !== req.user.id) return res.status(403).json({ msg: 'Access denied' });
     res.json(file);
@@ -97,7 +98,7 @@ router.get('/:id', auth, async (req, res) => {
 // ____________________________________________________
 router.patch('/:id/meta', auth, async (req, res) => {
   try {
-    const file = await File.findById(req.params.id);
+    const file = await UploadedFile.findById(req.params.id);
     if (!file) return res.status(404).json({ msg: 'File not found' });
     if (file.userID.toString() !== req.user.id) return res.status(403).json({ msg: 'Access denied' });
     const { title, tags, isFavorite } = req.body;
@@ -118,7 +119,7 @@ router.patch('/:id/meta', auth, async (req, res) => {
 // appends an edit record, updates currentContent field
 // ____________________________________________________
 async function applyTextEdit(fileId, userId, field, historyKey, { previousText, newText, selectionStart, selectionEnd }) {
-  const file = await File.findById(fileId);
+  const file = await UploadedFile.findById(fileId);
   if (!file) return { err: 'File not found', status: 404 };
   if (file.userID.toString() !== userId) return { err: 'Access denied', status: 403 };
 
@@ -233,7 +234,7 @@ router.put('/:id/edit/quiz', auth, async (req, res) => {
 // ____________________________________________________
 router.get('/:id/edits', auth, async (req, res) => {
   try {
-    const file = await File.findById(req.params.id).select('editHistory userID');
+    const file = await UploadedFile.findById(req.params.id).select('editHistory userID');
     if (!file) return res.status(404).json({ msg: 'File not found' });
     if (file.userID.toString() !== req.user.id) return res.status(403).json({ msg: 'Access denied' });
     res.json(file.editHistory);
@@ -255,7 +256,7 @@ router.post('/:id/regenerate', auth, async (req, res) => {
     return res.status(400).json({ msg: `contentType must be one of: ${valid.join(', ')}` });
   }
   try {
-    const file = await File.findById(req.params.id);
+    const file = await UploadedFile.findById(req.params.id);
     if (!file) return res.status(404).json({ msg: 'File not found' });
     if (file.userID.toString() !== req.user.id) return res.status(403).json({ msg: 'Access denied' });
 
@@ -288,14 +289,14 @@ router.post('/:id/regenerate', auth, async (req, res) => {
 // ____________________________________________________
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const file = await File.findById(req.params.id);
+    const file = await UploadedFile.findById(req.params.id);
     if (!file) return res.status(404).json({ msg: 'File not found' });
     if (file.userID.toString() !== req.user.id) return res.status(403).json({ msg: 'Access denied' });
 
     const folder = path.join(__dirname, '..', 'uploads', file.userID.toString(), file.uploadId);
     if (fs.existsSync(folder)) fs.rmSync(folder, { recursive: true, force: true });
 
-    await File.findByIdAndDelete(req.params.id);
+    await UploadedFile.findByIdAndDelete(req.params.id);
     await User.findByIdAndUpdate(req.user.id, { $pull: { fileUploads: file._id } });
     res.json({ msg: 'File deleted' });
   } catch (err) {

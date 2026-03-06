@@ -39,6 +39,9 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Dat
 async function start() {
   try {
     const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/notescan_db';
+    // (TESTING) query timeout to ensure there is no stalling
+    //await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000, socketTimeoutMS: 10000, });
+    
     await mongoose.connect(uri);
     console.log('MongoDB connected');
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
@@ -48,6 +51,8 @@ async function start() {
   }
 }
 
+// (TESTING) test route; no database interaction
+//app.get('/api/ping', (req, res) => res.json({ pong: true }));
 
 start();
 
