@@ -85,7 +85,6 @@ styleEl.textContent = `
   .ns-tab.active { color:${T.amber}; background:${T.amberDim}; border-color:rgba(245,166,35,.25); }
   .ns-tab-panel  { animation:tabIn .25s ease both; }
 
-  /* ── Toolbar ── */
   .ns-toolbar {
     display:flex; align-items:center; gap:3px; flex-wrap:wrap;
     padding:8px 12px; background:${T.bg};
@@ -109,7 +108,6 @@ styleEl.textContent = `
   .ns-tool.pressed { color:${T.amber}; background:${T.amberDim}; border-color:rgba(245,166,35,.25); }
   .ns-tool-sep { width:1px; height:16px; background:${T.border}; margin:0 3px; flex-shrink:0; align-self:center; }
 
-  //editable area
   .ns-editable {
     background:${T.surfaceHi}; border:1px solid ${T.border};
     border-radius:0 0 12px 12px;
@@ -134,7 +132,6 @@ styleEl.textContent = `
   .ns-editable p  { margin:0 0 4px; }
   .ns-editable ::selection { background:${T.amberDim}; }
 
-  //fullscreen overlay
   .ns-fullscreen {
     position:fixed; inset:0; background:${T.bg}; z-index:500;
     display:flex; flex-direction:column;
@@ -144,7 +141,6 @@ styleEl.textContent = `
     flex:1; display:flex; flex-direction:column; overflow:hidden;
   }
 
-  //export dropdown
   .ns-export-menu {
     position:absolute; top:calc(100% + 6px); right:0;
     background:${T.surface}; border:1px solid ${T.border};
@@ -161,7 +157,6 @@ styleEl.textContent = `
   .ns-export-item:hover { background:${T.surfaceHi}; color:${T.cream}; }
   .ns-export-item.copied { color:${T.green}; }
 
-  /* ── Bottom status bar ── */
   .ns-status-bar {
     display:flex; align-items:center; justify-content:space-between;
     padding:10px 24px; border-top:1px solid ${T.border};
@@ -170,7 +165,6 @@ styleEl.textContent = `
   .ns-char-count { font-size:11px; color:${T.muted}; font-family:${T.font}; }
   .ns-unsaved    { font-size:11px; color:${T.amber}; font-family:${T.font}; }
 
-  //print/pdf styles
   @media print {
     body * { visibility:hidden; }
     #ns-print-area, #ns-print-area * { visibility:visible; }
@@ -188,14 +182,12 @@ styleEl.textContent = `
 `;
 document.head.appendChild(styleEl);
 
-
 let printDiv = document.getElementById('ns-print-area');
 if (!printDiv) {
   printDiv = document.createElement('div');
   printDiv.id = 'ns-print-area';
   document.body.appendChild(printDiv);
 }
-
 
 const Icon = ({ d, size = 18, color = 'currentColor', fill = 'none' }) => (
   <svg width={size} height={size} fill={fill} stroke={color} viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
@@ -218,7 +210,6 @@ function useCards() {
   return { cards, addCard, toggleLearned };
 }
 
-//card modals
 function CardModal({ onSave, onClose }) {
   const [q, setQ] = useState('');
   const [a, setA] = useState('');
@@ -243,7 +234,6 @@ function CardModal({ onSave, onClose }) {
   );
 }
 
-//preview card ui
 function PreviewCard({ card }) {
   const [flipped, setFlipped] = useState(false);
   const face = { position:'absolute', inset:0, backfaceVisibility:'hidden', WebkitBackfaceVisibility:'hidden', borderRadius:14, border:`1px solid ${T.border}`, display:'flex', flexDirection:'column', padding:'16px 18px', overflow:'hidden' };
@@ -263,7 +253,6 @@ function PreviewCard({ card }) {
   );
 }
 
-//export menu 
 function ExportMenu({ editorRef, onClose }) {
   const [copied, setCopied] = useState(false);
   const menuRef = useRef(null);
@@ -274,11 +263,8 @@ function ExportMenu({ editorRef, onClose }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose]);
 
-  const getPlainText = () =>
-  editorRef.current?.innerText || '';
-
-const getHTML = () =>
-  editorRef.current?.innerHTML || '';
+  const getPlainText = () => editorRef.current?.innerText || '';
+  const getHTML      = () => editorRef.current?.innerHTML || '';
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(getPlainText());
@@ -303,8 +289,8 @@ const getHTML = () =>
 
   const items = [
     { label: copied ? 'Copied!' : 'Copy to clipboard', icon: copied ? 'M5 13l4 4L19 7' : 'M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z', action: handleCopy, cls: copied ? 'copied' : '' },
-    { label: 'Export as TXT',        icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', action: handleTXT },
-    { label: 'Export as PDF',        icon: 'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z',          action: handlePDF },
+    { label: 'Export as TXT', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', action: handleTXT },
+    { label: 'Export as PDF', icon: 'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z', action: handlePDF },
   ];
 
   return (
@@ -319,29 +305,25 @@ const getHTML = () =>
   );
 }
 
-//text editor
 function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen }) {
   const editorRef = useRef(null);
+  const [editorHTML,    setEditorHTML]    = useState('');
+  const [charCount,     setCharCount]     = useState(0);
+  const [isDirty,       setIsDirty]       = useState(false);
+  const [activeFormats, setActiveFormats] = useState({});
+  const [showExport,    setShowExport]    = useState(false);
 
-const [editorHTML, setEditorHTML] = useState('');
-const [charCount, setCharCount] = useState(0);
-const [isDirty, setIsDirty] = useState(false);
-const [activeFormats, setActiveFormats] = useState({});
-const [showExport, setShowExport] = useState(false);
-
+  // Re-populate editor whenever initialText arrives from the backend
   useEffect(() => {
-  if (!editorRef.current) return;
-
-  const html = (initialText || "")
-    .split('\n')
-    .map(line => `<p>${line || '<br>'}</p>`)
-    .join('');
-
-  setEditorHTML(html);
-  setCharCount(initialText?.length || 0);
-
-  editorRef.current.innerHTML = html;
-}, [initialText]);
+    if (!editorRef.current) return;
+    const html = (initialText || '')
+      .split('\n')
+      .map(line => `<p>${line || '<br>'}</p>`)
+      .join('');
+    setEditorHTML(html);
+    setCharCount(initialText?.length || 0);
+    editorRef.current.innerHTML = html;
+  }, [initialText]);
 
   // ESC to exit fullscreen
   useEffect(() => {
@@ -364,35 +346,23 @@ const [showExport, setShowExport] = useState(false);
   });
 
   const handleInput = () => {
-  if (!editorRef.current) return;
-
-  const html = editorRef.current.innerHTML;
-  const text = editorRef.current.innerText;
-
-  setEditorHTML(html);
-  setCharCount(text.length);
-  setIsDirty(true);
-  updateFormats();
-};
+    if (!editorRef.current) return;
+    setEditorHTML(editorRef.current.innerHTML);
+    setCharCount(editorRef.current.innerText.length);
+    setIsDirty(true);
+    updateFormats();
+  };
 
   const handleKeyUp   = () => updateFormats();
   const handleMouseUp = () => updateFormats();
 
   const handleSave = () => {
-  const text = editorRef.current?.innerText || '';
-
-  onSave({
-    newText: text,
-    html: editorHTML,
-    previousText: initialText
-  });
-
-  setIsDirty(false);
-};
+    onSave({ newText: editorRef.current?.innerText || '', html: editorHTML, previousText: initialText });
+    setIsDirty(false);
+  };
 
   const toolbar = (fullscreen = false) => (
     <div className={`ns-toolbar${fullscreen ? ' fullscreen-bar' : ''}`}>
-      {/* Headings */}
       {['h1','h2','h3'].map((h, i) => (
         <button key={h} className="ns-tool" title={`Heading ${i+1}`} onMouseDown={e => { e.preventDefault(); exec('formatBlock', h); }}>{h.toUpperCase()}</button>
       ))}
@@ -408,8 +378,6 @@ const [showExport, setShowExport] = useState(false);
       <button className="ns-tool" title="Undo" onMouseDown={e => { e.preventDefault(); exec('undo'); }}><Icon d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" size={13} /></button>
       <button className="ns-tool" title="Redo" onMouseDown={e => { e.preventDefault(); exec('redo'); }}><Icon d="M21 10H11a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6" size={13} /></button>
       <div className="ns-tool-sep" />
-
-      {/* Export dropdown */}
       <div style={{ position:'relative' }}>
         <button className="ns-tool" title="Export" onMouseDown={e => { e.preventDefault(); setShowExport(v => !v); }}>
           <Icon d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" size={13} />
@@ -417,16 +385,8 @@ const [showExport, setShowExport] = useState(false);
         </button>
         {showExport && <ExportMenu editorRef={editorRef} onClose={() => setShowExport(false)} />}
       </div>
-
-      {/* Spacer */}
       <div style={{ flex:1 }} />
-
-      {/* Expand / collapse */}
-      <button
-        className="ns-tool"
-        title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Expand to fullscreen'}
-        onMouseDown={e => { e.preventDefault(); onToggleFullscreen(); }}
-      >
+      <button className="ns-tool" title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Expand to fullscreen'} onMouseDown={e => { e.preventDefault(); onToggleFullscreen(); }}>
         {isFullscreen
           ? <Icon d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3" size={14} />
           : <Icon d="M3 8V5a2 2 0 012-2h3M16 3h3a2 2 0 012 2v3M21 16v3a2 2 0 01-2 2h-3M8 21H5a2 2 0 01-2-2v-3" size={14} />
@@ -461,17 +421,17 @@ const [showExport, setShowExport] = useState(false);
   };
 
   if (isFullscreen) {
-  return createPortal(
-    <div className="ns-fullscreen">
-      <div className="ns-fullscreen-inner">
-        {toolbar(true)}
-        <div {...editableProps} />
-      </div>
-      {statusBar()}
-    </div>,
-    document.body
-  );
-}
+    return createPortal(
+      <div className="ns-fullscreen">
+        <div className="ns-fullscreen-inner">
+          {toolbar(true)}
+          <div {...editableProps} />
+        </div>
+        {statusBar()}
+      </div>,
+      document.body
+    );
+  }
 
   return (
     <div>
@@ -482,7 +442,6 @@ const [showExport, setShowExport] = useState(false);
   );
 }
 
-//tabs
 const TABS = [
   { id:'image',      label:'Original',        icon:'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
   { id:'ocr',        label:'Recognized Text',  icon:'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
@@ -490,12 +449,11 @@ const TABS = [
   { id:'flashcards', label:'Flashcards',       icon:'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
 ];
 
-//result page
 const ResultsPage = ({ onBack }) => {
-  const [page,          setPage]          = useState('results');
-  const [activeTab,     setActiveTab]     = useState('image');
-  const [isSaved,       setIsSaved]       = useState(false);
-  const [showAdd,       setShowAdd]       = useState(false);
+  const [page,             setPage]             = useState('results');
+  const [activeTab,        setActiveTab]        = useState('image');
+  const [isSaved,          setIsSaved]          = useState(false);
+  const [showAdd,          setShowAdd]          = useState(false);
   const [editorFullscreen, setEditorFullscreen] = useState(false);
   const { cards, addCard } = useCards();
 
@@ -506,8 +464,9 @@ const ResultsPage = ({ onBack }) => {
     ? { 'Content-Type': 'application/json', 'x-auth-token': token }
     : { 'Content-Type': 'application/json' };
 
-  const [recognizedText,      setRecognizedText]      = useState('OCR output will appear here once processing is complete.');
-  const [aiSummary,           setAiSummary]           = useState('AI summary will appear here once processing is complete.');
+  const [fileData,            setFileData]            = useState(null);
+  const [recognizedText,      setRecognizedText]      = useState('');
+  const [aiSummary,           setAiSummary]           = useState('');
   const [studyGuideText,      setStudyGuideText]      = useState('');
   const [transcriptionEdited, setTranscriptionEdited] = useState(false);
   const [summaryEdited,       setSummaryEdited]       = useState(false);
@@ -517,6 +476,7 @@ const ResultsPage = ({ onBack }) => {
     fetch(`/api/files/${fileId}`, { headers })
       .then(r => r.json())
       .then(data => {
+        setFileData(data);
         if (data.currentContent?.transcribedText) setRecognizedText(data.currentContent.transcribedText);
         if (data.currentContent?.summary)         setAiSummary(data.currentContent.summary);
         if (data.currentContent?.studyGuide)      setStudyGuideText(data.currentContent.studyGuide);
@@ -546,7 +506,7 @@ const ResultsPage = ({ onBack }) => {
   return (
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream }}>
 
-      {/* ── Top bar ─────────────────────────────────────── */}
+      {/* Top bar */}
       <div style={{ borderBottom:`1px solid ${T.border}`, padding:'0 32px', display:'flex', alignItems:'center', justifyContent:'space-between', height:58, position:'sticky', top:0, background:`${T.bg}ee`, backdropFilter:'blur(12px)', zIndex:100 }}>
         <div style={{ display:'flex', alignItems:'center', gap:20 }}>
           {onBack && (
@@ -569,7 +529,7 @@ const ResultsPage = ({ onBack }) => {
         </button>
       </div>
 
-      {/* ── Hero ────────────────────────────────────────── */}
+      {/* Hero */}
       <div style={{ padding:'40px 40px 0', animation:'fadeUp .4s ease both' }}>
         <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 10px' }}>Processing Complete</p>
         <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', flexWrap:'wrap', gap:16, marginBottom:32 }}>
@@ -601,7 +561,7 @@ const ResultsPage = ({ onBack }) => {
         </div>
       </div>
 
-      {/* ── Tab panels ──────────────────────────────────── */}
+      {/* Tab panels */}
       <div style={{ padding:'0 40px 64px' }}>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderTop:'none', borderRadius:'0 0 16px 16px', padding:'32px 36px', minHeight:400 }}>
 
@@ -620,7 +580,7 @@ const ResultsPage = ({ onBack }) => {
             </div>
           )}
 
-          {/* Recognized Text — rich editor */}
+          {/* Recognized Text */}
           {activeTab === 'ocr' && (
             <div key="ocr" className="ns-tab-panel">
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
@@ -655,7 +615,7 @@ const ResultsPage = ({ onBack }) => {
                 </button>
               </div>
               <div style={{ background:'linear-gradient(135deg,rgba(245,166,35,.06) 0%,rgba(129,140,248,.06) 100%)', border:`1px solid ${T.border}`, borderRadius:12, padding:'20px 24px', fontFamily:T.font, fontSize:14, lineHeight:1.8, color:T.cream }}>
-                {aiSummary}
+                {aiSummary || <span style={{ color:T.muted, fontStyle:'italic' }}>Waiting for AI summary…</span>}
               </div>
             </div>
           )}
