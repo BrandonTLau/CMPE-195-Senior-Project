@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { runOcr } from "./api/ocrClient";
 
 const UploadPage = ({ onBack, onProcess }) => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -89,6 +90,18 @@ const UploadPage = ({ onBack, onProcess }) => {
 
       // Memorize what was uploaded to display in Results
       sessionStorage.setItem("lastUploadId", saved._id);
+
+      const first = uploadedFiles[0];
+
+      if (first?.file?.type?.startsWith("image/")) {
+        const ocrData = await runOcr(first.file);
+
+        sessionStorage.setItem("lastOcrOverlayUrl", ocrData?.overlay_url || "");
+        sessionStorage.setItem("lastOcrMergedText", ocrData?.merged_text || ocrData?.text || "");
+      } else {
+        sessionStorage.removeItem("lastOcrOverlayUrl");
+        sessionStorage.removeItem("lastOcrMergedText");
+      }
 
       if (onProcess) onProcess();
     } catch (e) {
@@ -210,10 +223,12 @@ const UploadPage = ({ onBack, onProcess }) => {
           <button
             onClick={handleProcessNotes}
             style={styles.processButton}
-            disabled={uploadedFiles.length === 0}
+            disabled={uploadedFiles.length === 0 || uploading}
           >
             Process Notes
           </button>
+
+          {error && <p style={{ color: "#DC2626", marginTop: "1rem" }}>{error}</p>}
 
         </div>
       </div>
