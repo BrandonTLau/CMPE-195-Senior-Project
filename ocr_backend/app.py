@@ -1,5 +1,3 @@
-import base64
-import time
 from fastapi.staticfiles import StaticFiles
 import numpy as np
 
@@ -26,7 +24,7 @@ UPLOADS_DIR = BASE_DIR / "uploads"
 OUTPUT_DIR = BASE_DIR / "output"
 UPLOADS_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
-app.mount("/static", StaticFiles(directory=str(OUTPUT_DIR)), name="static")
+app.mount("/ocr_static", StaticFiles(directory=str(OUTPUT_DIR)), name="ocr_static")
 
 OCR_CFG_PATH = BASE_DIR / "PaddleOCR.yaml"
 ocr = PaddleOCR(paddlex_config=str(OCR_CFG_PATH))
@@ -180,12 +178,12 @@ def merge_items_into_lines(items: list[dict], y_tol: int = 14, gap_for_tab: int 
 
     return "\n".join(out_lines).strip()
 
-@app.get("/api/health")
+@app.get("/ocr_api/health")
 def health():
     return {"ok": True}
 
 
-@app.post("/api/ocr")
+@app.post("/ocr_api/ocr")
 async def run_ocr(file: UploadFile = File(...)):
     filename_lower = (file.filename or "").lower()
     if filename_lower.endswith(".pdf"):
@@ -223,7 +221,7 @@ async def run_ocr(file: UploadFile = File(...)):
     }
 
 
-@app.post("/api/ocr_v5")
+@app.post("/ocr_api/ocr_v5")
 async def run_ocr_v5(file: UploadFile = File(...)):
     filename_lower = (file.filename or "").lower()
     if filename_lower.endswith(".pdf"):
@@ -261,17 +259,17 @@ async def run_ocr_v5(file: UploadFile = File(...)):
     overlay_path = OUTPUT_DIR / overlay_name
     build_overlay_image(Path(norm_path), items, overlay_path)
 
-    overlay_url = f"/static/{overlay_name}"
+    overlay_url = f"/ocr_static/{overlay_name}"
 
     return {
-    "filename": file.filename,
-    "text": "\n".join(lines),
-    "merged_text": merged_text,
-    "items": items,
-    "overlay_url": overlay_url,
-    "debug": {
-        "mode": "pp-ocrv5_demo_like",
-        "raw_path": str(raw_path),
-        "used_path": str(norm_path),
+        "filename": file.filename,
+        "text": "\n".join(lines),
+        "merged_text": merged_text,
+        "items": items,
+        "overlay_url": overlay_url,
+        "debug": {
+            "mode": "pp-ocrv5_demo_like",
+            "raw_path": str(raw_path),
+            "used_path": str(norm_path),
         },
     }
