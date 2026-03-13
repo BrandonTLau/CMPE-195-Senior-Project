@@ -202,6 +202,7 @@ Applications include image recognition, natural language processing, and predict
   const [studyGuideText, setStudyGuideText]   = useState('');
   const [transcriptionEdited, setTranscriptionEdited] = useState(false);
   const [summaryEdited, setSummaryEdited]     = useState(false);
+  const [overlayUrl, setOverlayUrl] = useState(sessionStorage.getItem("lastOcrOverlayUrl") || "");
 
   useEffect(() => {
     if (!fileId) return;
@@ -212,6 +213,11 @@ Applications include image recognition, natural language processing, and predict
         if (data.currentContent?.transcribedText) setRecognizedText(data.currentContent.transcribedText);
         if (data.currentContent?.summary)         setAiSummary(data.currentContent.summary);
         if (data.currentContent?.studyGuide)      setStudyGuideText(data.currentContent.studyGuide);
+        const ssOverlay = sessionStorage.getItem("lastOcrOverlayUrl");
+        if (ssOverlay) setOverlayUrl(ssOverlay);
+
+        const ssMerged = sessionStorage.getItem("lastOcrMergedText");
+        if (ssMerged) setRecognizedText(ssMerged);
       })
       .catch(err => console.error('Failed to load file data:', err));
   }, [fileId]);
@@ -303,10 +309,16 @@ Applications include image recognition, natural language processing, and predict
               Original Image
             </h3>
             <div style={styles.imagePreview}>
-              <svg style={styles.imagePlaceholder} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <p style={styles.imagePlaceholderText}>lecture_notes_01.jpg</p>
+              {overlayUrl ? (
+                <img src={overlayUrl} alt="OCR overlay" style={styles.imageActual} />
+              ) : (
+                <>
+                  <svg style={styles.imagePlaceholder} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <p style={styles.imagePlaceholderText}>{fileData?.originalName || "Uploaded image"}</p>
+                </>
+              )}
             </div>
           </div>
 
@@ -497,6 +509,7 @@ const styles = {
   cardTitle: { fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#1F2937' },
   cardIcon: { width: '20px', height: '20px', color: '#4F46E5' },
   imagePreview: { backgroundColor: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: '0.75rem', height: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' },
+  imageActual: { width: "100%", height: "100%", objectFit: "contain", borderRadius: "0.75rem" },
   imagePlaceholder: { width: '64px', height: '64px', color: '#9CA3AF' },
   imagePlaceholderText: { color: '#6B7280', fontSize: '0.875rem' },
   textContent: { backgroundColor: '#F9FAFB', border: '1px solid #F3F4F6', borderRadius: '0.75rem', padding: '1rem', maxHeight: '300px', overflowY: 'auto', marginBottom: '1rem' },
