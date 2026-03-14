@@ -69,10 +69,10 @@ const UploadPage = ({ onBack, onProcess }) => {
     }
   };
 
-  /** const handleProcessNotes = () => {
+  const handleProcessNotes = () => {
     if (onProcess) onProcess(); // doesn't handle uploads, only moves to next screen   
-  }; */
-
+  }; 
+/*
   const handleProcessNotes = async () => {
     setError("");
 
@@ -109,13 +109,13 @@ const UploadPage = ({ onBack, onProcess }) => {
     } finally {
       setUploading(false);
     }
-  };
+  };*/
 
 
   const removeFile = (index) => {
     setUploadedFiles(uploadedFiles.filter((_, i) => i !== index));
   };
-
+/*
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
 
@@ -135,7 +135,7 @@ const UploadPage = ({ onBack, onProcess }) => {
     const data = await res.json();
     if (!res.ok) throw new Error(data?.msg || "Upload failed");
     return data; // expected: saved file doc (includes _id)
-  };
+  };*/
 
   return (
     <div style={styles.container}>
