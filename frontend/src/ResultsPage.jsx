@@ -469,7 +469,8 @@ const ResultsPage = ({ onBack }) => {
   const [aiSummary,           setAiSummary]           = useState('');
   const [studyGuideText,      setStudyGuideText]      = useState('');
   const [transcriptionEdited, setTranscriptionEdited] = useState(false);
-  const [summaryEdited,       setSummaryEdited]       = useState(false);
+  const [summaryEdited, setSummaryEdited]     = useState(false);
+  const [overlayUrl, setOverlayUrl] = useState(sessionStorage.getItem("lastOcrOverlayUrl") || "");
 
   useEffect(() => {
     if (!fileId) return;
@@ -480,6 +481,11 @@ const ResultsPage = ({ onBack }) => {
         if (data.currentContent?.transcribedText) setRecognizedText(data.currentContent.transcribedText);
         if (data.currentContent?.summary)         setAiSummary(data.currentContent.summary);
         if (data.currentContent?.studyGuide)      setStudyGuideText(data.currentContent.studyGuide);
+        const ssOverlay = sessionStorage.getItem("lastOcrOverlayUrl");
+        if (ssOverlay) setOverlayUrl(ssOverlay);
+
+        const ssMerged = sessionStorage.getItem("lastOcrMergedText");
+        if (ssMerged) setRecognizedText(ssMerged);
       })
       .catch(err => console.error('Failed to load file data:', err));
   }, [fileId]);
@@ -561,6 +567,28 @@ const ResultsPage = ({ onBack }) => {
         </div>
       </div>
 
+        {/* Content grid */}
+        <div style={styles.contentGrid}>
+          <div style={styles.card}>
+            <h3 style={styles.cardTitle}>
+              <svg style={styles.cardIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Original Image
+            </h3>
+            <div style={styles.imagePreview}>
+              {overlayUrl ? (
+                <img src={overlayUrl} alt="OCR overlay" style={styles.imageActual} />
+              ) : (
+                <>
+                  <svg style={styles.imagePlaceholder} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <p style={styles.imagePlaceholderText}>{fileData?.originalName || "Uploaded image"}</p>
+                </>
+              )}
+            </div>
+          </div>
       {/* Tab panels */}
       <div style={{ padding:'0 40px 64px' }}>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderTop:'none', borderRadius:'0 0 16px 16px', padding:'32px 36px', minHeight:400 }}>
@@ -656,6 +684,85 @@ const ResultsPage = ({ onBack }) => {
       {showAdd && <CardModal onSave={(q, a) => { addCard(q, a); setShowAdd(false); }} onClose={() => setShowAdd(false)} />}
     </div>
   );
+};
+
+const previewFace = {
+  position: 'absolute', inset: 0,
+  backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
+  borderRadius: 10, border: '1.5px solid',
+  display: 'flex', flexDirection: 'column', padding: '10px 14px', overflow: 'hidden',
+};
+const previewTag = { fontSize: 10, fontWeight: 700, letterSpacing: 1, color: '#9CA3AF', marginBottom: 6 };
+const previewText = {
+  fontSize: 12, fontWeight: 600, color: '#1F2937', margin: 0, lineHeight: 1.45,
+  display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+};
+
+const modalStyles = {
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+  box: { background: '#fff', borderRadius: 16, padding: 28, width: 420, maxWidth: '90vw', boxShadow: '0 24px 48px rgba(0,0,0,.18)' },
+  label: { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 },
+  textarea: { width: '100%', boxSizing: 'border-box', border: '1.5px solid #D1D5DB', borderRadius: 10, padding: '10px 12px', fontSize: 14, fontFamily: 'inherit', color: '#111827', resize: 'vertical', outline: 'none', display: 'block', marginBottom: 14 },
+  solid: { padding: '9px 18px', background: '#6366F1', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' },
+  ghost: { padding: '9px 18px', background: 'transparent', color: '#374151', border: '1.5px solid #D1D5DB', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' },
+};
+
+const styles = {
+  container: { minHeight: '100vh', backgroundColor: '#F9FAFB', padding: '2rem' },
+  wrapper: { maxWidth: '1400px', margin: '0 auto' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' },
+  backButton: {
+    display: 'inline-flex', alignItems: 'center', gap: '0.375rem',
+    marginBottom: '1rem',
+    padding: '0.5rem 1rem',
+    backgroundColor: 'white', color: '#4F46E5',
+    border: '1px solid #E5E7EB', borderRadius: '0.625rem',
+    fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.07)',
+  },
+  backIcon: { width: '16px', height: '16px' },
+  logo: { display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' },
+  logoIcon: { width: '28px', height: '28px', color: '#4F46E5' },
+  logoText: { fontSize: '1.25rem', fontWeight: '700', color: '#1F2937' },
+  title: { fontSize: '2rem', fontWeight: '700', color: '#1F2937', marginBottom: '0.25rem' },
+  subtitle: { color: '#6B7280' },
+  headerActions: { display: 'flex', gap: '0.75rem', flexWrap: 'wrap' },
+  exportButton: { padding: '0.625rem 1.25rem', backgroundColor: 'white', color: '#374151', border: '1px solid #D1D5DB', borderRadius: '0.5rem', fontSize: '0.875rem', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.2s', fontFamily: 'inherit' },
+  saveButton: { padding: '0.625rem 1.25rem', backgroundColor: '#22C55E', color: 'white', border: 'none', borderRadius: '0.5rem', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.2s', fontFamily: 'inherit' },
+  saveButtonSaved: { backgroundColor: '#10B981', cursor: 'default' },
+  buttonIcon: { width: '18px', height: '18px' },
+  contentGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem', marginBottom: '2rem' },
+  card: { backgroundColor: 'white', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' },
+  cardTitle: { fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#1F2937' },
+  cardIcon: { width: '20px', height: '20px', color: '#4F46E5' },
+  imagePreview: { backgroundColor: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: '0.75rem', height: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' },
+  imageActual: { width: "100%", height: "100%", objectFit: "contain", borderRadius: "0.75rem" },
+  imagePlaceholder: { width: '64px', height: '64px', color: '#9CA3AF' },
+  imagePlaceholderText: { color: '#6B7280', fontSize: '0.875rem' },
+  textContent: { backgroundColor: '#F9FAFB', border: '1px solid #F3F4F6', borderRadius: '0.75rem', padding: '1rem', maxHeight: '300px', overflowY: 'auto', marginBottom: '1rem' },
+  textPre: { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif', fontSize: '0.875rem', lineHeight: '1.6', margin: 0, whiteSpace: 'pre-wrap', color: '#1F2937' },
+  confidenceBadge: { display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '0.5rem' },
+  badgeIcon: { width: '20px', height: '20px', color: '#3B82F6' },
+  badgeText: { fontSize: '0.875rem', fontWeight: '500', color: '#1E40AF' },
+  aiSection: { marginTop: '2rem' },
+  aiSectionTitle: { fontSize: '1.5rem', fontWeight: '700', color: '#1F2937', marginBottom: '1.5rem' },
+  aiGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem' },
+  aiCard: { backgroundColor: 'white', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' },
+  aiCardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' },
+  aiCardTitle: { fontSize: '1.125rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#1F2937', margin: 0 },
+  regenerateButton: { padding: '0.5rem 0.75rem', backgroundColor: '#F3F4F6', color: '#374151', border: 'none', borderRadius: '0.375rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem', transition: 'background-color 0.2s', fontFamily: 'inherit' },
+  smallIcon: { width: '14px', height: '14px' },
+  summaryBox: { padding: '1.25rem', background: 'linear-gradient(135deg, #F3E8FF 0%, #FCE7F3 100%)', border: '1px solid #E9D5FF', borderRadius: '0.75rem' },
+  summaryText: { fontSize: '0.875rem', lineHeight: '1.6', color: '#1F2937', margin: 0 },
+  studyButton: {
+    width: '100%', padding: '12px 20px',
+    background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
+    color: '#fff', border: 'none', borderRadius: '0.75rem',
+    fontSize: '0.9375rem', fontWeight: '700', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    fontFamily: 'inherit', boxShadow: '0 4px 14px rgba(79,70,229,.35)',
+  },
 };
 
 export default ResultsPage;
