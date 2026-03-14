@@ -6,29 +6,35 @@ import SignUp from "./SignUp";
 import ResultsPage from "./ResultsPage";
 
 function App() {
-  const [screen, setScreen] = useState("landing");
-  const [selectedNoteId, setSelectedNoteId] = useState(null);
+  const [screen, setScreen] = useState(() => sessionStorage.getItem('screen') || 'landing');
+  const [selectedNoteId, setSelectedNoteId] = useState(() => sessionStorage.getItem('selectedNoteId') || null);
   const [dashboardInitialTab, setDashboardInitialTab] = useState(null);
 
+  const navigate = (s) => {
+    sessionStorage.setItem('screen', s);
+    setScreen(s);
+  };
+
   const handleNoteSelect = (id) => {
+    sessionStorage.setItem('selectedNoteId', id);
     setSelectedNoteId(id);
-    setScreen("note_results");
+    navigate("note_results");
   };
 
   return (
     <>
       {screen === "landing" && (
         <LandingPage
-          onStart={() => setScreen("login")}
-          onSignIn={() => setScreen("login")}
+          onStart={() => navigate("login")}
+          onSignIn={() => navigate("login")}
         />
       )}
 
       {screen === "login" && (
         <LoginPage
-          onBack={() => setScreen("landing")}
-          onLoginSuccess={() => setScreen("dashboard")}
-          onGoToSignUp={() => setScreen("signup")}
+          onBack={() => navigate("landing")}
+          onLoginSuccess={() => navigate("dashboard")}
+          onGoToSignUp={() => navigate("signup")}
         />
       )}
 
@@ -37,8 +43,8 @@ function App() {
           showUploadPage={false}
           showProcessingPage={false}
           showResultsPage={false}
-          onLogout={() => setScreen("landing")}
-          onNewScan={() => setScreen("dashboard_upload")}
+          onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
+          onNewScan={() => navigate("dashboard_upload")}
           onNoteSelect={handleNoteSelect}
           initialTab={dashboardInitialTab}
           onInitialTabConsumed={() => setDashboardInitialTab(null)}
@@ -50,9 +56,9 @@ function App() {
           showUploadPage={true}
           showProcessingPage={false}
           showResultsPage={false}
-          onLogout={() => setScreen("landing")}
-          onNewScan={() => setScreen("dashboard_upload")}
-          onProcess={() => setScreen("processing")}
+          onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
+          onNewScan={() => navigate("dashboard_upload")}
+          onProcess={() => navigate("processing")}
           onNoteSelect={handleNoteSelect}
         />
       )}
@@ -62,9 +68,9 @@ function App() {
           showUploadPage={false}
           showProcessingPage={true}
           showResultsPage={false}
-          onLogout={() => setScreen("landing")}
-          onNewScan={() => setScreen("dashboard_upload")}
-          onFinishProcessing={() => setScreen("results")}
+          onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
+          onNewScan={() => navigate("dashboard_upload")}
+          onFinishProcessing={() => navigate("results")}
           onNoteSelect={handleNoteSelect}
         />
       )}
@@ -74,16 +80,16 @@ function App() {
           showUploadPage={false}
           showProcessingPage={false}
           showResultsPage={true}
-          onLogout={() => setScreen("landing")}
-          onNewScan={() => setScreen("dashboard_upload")}
+          onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
+          onNewScan={() => navigate("dashboard_upload")}
           onNoteSelect={handleNoteSelect}
         />
       )}
 
       {screen === "signup" && (
         <SignUp
-          onBack={() => setScreen("login")}
-          onSignUpSuccess={() => setScreen("dashboard")}
+          onBack={() => navigate("login")}
+          onSignUpSuccess={() => navigate("dashboard")}
         />
       )}
 
@@ -92,10 +98,10 @@ function App() {
           noteId={selectedNoteId}
           onBack={() => {
             setDashboardInitialTab("notes");
-            setScreen("dashboard");
+            navigate("dashboard");
           }}
-          onNewScan={() => setScreen("dashboard_upload")}
-          onLogout={() => setScreen("landing")}
+          onNewScan={() => navigate("dashboard_upload")}
+          onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
         />
       )}
     </>
