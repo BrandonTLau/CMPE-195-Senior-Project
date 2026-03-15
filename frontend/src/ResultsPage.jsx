@@ -589,6 +589,7 @@ const ResultsPage = ({ onBack }) => {
               )}
             </div>
           </div>
+        </div>
       {/* Tab panels */}
       <div style={{ padding:'0 40px 64px' }}>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderTop:'none', borderRadius:'0 0 16px 16px', padding:'32px 36px', minHeight:400 }}>
