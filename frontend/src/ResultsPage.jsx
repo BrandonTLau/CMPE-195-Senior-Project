@@ -443,18 +443,18 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
 }
 
 const TABS = [
-  { id:'image',      label:'Original',        icon:'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
-  { id:'ocr',        label:'Recognized Text',  icon:'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+  { id:'scan_edit',  label:'Scan & Edit',      icon:'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
   { id:'summary',    label:'AI Summary',       icon:'M13 10V3L4 14h7v7l9-11h-7z' },
   { id:'flashcards', label:'Flashcards',       icon:'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
 ];
 
 const ResultsPage = ({ onBack }) => {
   const [page,             setPage]             = useState('results');
-  const [activeTab,        setActiveTab]        = useState('image');
+  const [activeTab,        setActiveTab]        = useState('scan_edit');
   const [isSaved,          setIsSaved]          = useState(false);
   const [showAdd,          setShowAdd]          = useState(false);
   const [editorFullscreen, setEditorFullscreen] = useState(false);
+  const [scanEditView,     setScanEditView]     = useState('both'); // 'both' | 'image' | 'editor'
   const { cards, addCard } = useCards();
 
   //backend wiring
@@ -565,26 +565,19 @@ const ResultsPage = ({ onBack }) => {
       <div style={{ padding:'0 40px 64px' }}>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderTop:'none', borderRadius:'0 0 16px 16px', padding:'32px 36px', minHeight:400 }}>
 
-          {/* Original */}
-          {activeTab === 'image' && (
-            <div key="image" className="ns-tab-panel">
-              <div style={{ display:'flex', alignItems:'center', gap:20, background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:14, padding:'24px 28px' }}>
-                <div style={{ width:64, height:64, borderRadius:16, background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <Icon d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" size={28} color={T.amber} />
-                </div>
-                <div>
-                  <p style={{ margin:'0 0 5px', fontSize:16, fontWeight:600, color:T.cream }}>lecture_notes_01.jpg</p>
-                  <p style={{ margin:0, fontSize:13, color:T.muted }}>Source document uploaded for OCR processing</p>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Scan & Edit */}
+          {activeTab === 'scan_edit' && (
+            <div key="scan_edit" className="ns-tab-panel">
 
-          {/* Recognized Text */}
-          {activeTab === 'ocr' && (
-            <div key="ocr" className="ns-tab-panel">
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
-                <p style={{ margin:0, fontSize:13, color:T.muted }}>Edit, format, and export your recognized text.</p>
+              {/* Mobile toggle */}
+              <div style={{ display:'flex', gap:6, marginBottom:16 }}>
+                {[['both','Both'],['image','Scan'],['editor','Editor']].map(([val, label]) => (
+                  <button key={val} onClick={() => setScanEditView(val)}
+                    style={{ padding:'5px 14px', borderRadius:8, fontSize:12, fontWeight:600, fontFamily:T.font, cursor:'pointer', border:`1px solid ${scanEditView===val ? T.amber : T.border}`, background:scanEditView===val ? T.amberDim : 'transparent', color:scanEditView===val ? T.amber : T.muted, transition:'all .15s' }}>
+                    {label}
+                  </button>
+                ))}
+                <div style={{ flex:1 }} />
                 {transcriptionEdited && (
                   <button className="ns-regen" onClick={() => requestRegenerate('all')}>
                     <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} />
@@ -592,17 +585,49 @@ const ResultsPage = ({ onBack }) => {
                   </button>
                 )}
               </div>
-              <RichTextEditor
-                initialText={recognizedText}
-                isFullscreen={editorFullscreen}
-                onToggleFullscreen={() => setEditorFullscreen(f => !f)}
-                onSave={(payload) => saveEdit(
-                  'edit/transcription',
-                  payload,
-                  (c) => { setRecognizedText(c.transcribedText); setTranscriptionEdited(true); },
-                  setTranscriptionEdited
+
+              {/* Split layout */}
+              <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
+
+                {/* Image pane */}
+                {(scanEditView === 'both' || scanEditView === 'image') && (
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 10px', fontFamily:T.font }}>Original Scan</p>
+                    <div style={{ background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:14, overflow:'hidden', minHeight:400, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:12, padding:24 }}>
+                      {/* Placeholder — replace with <img src={scanImageUrl} /> when backend provides it */}
+                      <div style={{ width:80, height:80, borderRadius:20, background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <Icon d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" size={36} color={T.amber} />
+                      </div>
+                      <p style={{ fontSize:14, fontWeight:600, color:T.cream, margin:0 }}>lecture_notes_01.jpg</p>
+                      <p style={{ fontSize:12, color:T.muted, margin:0, textAlign:'center' }}>Scanned image will appear here once<br/>image serving is wired up.</p>
+                    </div>
+                  </div>
                 )}
-              />
+
+                {/* Divider */}
+                {scanEditView === 'both' && (
+                  <div style={{ width:1, alignSelf:'stretch', background:T.border, flexShrink:0 }} />
+                )}
+
+                {/* Editor pane */}
+                {(scanEditView === 'both' || scanEditView === 'editor') && (
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 10px', fontFamily:T.font }}>Recognized Text</p>
+                    <RichTextEditor
+                      initialText={recognizedText}
+                      isFullscreen={editorFullscreen}
+                      onToggleFullscreen={() => setEditorFullscreen(f => !f)}
+                      onSave={(payload) => saveEdit(
+                        'edit/transcription',
+                        payload,
+                        (c) => { setRecognizedText(c.transcribedText); setTranscriptionEdited(true); },
+                        setTranscriptionEdited
+                      )}
+                    />
+                  </div>
+                )}
+
+              </div>
             </div>
           )}
 

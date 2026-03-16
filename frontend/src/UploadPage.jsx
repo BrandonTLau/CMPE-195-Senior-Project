@@ -1,5 +1,27 @@
 import React, { useState } from 'react';
 
+const T = {
+  bg:        '#0E1117',
+  surface:   '#161B27',
+  surfaceHi: '#1E2537',
+  border:    'rgba(255,255,255,0.07)',
+  borderHi:  'rgba(255,255,255,0.13)',
+  amber:     '#F5A623',
+  amberDim:  'rgba(245,166,35,0.12)',
+  cream:     '#EDE8DC',
+  muted:     '#6B7694',
+  red:       '#F87171',
+  redDim:    'rgba(248,113,113,0.12)',
+  font:      '"DM Sans", system-ui, sans-serif',
+  serif:     '"DM Serif Display", Georgia, serif',
+};
+
+const Icon = ({ d, size = 16, color = 'currentColor' }) => (
+  <svg width={size} height={size} fill="none" stroke={color} viewBox="0 0 24 24" style={{ flexShrink:0 }}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={d} />
+  </svg>
+);
+
 const UploadPage = ({ onBack, onProcess }) => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [dragActive, setDragActive] = useState(false);
@@ -67,11 +89,11 @@ const UploadPage = ({ onBack, onProcess }) => {
       setUploadedFiles((prev) => [...prev, ...newFiles]);
     }
   };
-
+/*
   const handleProcessNotes = () => {
     if (onProcess) onProcess(); // doesn't handle uploads, only moves to next screen   
   }; 
-/*
+*/
   const handleProcessNotes = async () => {
     setError("");
 
@@ -96,13 +118,13 @@ const UploadPage = ({ onBack, onProcess }) => {
     } finally {
       setUploading(false);
     }
-  };*/
-
+  };
 
   const removeFile = (index) => {
     setUploadedFiles(uploadedFiles.filter((_, i) => i !== index));
   };
-/*
+
+
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
 
@@ -122,260 +144,121 @@ const UploadPage = ({ onBack, onProcess }) => {
     const data = await res.json();
     if (!res.ok) throw new Error(data?.msg || "Upload failed");
     return data; // expected: saved file doc (includes _id)
-  };*/
+  };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.wrapper}>
+    <div style={{ fontFamily: T.font, animation: 'fadeUp .35s ease both' }}>
 
-        
+      {/* Header */}
+      <div style={{ marginBottom: 28 }}>
+        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: T.amber, margin: '0 0 6px', fontFamily: T.font }}>New Scan</p>
+        <h1 style={{ fontFamily: T.serif, fontSize: 32, fontWeight: 400, color: T.cream, margin: 0, lineHeight: 1.1 }}>Upload Your Notes</h1>
+        <p style={{ fontFamily: T.font, fontSize: 13, color: T.muted, margin: '6px 0 0' }}>Supports JPEG, PNG, and PDF formats</p>
+      </div>
 
-          
-        
+      {/* Upload box */}
+      <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 16, padding: 32 }}>
 
-        {/* Upload Box */}
-        <div style={styles.uploadBox}>
-          <h2 style={styles.title}>Upload Your Notes</h2>
-          <p style={styles.subtitle}>Support for JPEG, PNG, and PDF formats</p>
-
-          {/* Drag & Drop Area */}
-          <div
-            style={{
-              ...styles.dropzone,
-              ...(dragActive ? styles.dropzoneActive : {})
-            }}
-            onDragEnter={handleDrag}
-            onDragLeave={handleDrag}
-            onDragOver={handleDrag}
-            onDrop={handleDrop}
-            onClick={() => document.getElementById("file-upload").click()}
-          >
-            <svg style={styles.uploadIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6H16a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-
-            <p style={styles.dropzoneText}>Drag and drop your files here</p>
-            <p style={styles.dropzoneOr}>or</p>
-
-            <button style={styles.browseButton}>Browse Files</button>
-
-            <input
-              id="file-upload"
-              type="file"
-              multiple
-              accept="image/*,.pdf"
-              onChange={handleFileUpload}
-              style={{ display: "none" }}
-            />
+        {/* Drag & Drop Area */}
+        <div
+          style={{
+            border: `2px dashed ${dragActive ? T.amber : T.border}`,
+            borderRadius: 12,
+            padding: '48px 32px',
+            textAlign: 'center',
+            background: dragActive ? T.amberDim : T.surfaceHi,
+            cursor: 'pointer',
+            transition: 'all .2s',
+          }}
+          onDragEnter={handleDrag}
+          onDragLeave={handleDrag}
+          onDragOver={handleDrag}
+          onDrop={handleDrop}
+          onClick={() => document.getElementById('file-upload').click()}
+        >
+          <div style={{ width: 56, height: 56, borderRadius: 14, background: T.amberDim, border: `1px solid rgba(245,166,35,.2)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <Icon d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6H16a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" size={26} color={T.amber} />
           </div>
 
-          {/* Uploaded Files */}
-          {uploadedFiles.length > 0 && (
-            <div style={styles.filesList}>
-              <h3 style={styles.filesTitle}>Uploaded Files ({uploadedFiles.length})</h3>
+          <p style={{ fontFamily: T.font, fontSize: 15, fontWeight: 500, color: T.cream, margin: '0 0 6px' }}>
+            Drag and drop your files here
+          </p>
+          <p style={{ fontFamily: T.font, fontSize: 13, color: T.muted, margin: '0 0 20px' }}>or</p>
 
-              <div style={styles.filesContainer}>
-                {uploadedFiles.map((file, index) => (
-                  <div key={index} style={styles.fileItem}>
-                    <div style={styles.fileInfo}>
-                      <svg style={styles.fileIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-
-                      <div>
-                        <p style={styles.fileName}>{file.name}</p>
-                        <p style={styles.fileSize}>{file.size} • {file.type}</p>
-                      </div>
-                    </div>
-
-                    <div style={styles.fileActions}>
-                      
-
-                      <button
-                        onClick={() => removeFile(index)}
-                        style={styles.removeButton}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Process Button */}
           <button
-            onClick={handleProcessNotes}
-            style={styles.processButton}
-            disabled={uploadedFiles.length === 0}
-          >
-            Process Notes
+            style={{ background: T.amber, border: 'none', color: '#0E1117', borderRadius: 9, padding: '9px 22px',
+              fontFamily: T.font, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              transition: 'opacity .2s, transform .15s' }}
+            onMouseEnter={e => { e.currentTarget.style.opacity = '.88'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'none'; }}>
+            Browse Files
           </button>
 
+          <input
+            id="file-upload"
+            type="file"
+            multiple
+            accept="image/*,.pdf"
+            onChange={handleFileUpload}
+            style={{ display: 'none' }}
+          />
         </div>
+
+        {/* Uploaded Files */}
+        {uploadedFiles.length > 0 && (
+          <div style={{ marginTop: 24 }}>
+            <p style={{ fontFamily: T.font, fontSize: 11, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase',
+              color: T.muted, margin: '0 0 12px' }}>
+              Uploaded Files ({uploadedFiles.length})
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {uploadedFiles.map((file, index) => (
+                <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 12,
+                  background: T.surfaceHi, border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 14px' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: T.amberDim,
+                    border: `1px solid rgba(245,166,35,.2)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={15} color={T.amber} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontFamily: T.font, fontSize: 13, fontWeight: 600, color: T.cream, margin: '0 0 2px',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
+                    <p style={{ fontFamily: T.font, fontSize: 11, color: T.muted, margin: 0 }}>{file.size} · {file.type}</p>
+                  </div>
+                  <button
+                    onClick={() => removeFile(index)}
+                    style={{ width: 26, height: 26, borderRadius: 99, background: T.redDim, border: `1px solid rgba(248,113,113,.2)`,
+                      color: T.red, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 16, fontWeight: 700, flexShrink: 0, transition: 'background .15s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(248,113,113,.25)'}
+                    onMouseLeave={e => e.currentTarget.style.background = T.redDim}>
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Process Button */}
+        <button
+          onClick={handleProcessNotes}
+          disabled={uploadedFiles.length === 0}
+          style={{ width: '100%', marginTop: 24, padding: '13px', borderRadius: 10, border: 'none',
+            background: uploadedFiles.length === 0 ? T.surfaceHi : T.amber,
+            color: uploadedFiles.length === 0 ? T.muted : '#0E1117',
+            fontFamily: T.font, fontSize: 14, fontWeight: 600, cursor: uploadedFiles.length === 0 ? 'default' : 'pointer',
+            transition: 'opacity .2s, transform .15s',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+          onMouseEnter={e => { if (uploadedFiles.length > 0) { e.currentTarget.style.opacity = '.88'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
+          onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'none'; }}>
+          <Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" size={15} color={uploadedFiles.length === 0 ? T.muted : '#0E1117'} />
+          Process Notes
+        </button>
+
       </div>
     </div>
   );
-};
-
-const styles = {
-  container: {
-    minHeight: "100vh",
-    backgroundColor: "#F9FAFB",
-    padding: "2rem",
-  },
-  wrapper: {
-    maxWidth: "1024px",
-    margin: "0 auto",
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: "2rem",
-  },
-  logo: {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.5rem",
-  },
-  logoIcon: {
-    width: "32px",
-    height: "32px",
-    color: "#4F46E5",
-  },
-  logoText: {
-    fontSize: "1.5rem",
-    fontWeight: "700",
-    color: "#1F2937",
-  },
-  backButton: {
-    color: "#6B7280",
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    fontSize: "1rem",
-    padding: "0.5rem 1rem",
-    borderRadius: "0.5rem",
-  },
-  uploadBox: {
-    backgroundColor: "white",
-    borderRadius: "1rem",
-    boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
-    padding: "3rem",
-  },
-  title: {
-    fontSize: "2rem",
-    fontWeight: "700",
-    textAlign: "center",
-    marginBottom: "0.5rem",
-  },
-  subtitle: {
-    color: "#6B7280",
-    textAlign: "center",
-    marginBottom: "2rem",
-  },
-  dropzone: {
-    border: "4px dashed #C7D2FE",
-    borderRadius: "1rem",
-    padding: "4rem",
-    textAlign: "center",
-    backgroundColor: "#EEF2FF",
-    cursor: "pointer",
-    transition: "all 0.3s",
-  },
-  dropzoneActive: {
-    backgroundColor: "#E0E7FF",
-    borderColor: "#818CF8",
-  },
-  uploadIcon: {
-    width: "64px",
-    height: "64px",
-    color: "#A5B4FC",
-    margin: "0 auto 1rem",
-  },
-  dropzoneText: {
-    fontSize: "1.25rem",
-    marginBottom: "0.5rem",
-  },
-  dropzoneOr: {
-    color: "#9CA3AF",
-    marginBottom: "1rem",
-  },
-  browseButton: {
-    padding: "0.75rem 1.5rem",
-    backgroundColor: "#4F46E5",
-    color: "white",
-    borderRadius: "0.5rem",
-    border: "none",
-    cursor: "pointer",
-  },
-  filesList: {
-    marginTop: "2rem",
-  },
-  filesTitle: {
-    fontSize: "1.125rem",
-    fontWeight: "600",
-    marginBottom: "1rem",
-  },
-  filesContainer: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.75rem",
-  },
-  fileItem: {
-    display: "flex",
-    justifyContent: "space-between",
-    padding: "1rem",
-    backgroundColor: "#F9FAFB",
-    borderRadius: "0.5rem",
-  },
-  fileInfo: {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.75rem",
-  },
-  fileIcon: {
-    width: "24px",
-    height: "24px",
-    color: "#9CA3AF",
-  },
-  fileName: {
-    fontWeight: "500",
-  },
-  fileSize: {
-    fontSize: "0.875rem",
-    color: "#6B7280",
-  },
-  fileActions: {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.5rem",
-  },
-  
-  removeButton: {
-    width: "28px",
-    height: "28px",
-    backgroundColor: "#FEE2E2",
-    color: "#DC2626",
-    borderRadius: "50%",
-    border: "none",
-    fontSize: "1.5rem",
-    cursor: "pointer",
-  },
-  processButton: {
-    width: "100%",
-    marginTop: "2rem",
-    padding: "1rem",
-    backgroundColor: "#4F46E5",
-    color: "white",
-    borderRadius: "0.5rem",
-    fontSize: "1.125rem",
-    cursor: "pointer",
-  },
 };
 
 export default UploadPage;
