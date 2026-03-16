@@ -69,10 +69,22 @@ const UploadPage = ({ onBack, onProcess }) => {
     }
   };
 
-  const handleProcessNotes = () => {
+  // --------------------------------------------------------------
+  // --------------- MOCK UPLOAD || NO BACKEND --------------------
+  // --------------------------------------------------------------
+
+/*   const handleProcessNotes = () => {
     if (onProcess) onProcess(); // doesn't handle uploads, only moves to next screen   
-  }; 
-/*
+  };  */
+
+  // ______________________________________________________________
+
+
+  // --------------------------------------------------------------
+  // ------------- FUNCTIONING UPLOAD W/ BACKEND ------------------
+  // --------------------------------------------------------------
+
+
   const handleProcessNotes = async () => {
     setError("");
 
@@ -109,33 +121,42 @@ const UploadPage = ({ onBack, onProcess }) => {
     } finally {
       setUploading(false);
     }
-  };*/
+  };
+
+  // ______________________________________________________________
 
 
   const removeFile = (index) => {
     setUploadedFiles(uploadedFiles.filter((_, i) => i !== index));
   };
-/*
+
+
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+
+  // --------------------------------------------------------------
+  // ----------------- CONNECTION TO BACKEND ----------------------
+  // --------------------------------------------------------------
 
   // Upload fx to send formData + error handling
   const uploadOne = async (fileObj) => {
     const token = localStorage.getItem("token") || sessionStorage.getItem("token");
 
     const form = new FormData();
-    form.append("file", fileObj.file); // field name must match backend
+    form.append("file", fileObj.file); // ensure backend & frontend field names match!
 
     const res = await fetch("/api/files/upload", {
       method: "POST",
-      headers: token ? { "x-auth-token": token } : {}, // adjust header name if your backend differs
+      headers: token ? { "x-auth-token": token } : {}, // ensure backend & frontend header name matches!
       body: form,
     });
 
     const data = await res.json();
     if (!res.ok) throw new Error(data?.msg || "Upload failed");
     return data; // expected: saved file doc (includes _id)
-  };*/
+  };
+
+  // ______________________________________________________________
 
   return (
     <div style={styles.container}>
