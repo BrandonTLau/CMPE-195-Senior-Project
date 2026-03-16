@@ -232,6 +232,9 @@ async def run_ocr_v5(file: UploadFile = File(...)):
     raw_path = UPLOADS_DIR / f"v5_{file_id}{ext}"
     raw_path.write_bytes(await file.read())
 
+    # added for use preprocessing input
+    processed_path = preprocess_for_handwriting(raw_path)
+
     norm_path = normalize_image_max_side(raw_path, max_side=1600)
 
     page = ocr.predict(
