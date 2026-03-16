@@ -33,8 +33,8 @@ const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
   const [error,        setError]        = useState('');
 
   // mock login
-  const MOCK_EMAIL    = 'test@example.com';
-  const MOCK_PASSWORD = 'password123';
+  //const MOCK_EMAIL    = 'test@example.com';
+  //const MOCK_PASSWORD = 'password123';
 
   useEffect(() => {
     const body = document.body;
@@ -68,7 +68,7 @@ const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
       document.head.removeChild(style);
     };
   }, []);
-
+/*
   const handleLogin = (e) => {
     e.preventDefault();
 
@@ -79,11 +79,11 @@ const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
       setError('Invalid email or password.');
     }
   };
-
+*/
   // replaced the mock login
   // now posts to localhost:5000/api/auth/login
   // async request -> store returned JWT token
-  /*const handleLogin = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
 
@@ -114,7 +114,7 @@ const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
     } catch (err) {
       setError("Failed ot connect to server. Verify that it's running.");
     }
-  };*/
+  };
 
   return (
     <div style={{ display:'flex', minHeight:'100vh', width:'100%', overflow:'hidden', fontFamily:T.font, background:T.bg }}>
