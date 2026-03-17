@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import UploadPage from "./UploadPage";
-import ProcessingScreen from "./ProcessingPage";
 import ResultsPage from "./ResultsPage";
 import FavoritesPage from "./FavoritesPage";
 
@@ -789,7 +788,7 @@ const UserDashboard = ({
                 onMoveNote={handleMoveNote} onUpdateTags={handleUpdateTags} />
             )}
             {activeTab === 'upload' && (
-              <UploadPage onProcess={() => { setActiveTab('processing'); if (onProcess) onProcess(); }} />
+              <UploadPage onProcess={() => { setActiveTab('results'); if (onProcess) onProcess(); }} />
             )}
             {activeTab === 'processing' && (
               <ProcessingScreen onAutoFinish={() => { setActiveTab('results'); if (onFinishProcessing) onFinishProcessing(); }} />

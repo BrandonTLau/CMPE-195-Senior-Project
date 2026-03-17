@@ -79,7 +79,11 @@ styleEl.textContent = `
   }
   .up-process:hover:not(:disabled) { opacity: .88; transform: translateY(-2px); box-shadow: 0 8px 32px rgba(245,166,35,.35); }
   .up-process:disabled { opacity: .4; cursor: not-allowed; transform: none; }
-  @keyframes fadeUp { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
+  @keyframes fadeUp  { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
+  @keyframes fadeIn  { from { opacity:0 } to { opacity:1 } }
+  @keyframes spin    { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
+  @keyframes float   { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-8px) } }
+  @keyframes stepIn  { from { opacity:0; transform:translateX(-8px) } to { opacity:1; transform:translateX(0) } }
 `;
 if (!document.head.querySelector('#up-styles')) {
   document.head.appendChild(styleEl);
@@ -91,12 +95,64 @@ const Icon = ({ d, size = 18, color = 'currentColor' }) => (
   </svg>
 );
 
+// Step indicator used in the loading overlay
+const StepRow = ({ label, status }) => {
+  // status: 'pending' | 'active' | 'done'
+  const isDone   = status === 'done';
+  const isActive = status === 'active';
+  return (
+    <div style={{
+      display:'flex', alignItems:'center', gap:12,
+      padding:'10px 16px',
+      background:  isDone ? T.greenDim : isActive ? T.amberDim : T.surfaceHi,
+      border:`1px solid ${isDone ? 'rgba(52,211,153,.25)' : isActive ? 'rgba(245,166,35,.25)' : T.border}`,
+      borderRadius:10,
+      animation: isActive ? 'stepIn .3s ease both' : 'none',
+      transition: 'background .3s, border-color .3s',
+    }}>
+      <div style={{
+        width:20, height:20, borderRadius:'50%', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center',
+        background:  isDone ? 'rgba(52,211,153,.2)' : isActive ? T.amberDim : T.surfaceHi,
+        border:`1.5px solid ${isDone ? 'rgba(52,211,153,.5)' : isActive ? 'rgba(245,166,35,.5)' : T.border}`,
+      }}>
+        {isDone   && <Icon d="M5 13l4 4L19 7" size={10} color="#34D399" />}
+        {isActive && <div style={{ width:7, height:7, borderRadius:'50%', background:T.amber, animation:'none' }} />}
+      </div>
+      <span style={{
+        fontSize:12, fontWeight:600,
+        color: isDone ? '#34D399' : isActive ? T.amber : T.muted,
+        transition:'color .3s',
+      }}>
+        {label}
+      </span>
+      {isActive && (
+        <span style={{ marginLeft:'auto', fontSize:11, color:T.muted, fontStyle:'italic' }}>running…</span>
+      )}
+      {isDone && (
+        <span style={{ marginLeft:'auto', fontSize:11, color:'rgba(52,211,153,.7)' }}>done</span>
+      )}
+    </div>
+  );
+};
+
 // ── component ──────────────────────────────────────────────────
 const UploadPage = ({ onBack, onProcess }) => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [dragActive,    setDragActive]    = useState(false);
   const [uploading,     setUploading]     = useState(false);
   const [error,         setError]         = useState('');
+
+  // Each step: 'pending' | 'active' | 'done'
+  const [steps, setSteps] = useState({
+    upload:    'pending',
+    preprocess:'pending',
+    ocr:       'pending',
+    results:   'pending',
+  });
+  const [showOverlay, setShowOverlay] = useState(false);
+
+  const setStep = (key, status) =>
+    setSteps(prev => ({ ...prev, [key]: status }));
 
   const parseFiles = (files) =>
     Array.from(files).map((file) => ({
@@ -125,23 +181,20 @@ const UploadPage = ({ onBack, onProcess }) => {
   const removeFile = (index) =>
     setUploadedFiles(uploadedFiles.filter((_, i) => i !== index));
 
-  //backend
+  // ── backend ──────────────────────────────────────────────────
   const uploadOne = async (fileObj) => {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     const form  = new FormData();
     form.append('file', fileObj.file);
-
     const res = await fetch('/api/files/upload', {
       method: 'POST',
       headers: token ? { 'x-auth-token': token } : {},
       body: form,
     });
-
     let data;
     try { data = await res.json(); } catch {
       throw new Error(`Server returned status ${res.status} with non-JSON response`);
     }
-
     if (!res.ok) {
       const msg = data?.msg || data?.message || data?.error || `Server error ${res.status}`;
       console.error('Upload error:', res.status, data);
@@ -153,31 +206,112 @@ const UploadPage = ({ onBack, onProcess }) => {
   const handleProcessNotes = async () => {
     setError('');
     if (uploadedFiles.length === 0) { setError('Please add at least one file.'); return; }
+
+    // Reset all steps and show overlay
+    setSteps({ upload:'pending', preprocess:'pending', ocr:'pending', results:'pending' });
+    setShowOverlay(true);
+    setUploading(true);
+
     try {
-      setUploading(true);
+      // Step 1 — Upload
+      setStep('upload', 'active');
       const saved = await uploadOne(uploadedFiles[0]);
       sessionStorage.setItem('lastUploadId', saved._id);
+      setStep('upload', 'done');
+
       const first = uploadedFiles[0];
       if (first?.file?.type?.startsWith('image/')) {
-        const ocrData = await runOcr(first.file);
-        sessionStorage.setItem('lastOcrOverlayUrl', ocrData?.overlay_url || '');
-        sessionStorage.setItem('lastOcrMergedText',  ocrData?.merged_text || ocrData?.text || '');
+
+        // Step 2 — Preprocess (brief pause to show the step)
+        setStep('preprocess', 'active');
+        await new Promise(r => setTimeout(r, 400));
+        setStep('preprocess', 'done');
+
+        // Step 3 — OCR (this is the real wait)
+        setStep('ocr', 'active');
+        try {
+          const ocrData = await runOcr(first.file);
+          sessionStorage.setItem('lastOcrOverlayUrl', ocrData?.overlay_url || '');
+          sessionStorage.setItem('lastOcrMergedText',  ocrData?.merged_text || ocrData?.text || '');
+        } catch (ocrErr) {
+          console.warn('OCR service unavailable, skipping:', ocrErr.message);
+          sessionStorage.removeItem('lastOcrOverlayUrl');
+          sessionStorage.removeItem('lastOcrMergedText');
+        }
+        setStep('ocr', 'done');
+
+        // Step 4 — Generating results
+        setStep('results', 'active');
+        await new Promise(r => setTimeout(r, 300));
+        setStep('results', 'done');
+
       } else {
+        // PDF — skip OCR steps
+        setStep('preprocess', 'done');
+        setStep('ocr', 'done');
+        setStep('results', 'active');
+        await new Promise(r => setTimeout(r, 300));
+        setStep('results', 'done');
         sessionStorage.removeItem('lastOcrOverlayUrl');
         sessionStorage.removeItem('lastOcrMergedText');
       }
+
+      // Brief pause so user sees all steps done
+      await new Promise(r => setTimeout(r, 400));
+      setShowOverlay(false);
       if (onProcess) onProcess();
+
     } catch (e) {
       console.error('handleProcessNotes:', e);
+      setShowOverlay(false);
       setError(e.message || 'Upload failed.');
     } finally {
       setUploading(false);
     }
   };
-  // ────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
 
   return (
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream }}>
+
+      {/* Real loading overlay */}
+      {showOverlay && (
+        <div style={{
+          position:'fixed', inset:0, background:T.bg, zIndex:999,
+          display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+          gap:32, animation:'fadeIn .2s ease both',
+        }}>
+          {/* Spinner */}
+          <div style={{ position:'relative', width:80, height:80, animation:'float 3s ease-in-out infinite' }}>
+            <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:`3px solid ${T.border}` }} />
+            <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:`3px solid transparent`, borderTopColor:T.amber, animation:'spin 1s linear infinite' }} />
+            <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:`3px solid transparent`, borderBottomColor:'rgba(245,166,35,.3)', animation:'spin 1.8s linear infinite reverse' }} />
+            <div style={{ position:'absolute', inset:10, borderRadius:'50%', background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={22} color={T.amber} />
+            </div>
+          </div>
+
+          {/* Title */}
+          <div style={{ textAlign:'center' }}>
+            <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 10px' }}>Please Wait</p>
+            <h2 style={{ fontFamily:T.serif, fontSize:32, fontWeight:400, color:T.cream, margin:'0 0 8px', lineHeight:1.1 }}>Processing Your Notes</h2>
+            <p style={{ color:T.muted, fontSize:13, margin:0 }}>
+              {steps.ocr === 'active' ? 'Running OCR engine — this is the longest step…' :
+               steps.upload === 'active' ? 'Uploading your file…' :
+               steps.results === 'active' ? 'Finalizing results…' :
+               'Almost there…'}
+            </p>
+          </div>
+
+          {/* Live step indicators */}
+          <div style={{ display:'flex', flexDirection:'column', gap:8, width:'100%', maxWidth:360 }}>
+            <StepRow label="Uploading file"      status={steps.upload}     />
+            <StepRow label="Preprocessing image" status={steps.preprocess} />
+            <StepRow label="Running OCR engine"  status={steps.ocr}        />
+            <StepRow label="Generating results"  status={steps.results}    />
+          </div>
+        </div>
+      )}
 
       {/* Hero */}
       <div style={{ padding:'48px 40px 0', animation:'fadeUp .4s ease both' }}>
@@ -267,4 +401,3 @@ const UploadPage = ({ onBack, onProcess }) => {
 };
 
 export default UploadPage;
-

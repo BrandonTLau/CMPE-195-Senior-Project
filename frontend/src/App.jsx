@@ -58,19 +58,7 @@ function App() {
           showResultsPage={false}
           onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
           onNewScan={() => navigate("dashboard_upload")}
-          onProcess={() => navigate("processing")}
-          onNoteSelect={handleNoteSelect}
-        />
-      )}
-
-      {screen === "processing" && (
-        <UserDashboard
-          showUploadPage={false}
-          showProcessingPage={true}
-          showResultsPage={false}
-          onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
-          onNewScan={() => navigate("dashboard_upload")}
-          onFinishProcessing={() => navigate("results")}
+          onProcess={() => navigate("results")}
           onNoteSelect={handleNoteSelect}
         />
       )}
