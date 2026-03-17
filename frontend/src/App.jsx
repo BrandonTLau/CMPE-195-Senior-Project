@@ -64,15 +64,12 @@ function App() {
       )}
 
       {screen === "results" && (
-        <UserDashboard
-          showUploadPage={false}
-          showProcessingPage={false}
-          showResultsPage={true}
-          onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
-          onNewScan={() => navigate("dashboard_upload")}
-          onNoteSelect={handleNoteSelect}
-        />
-      )}
+  <ResultsPage
+    onBack={() => navigate("dashboard")}
+    onNewScan={() => navigate("dashboard_upload")}
+    onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
+  />
+)}
 
       {screen === "signup" && (
         <SignUp

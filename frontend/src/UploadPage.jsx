@@ -222,17 +222,22 @@ const UploadPage = ({ onBack, onProcess }) => {
       const first = uploadedFiles[0];
       if (first?.file?.type?.startsWith('image/')) {
 
-        // Step 2 — Preprocess (brief pause to show the step)
+        // Step 2 — Preprocess 
         setStep('preprocess', 'active');
         await new Promise(r => setTimeout(r, 400));
         setStep('preprocess', 'done');
 
-        // Step 3 — OCR (this is the real wait)
+        // Step 3 — OCR 
         setStep('ocr', 'active');
         try {
           const ocrData = await runOcr(first.file);
-          sessionStorage.setItem('lastOcrOverlayUrl', ocrData?.overlay_url || '');
-          sessionStorage.setItem('lastOcrMergedText',  ocrData?.merged_text || ocrData?.text || '');
+          console.log('OCR response:', ocrData);
+          sessionStorage.setItem('lastOcrOverlayUrl',  ocrData?.overlay_url || '');
+          sessionStorage.setItem('lastOcrMergedText',   ocrData?.merged_text || ocrData?.text || '');
+          const avgConfidence = ocrData?.items?.length
+  ? Math.round((ocrData.items.reduce((sum, item) => sum + (item.score || 0), 0) / ocrData.items.length) * 100)
+  : null;
+sessionStorage.setItem('lastOcrConfidence', avgConfidence ?? '');
         } catch (ocrErr) {
           console.warn('OCR service unavailable, skipping:', ocrErr.message);
           sessionStorage.removeItem('lastOcrOverlayUrl');
@@ -338,9 +343,9 @@ const UploadPage = ({ onBack, onProcess }) => {
             </div>
             <p style={{ fontSize:15, fontWeight:600, color:T.cream, margin:'0 0 6px' }}>Drag and drop your files here</p>
             <p style={{ fontSize:13, color:T.muted, margin:'0 0 20px' }}>or</p>
-            <button className="up-btn-amber" onClick={e => e.stopPropagation()}>
+            <button className="up-btn-amber" onClick={e => { e.stopPropagation(); document.getElementById('file-upload').click(); }}>
               <Icon d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" size={14} color="#0E1117" />
-              Browse Files
+              <span style={{ flexShrink:0 }}>Browse Files</span>
             </button>
             <input
               id="file-upload"

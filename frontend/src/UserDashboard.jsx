@@ -778,32 +778,38 @@ const UserDashboard = ({
         </aside>
 
         {/* ── Main ── */}
-        <main className="ud-scrollbar" style={{ flex:1, overflowY:'auto', height:'100vh', padding:'32px 40px', boxSizing:'border-box' }}>
-          <div style={{ maxWidth:1100, margin:'0 auto' }}>
-            {activeTab === 'notes' && (
-              <NotesHome notes={activeNotes} folders={folders} onNewScan={handleNewScan}
-                onNoteSelect={onNoteSelect} onToggleFavorite={handleToggleFavorite}
-                onDelete={handleDeleteNote} onAddFolder={() => setShowNewFolder(true)}
-                onDeleteFolder={handleDeleteFolder} onRenameFolder={handleRenameFolder}
-                onMoveNote={handleMoveNote} onUpdateTags={handleUpdateTags} />
-            )}
-            {activeTab === 'upload' && (
-              <UploadPage onProcess={() => { setActiveTab('results'); if (onProcess) onProcess(); }} />
-            )}
-            {activeTab === 'processing' && (
-              <ProcessingScreen onAutoFinish={() => { setActiveTab('results'); if (onFinishProcessing) onFinishProcessing(); }} />
-            )}
-            {activeTab === 'results' && <ResultsPage onBack={() => setActiveTab('notes')} />}
-            {activeTab === 'favorites' && (
-              <FavoritesPage notes={activeNotes} onNoteSelect={onNoteSelect}
-                onRemoveFavorite={handleToggleFavorite} onNewScan={handleNewScan} />
-            )}
-            {activeTab === 'trash' && (
-              <TrashPage notes={trashedNotes} onRestore={handleRestoreNote}
-                onPermanentDelete={handlePermanentDelete} onEmptyTrash={handleEmptyTrash} />
-            )}
-          </div>
-        </main>
+        <main className="ud-scrollbar" style={{ flex:1, overflowY:'auto', height:'100vh', boxSizing:'border-box' }}>
+  {/* Results lives outside the padded wrapper so it can be full width */}
+  <div style={{ display: activeTab === 'results' ? 'block' : 'none' }}>
+    <ResultsPage onBack={() => setActiveTab('notes')} />
+  </div>
+
+  {activeTab !== 'results' && (
+    <div style={{ padding:'32px 40px', maxWidth:1100, margin:'0 auto' }}>
+      {activeTab === 'notes' && (
+        <NotesHome notes={activeNotes} folders={folders} onNewScan={handleNewScan}
+          onNoteSelect={onNoteSelect} onToggleFavorite={handleToggleFavorite}
+          onDelete={handleDeleteNote} onAddFolder={() => setShowNewFolder(true)}
+          onDeleteFolder={handleDeleteFolder} onRenameFolder={handleRenameFolder}
+          onMoveNote={handleMoveNote} onUpdateTags={handleUpdateTags} />
+      )}
+      {activeTab === 'upload' && (
+        <UploadPage onProcess={() => { setActiveTab('results'); if (onProcess) onProcess(); }} />
+      )}
+      {activeTab === 'processing' && (
+        <ProcessingScreen onAutoFinish={() => { setActiveTab('results'); if (onFinishProcessing) onFinishProcessing(); }} />
+      )}
+      {activeTab === 'favorites' && (
+        <FavoritesPage notes={activeNotes} onNoteSelect={onNoteSelect}
+          onRemoveFavorite={handleToggleFavorite} onNewScan={handleNewScan} />
+      )}
+      {activeTab === 'trash' && (
+        <TrashPage notes={trashedNotes} onRestore={handleRestoreNote}
+          onPermanentDelete={handlePermanentDelete} onEmptyTrash={handleEmptyTrash} />
+      )}
+    </div>
+  )}
+</main>
       </div>
 
       {showNewFolder && <NewFolderModal onSave={handleAddFolder} onClose={() => setShowNewFolder(false)} />}

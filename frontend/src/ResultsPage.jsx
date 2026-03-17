@@ -2,12 +2,6 @@ import { createPortal } from "react-dom";
 import React, { useState, useRef, useEffect } from 'react';
 import FlashcardsPage from './FlashcardsPage';
 
-//Google fonts
-const fontLink = document.createElement('link');
-fontLink.rel  = 'stylesheet';
-fontLink.href = 'https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap';
-document.head.appendChild(fontLink);
-
 //Design tokens
 const T = {
   bg:        '#0E1117',
@@ -26,6 +20,13 @@ const T = {
   font:      '"DM Sans", system-ui, sans-serif',
   serif:     '"DM Serif Display", Georgia, serif',
 };
+
+const fontLink = document.createElement('link');
+fontLink.rel  = 'stylesheet';
+fontLink.href = 'https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap';
+if (!document.head.querySelector('link[href*="DM+Sans"]')) {
+  document.head.appendChild(fontLink);
+}
 
 const styleEl = document.createElement('style');
 styleEl.textContent = `
@@ -131,6 +132,17 @@ styleEl.textContent = `
   .ns-editable p  { margin:0 0 4px; }
   .ns-editable ::selection { background:${T.amberDim}; }
 
+  .ns-title-input {
+    font-family:${T.serif}; font-size:38px; font-weight:400;
+    line-height:1.1; letter-spacing:-.4px;
+    color:${T.cream}; background:transparent;
+    border:none; border-bottom:1px solid ${T.border};
+    outline:none; width:100%; padding:0 0 4px;
+    margin:0 0 8px; transition:border-color .2s;
+  }
+  .ns-title-input:focus { border-bottom-color:${T.amber}; }
+  .ns-title-input::placeholder { color:${T.muted}; }
+
   .ns-fullscreen {
     position:fixed; inset:0; background:${T.bg}; z-index:500;
     display:flex; flex-direction:column;
@@ -143,7 +155,7 @@ styleEl.textContent = `
   .ns-export-menu {
     position:absolute; top:calc(100% + 6px); right:0;
     background:${T.surface}; border:1px solid ${T.border};
-    border-radius:12px; padding:6px; min-width:170px;
+    border-radius:12px; padding:6px; min-width:190px;
     box-shadow:0 16px 40px rgba(0,0,0,.5); z-index:600;
     animation:tabIn .15s ease both;
   }
@@ -252,58 +264,6 @@ function PreviewCard({ card }) {
   );
 }
 
-function ExportMenu({ editorRef, onClose }) {
-  const [copied, setCopied] = useState(false);
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) onClose(); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
-
-  const getPlainText = () => editorRef.current?.innerText || '';
-  const getHTML      = () => editorRef.current?.innerHTML || '';
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(getPlainText());
-    setCopied(true);
-    setTimeout(() => { setCopied(false); onClose(); }, 1200);
-  };
-
-  const handleTXT = () => {
-    const blob = new Blob([getPlainText()], { type: 'text/plain' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = 'recognized-text.txt'; a.click();
-    URL.revokeObjectURL(url);
-    onClose();
-  };
-
-  const handlePDF = () => {
-    printDiv.innerHTML = getHTML();
-    window.print();
-    setTimeout(() => { printDiv.innerHTML = ''; onClose(); }, 500);
-  };
-
-  const items = [
-    { label: copied ? 'Copied!' : 'Copy to clipboard', icon: copied ? 'M5 13l4 4L19 7' : 'M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z', action: handleCopy, cls: copied ? 'copied' : '' },
-    { label: 'Export as TXT', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', action: handleTXT },
-    { label: 'Export as PDF', icon: 'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z', action: handlePDF },
-  ];
-
-  return (
-    <div ref={menuRef} className="ns-export-menu">
-      {items.map(item => (
-        <button key={item.label} className={`ns-export-item ${item.cls || ''}`} onClick={item.action}>
-          <Icon d={item.icon} size={14} color="currentColor" />
-          {item.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen }) {
   const editorRef = useRef(null);
   const [editorHTML,    setEditorHTML]    = useState('');
@@ -311,6 +271,7 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
   const [isDirty,       setIsDirty]       = useState(false);
   const [activeFormats, setActiveFormats] = useState({});
   const [showExport,    setShowExport]    = useState(false);
+  const exportMenuRef = useRef(null);
 
   useEffect(() => {
     if (!editorRef.current) return;
@@ -328,6 +289,13 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [isFullscreen, onToggleFullscreen]);
+
+  // Re-populate editor from current state when toggling fullscreen
+  useEffect(() => {
+    if (editorRef.current && editorHTML) {
+      editorRef.current.innerHTML = editorHTML;
+    }
+  }, [isFullscreen]);
 
   const exec = (cmd, value = null) => {
     editorRef.current?.focus();
@@ -358,6 +326,29 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
     setIsDirty(false);
   };
 
+  const getPlainText = () => editorRef.current?.innerText || '';
+  const getHTML      = () => editorRef.current?.innerHTML || '';
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(getPlainText());
+    setShowExport(false);
+  };
+
+  const handleTXT = () => {
+    const blob = new Blob([getPlainText()], { type: 'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'recognized-text.txt'; a.click();
+    URL.revokeObjectURL(url);
+    setShowExport(false);
+  };
+
+  const handlePDF = () => {
+    printDiv.innerHTML = getHTML();
+    window.print();
+    setTimeout(() => { printDiv.innerHTML = ''; setShowExport(false); }, 500);
+  };
+
   const toolbar = (fullscreen = false) => (
     <div className={`ns-toolbar${fullscreen ? ' fullscreen-bar' : ''}`}>
       {['h1','h2','h3'].map((h, i) => (
@@ -375,13 +366,6 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
       <button className="ns-tool" title="Undo" onMouseDown={e => { e.preventDefault(); exec('undo'); }}><Icon d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" size={13} /></button>
       <button className="ns-tool" title="Redo" onMouseDown={e => { e.preventDefault(); exec('redo'); }}><Icon d="M21 10H11a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6" size={13} /></button>
       <div className="ns-tool-sep" />
-      <div style={{ position:'relative' }}>
-        <button className="ns-tool" title="Export" onMouseDown={e => { e.preventDefault(); setShowExport(v => !v); }}>
-          <Icon d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" size={13} />
-          Export
-        </button>
-        {showExport && <ExportMenu editorRef={editorRef} onClose={() => setShowExport(false)} />}
-      </div>
       <div style={{ flex:1 }} />
       <button className="ns-tool" title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Expand to fullscreen'} onMouseDown={e => { e.preventDefault(); onToggleFullscreen(); }}>
         {isFullscreen
@@ -451,7 +435,11 @@ const ResultsPage = ({ onBack }) => {
   const [isSaved,          setIsSaved]          = useState(false);
   const [showAdd,          setShowAdd]          = useState(false);
   const [editorFullscreen, setEditorFullscreen] = useState(false);
-  const [scanEditView,     setScanEditView]     = useState('both'); // 'both' | 'image' | 'editor'
+  const [scanEditView,     setScanEditView]     = useState('both');
+  const [title,            setTitle]            = useState('');
+  const [showExportMenu,   setShowExportMenu]   = useState(false);
+  const [confidence,       setConfidence]       = useState(null);
+  const exportMenuRef = useRef(null);
   const { cards, addCard } = useCards();
 
   // backend wiring
@@ -475,6 +463,9 @@ const ResultsPage = ({ onBack }) => {
       .then(r => r.json())
       .then(data => {
         setFileData(data);
+        if (data.title) setTitle(data.title);
+        else if (data.originalName) setTitle(data.originalName.replace(/\.[^/.]+$/, ''));
+        if (data.confidence)                  setConfidence(data.confidence);
         if (data.currentContent?.transcribedText) setRecognizedText(data.currentContent.transcribedText);
         if (data.currentContent?.summary)         setAiSummary(data.currentContent.summary);
         if (data.currentContent?.studyGuide)      setStudyGuideText(data.currentContent.studyGuide);
@@ -482,9 +473,21 @@ const ResultsPage = ({ onBack }) => {
         if (ssOverlay) setOverlayUrl(ssOverlay);
         const ssMerged = sessionStorage.getItem('lastOcrMergedText');
         if (ssMerged) setRecognizedText(ssMerged);
+        const ssConfidence = sessionStorage.getItem('lastOcrConfidence');
+        if (ssConfidence) setConfidence(Math.round(parseFloat(ssConfidence)));
       })
       .catch(err => console.error('Failed to load file data:', err));
   }, [fileId]);
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handler = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target))
+        setShowExportMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const saveEdit = async (endpoint, payload, onSuccess, setEdited) => {
     if (!fileId) return;
@@ -500,6 +503,27 @@ const ResultsPage = ({ onBack }) => {
     await fetch(`/api/files/${fileId}/regenerate`, { method: 'POST', headers, body: JSON.stringify({ contentType }) });
   };
 
+  // Export handlers
+  const handleExportCopy = async () => {
+    await navigator.clipboard.writeText(recognizedText);
+    setShowExportMenu(false);
+  };
+
+  const handleExportTXT = () => {
+    const blob = new Blob([recognizedText], { type: 'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `${title || 'notes'}.txt`; a.click();
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+  };
+
+  const handleExportPDF = () => {
+    printDiv.innerHTML = `<h1>${title || 'Notes'}</h1><div>${recognizedText}</div>`;
+    window.print();
+    setTimeout(() => { printDiv.innerHTML = ''; setShowExportMenu(false); }, 500);
+  };
+
   const learnedCount = cards.filter(c => c.learned).length;
   const pct          = cards.length ? Math.round((learnedCount / cards.length) * 100) : 0;
 
@@ -509,40 +533,71 @@ const ResultsPage = ({ onBack }) => {
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream }}>
 
       {/* Top bar */}
-      <div style={{ borderBottom:`1px solid ${T.border}`, padding:'0 32px', display:'flex', alignItems:'center', justifyContent:'space-between', height:58, position:'sticky', top:0, background:`${T.bg}ee`, backdropFilter:'blur(12px)', zIndex:100 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:20 }}>
+      <div style={{ borderBottom:`1px solid ${T.border}`, padding:'0 20px', display:'flex', alignItems:'center', justifyContent:'space-between', height:58, background:T.bg }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           {onBack && (
             <button className="ns-btn-ghost" onClick={onBack} style={{ padding:'6px 12px', fontSize:13 }}>
               <Icon d="M15 19l-7-7 7-7" size={14} /> Back
             </button>
           )}
-          <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-            <div style={{ width:28, height:28, borderRadius:7, background:T.amber, display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={15} color="#0E1117" />
-            </div>
-            <span style={{ fontFamily:T.serif, fontSize:17, color:T.cream }}>NoteScan</span>
-          </div>
         </div>
-        <button className="ns-btn-amber" onClick={() => setIsSaved(true)} disabled={isSaved} style={{ opacity:isSaved ? .7 : 1 }}>
-          {isSaved
-            ? <><Icon d="M5 13l4 4L19 7" size={14} color="#0E1117" />Saved</>
-            : <><Icon d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" size={14} color="#0E1117" />Save Notes</>
-          }
-        </button>
+
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          {/* Export dropdown */}
+          <div ref={exportMenuRef} style={{ position:'relative' }}>
+            <button className="ns-btn-ghost" onClick={() => setShowExportMenu(v => !v)} style={{ padding:'6px 12px', fontSize:13 }}>
+              <Icon d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" size={14} />
+              Export
+              <Icon d="M19 9l-7 7-7-7" size={12} />
+            </button>
+            {showExportMenu && (
+              <div className="ns-export-menu">
+                <button className="ns-export-item" onClick={handleExportCopy}>
+                  <Icon d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" size={14} color="currentColor" />
+                  Copy to clipboard
+                </button>
+                <button className="ns-export-item" onClick={handleExportTXT}>
+                  <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={14} color="currentColor" />
+                  Download TXT
+                </button>
+                <button className="ns-export-item" onClick={handleExportPDF}>
+                  <Icon d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" size={14} color="currentColor" />
+                  Download PDF
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Save Notes */}
+          <button className="ns-btn-amber" onClick={() => setIsSaved(true)} disabled={isSaved} style={{ opacity:isSaved ? .7 : 1 }}>
+            {isSaved
+              ? <><Icon d="M5 13l4 4L19 7" size={14} color="#0E1117" />Saved</>
+              : <><Icon d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" size={14} color="#0E1117" />Save Notes</>
+            }
+          </button>
+        </div>
       </div>
 
       {/* Hero */}
-      <div style={{ padding:'40px 40px 0', animation:'fadeUp .4s ease both' }}>
+      <div style={{ padding:'40px 20px 0', animation:'fadeUp .4s ease both' }}>
         <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 10px' }}>Processing Complete</p>
         <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', flexWrap:'wrap', gap:16, marginBottom:32 }}>
-          <div>
-            <h1 style={{ fontFamily:T.serif, fontSize:38, fontWeight:400, margin:'0 0 8px', lineHeight:1.1, letterSpacing:'-.4px' }}>OCR Results</h1>
+          <div style={{ flex:1, minWidth:0 }}>
+            {/* Editable title */}
+            <input
+              className="ns-title-input"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Enter a title for your notes…"
+            />
             <p style={{ color:T.muted, fontSize:14, margin:0 }}>Your notes have been scanned and processed successfully.</p>
           </div>
-          <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 16px', background:T.greenDim, border:`1px solid rgba(52,211,153,.2)`, borderRadius:99, flexShrink:0 }}>
-            <Icon d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" size={15} color={T.green} />
-            <span style={{ fontSize:13, fontWeight:600, color:T.green }}>87% Confidence</span>
-          </div>
+          {/* Confidence score display */}
+          {confidence !== null && (
+            <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 16px', background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:99, flexShrink:0 }}>
+              <span style={{ fontSize:13, fontWeight:600, color:T.cream }}>{confidence}% Confidence</span>
+            </div>
+          )}
         </div>
 
         {/* Tab bar */}
@@ -564,14 +619,12 @@ const ResultsPage = ({ onBack }) => {
       </div>
 
       {/* Tab panels */}
-      <div style={{ padding:'0 40px 64px' }}>
+      <div style={{ padding:'0 20px 64px' }}>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderTop:'none', borderRadius:'0 0 16px 16px', padding:'32px 36px', minHeight:400 }}>
 
           {/* Scan & Edit */}
           {activeTab === 'scan_edit' && (
             <div key="scan_edit" className="ns-tab-panel">
-
-              {/* View toggle */}
               <div style={{ display:'flex', gap:6, marginBottom:16 }}>
                 {[['both','Both'],['image','Scan'],['editor','Editor']].map(([val, label]) => (
                   <button key={val} onClick={() => setScanEditView(val)}
@@ -588,10 +641,7 @@ const ResultsPage = ({ onBack }) => {
                 )}
               </div>
 
-              {/* Split layout */}
               <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
-
-                {/* Image pane */}
                 {(scanEditView === 'both' || scanEditView === 'image') && (
                   <div style={{ flex:1, minWidth:0 }}>
                     <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 10px', fontFamily:T.font }}>Original Scan</p>
@@ -611,12 +661,10 @@ const ResultsPage = ({ onBack }) => {
                   </div>
                 )}
 
-                {/* Divider */}
                 {scanEditView === 'both' && (
                   <div style={{ width:1, alignSelf:'stretch', background:T.border, flexShrink:0 }} />
                 )}
 
-                {/* Editor pane */}
                 {(scanEditView === 'both' || scanEditView === 'editor') && (
                   <div style={{ flex:1, minWidth:0 }}>
                     <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 10px', fontFamily:T.font }}>Recognized Text</p>
@@ -633,7 +681,6 @@ const ResultsPage = ({ onBack }) => {
                     />
                   </div>
                 )}
-
               </div>
             </div>
           )}
