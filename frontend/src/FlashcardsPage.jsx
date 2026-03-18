@@ -1,62 +1,148 @@
 import { useState, useRef } from "react";
 
+//design tokens
+const T = {
+  bg:        '#0E1117',
+  surface:   '#161B27',
+  surfaceHi: '#1E2537',
+  border:    'rgba(255,255,255,0.07)',
+  borderHi:  'rgba(255,255,255,0.13)',
+  amber:     '#F5A623',
+  amberDim:  'rgba(245,166,35,0.12)',
+  cream:     '#EDE8DC',
+  muted:     '#6B7694',
+  green:     '#34D399',
+  red:       '#F87171',
+  redDim:    'rgba(248,113,113,0.12)',
+  purple:    '#818CF8',
+  purpleDim: 'rgba(129,140,248,0.12)',
+  font:      '"DM Sans", system-ui, sans-serif',
+  serif:     '"DM Serif Display", Georgia, serif',
+};
+
+const fontLink = document.createElement('link');
+fontLink.rel  = 'stylesheet';
+fontLink.href = 'https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap';
+if (!document.head.querySelector('link[href*="DM+Sans"]')) {
+  document.head.appendChild(fontLink);
+}
+
+const styleEl = document.createElement('style');
+styleEl.id = 'fc-styles';
+styleEl.textContent = `
+  @keyframes fadeUp { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
+  @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+
+  .fc-btn-ghost {
+    background: transparent; border: 1px solid ${T.border}; color: ${T.muted};
+    border-radius: 8px; padding: 7px 16px; font-family: ${T.font}; font-size: 13px;
+    font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    transition: border-color .2s, color .2s, background .2s;
+  }
+  .fc-btn-ghost:hover { border-color: ${T.borderHi}; color: ${T.cream}; background: ${T.surfaceHi}; }
+
+  .fc-btn-amber {
+    background: ${T.amber}; border: none; color: #0E1117;
+    border-radius: 9px; padding: 8px 20px; font-family: ${T.font}; font-size: 13px; font-weight: 600;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    transition: opacity .2s, transform .15s;
+  }
+  .fc-btn-amber:hover { opacity: .88; transform: translateY(-1px); }
+
+  .fc-nav-btn {
+    padding: 10px 24px; border: 1px solid ${T.border}; border-radius: 10px;
+    background: ${T.surfaceHi}; color: ${T.muted}; font-family: ${T.font};
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: border-color .2s, color .2s, background .2s;
+  }
+  .fc-nav-btn:hover:not(:disabled) { border-color: ${T.amber}; color: ${T.amber}; background: ${T.amberDim}; }
+  .fc-nav-btn:disabled { opacity: .3; cursor: not-allowed; }
+
+  .fc-action-btn {
+    padding: 11px 28px; border: 1px solid ${T.border}; border-radius: 9px;
+    background: transparent; color: ${T.muted}; font-family: ${T.font};
+    font-size: 14px; font-weight: 500; cursor: pointer;
+    transition: border-color .2s, color .2s, background .2s;
+  }
+  .fc-action-btn:hover { border-color: ${T.borderHi}; color: ${T.cream}; background: ${T.surfaceHi}; }
+  .fc-action-btn.danger { border-color: rgba(248,113,113,.3); color: ${T.red}; }
+  .fc-action-btn.danger:hover { background: ${T.redDim}; border-color: ${T.red}; }
+
+  .fc-input {
+    width: 100%; box-sizing: border-box;
+    background: ${T.surfaceHi}; border: 1px solid ${T.border};
+    color: ${T.cream}; border-radius: 10px; padding: 10px 14px;
+    font-family: ${T.font}; font-size: 14px; outline: none;
+    transition: border-color .2s; resize: vertical;
+  }
+  .fc-input:focus { border-color: ${T.amber}; }
+  .fc-input::placeholder { color: ${T.muted}; }
+`;
+if (!document.head.querySelector('#fc-styles')) {
+  document.head.appendChild(styleEl);
+}
+
+const Icon = ({ d, size = 16, color = 'currentColor' }) => (
+  <svg width={size} height={size} fill="none" stroke={color} viewBox="0 0 24 24" style={{ flexShrink:0 }}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={d} />
+  </svg>
+);
 
 const INITIAL_CARDS = [
-  { id: 1, question: "What is machine learning?", answer: "A subset of AI that enables computer systems to improve performance through experience.", learned: false },
-  { id: 2, question: "What are the three main types of machine learning?", answer: "Supervised Learning, Unsupervised Learning, and Reinforcement Learning.", learned: false },
-  { id: 3, question: "What is supervised learning?", answer: "Training machine learning models with labeled data.", learned: false },
-  { id: 4, question: "What is unsupervised learning?", answer: "Finding patterns and structure in unlabeled data without explicit guidance.", learned: false },
-  { id: 5, question: "What is reinforcement learning?", answer: "Learning through trial and error, where the model receives rewards or penalties for actions.", learned: false },
-  { id: 6, question: "Name a common application of machine learning.", answer: "Image recognition, natural language processing, and predictive analytics.", learned: false },
+  { id: 1, question: "What is machine learning?",                         answer: "A subset of AI that enables computer systems to improve performance through experience." },
+  { id: 2, question: "What are the three main types of machine learning?", answer: "Supervised Learning, Unsupervised Learning, and Reinforcement Learning." },
+  { id: 3, question: "What is supervised learning?",                      answer: "Training machine learning models with labeled data." },
+  { id: 4, question: "What is unsupervised learning?",                    answer: "Finding patterns and structure in unlabeled data without explicit guidance." },
+  { id: 5, question: "What is reinforcement learning?",                   answer: "Learning through trial and error, where the model receives rewards or penalties for actions." },
+  { id: 6, question: "Name a common application of machine learning.",    answer: "Image recognition, natural language processing, and predictive analytics." },
 ];
 
 function useCards() {
   const [cards, setCards] = useState(INITIAL_CARDS.map(c => ({ ...c })));
   const nextId = useRef(INITIAL_CARDS.length + 1);
-  const addCard     = (q, a) => setCards(p => [...p, { id: nextId.current++, question: q, answer: a, learned: false }]);
-  const deleteCard  = (id)   => setCards(p => p.filter(c => c.id !== id));
-  const editCard    = (id, q, a) => setCards(p => p.map(c => c.id === id ? { ...c, question: q, answer: a } : c));
-  const toggleLearned = (id) => setCards(p => p.map(c => c.id === id ? { ...c, learned: !c.learned } : c));
-  const resetAll    = ()     => setCards(INITIAL_CARDS.map(c => ({ ...c, learned: false })));
-  return { cards, addCard, deleteCard, editCard, toggleLearned, resetAll };
+  const addCard    = (q, a)    => setCards(p => [...p, { id: nextId.current++, question: q, answer: a }]);
+  const deleteCard = (id)      => setCards(p => p.filter(c => c.id !== id));
+  const editCard   = (id, q, a) => setCards(p => p.map(c => c.id === id ? { ...c, question: q, answer: a } : c));
+  return { cards, addCard, deleteCard, editCard };
 }
 
-
 function CardModal({ initial, onSave, onClose }) {
-  const [q, setQ] = useState(initial?.question ?? "");
-  const [a, setA] = useState(initial?.answer ?? "");
+  const [q, setQ] = useState(initial?.question ?? '');
+  const [a, setA] = useState(initial?.answer   ?? '');
   const valid = q.trim() && a.trim();
   return (
-    <div style={S.overlay}>
-      <div style={S.modal}>
-        <h3 style={S.modalTitle}>{initial ? "Edit Card" : "Add New Card"}</h3>
-        <label style={S.label}>Question</label>
-        <textarea value={q} onChange={e => setQ(e.target.value)} style={S.textarea} placeholder="Enter question…" rows={3} />
-        <label style={S.label}>Answer</label>
-        <textarea value={a} onChange={e => setA(e.target.value)} style={S.textarea} placeholder="Enter answer…" rows={3} />
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
-          <button onClick={onClose} style={S.ghostBtn}>Cancel</button>
-          <button onClick={() => valid && onSave(q.trim(), a.trim())} style={{ ...S.solidBtn, opacity: valid ? 1 : 0.45 }}>Save</button>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.7)', backdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
+      <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:20, padding:32, width:440, maxWidth:'90vw', boxShadow:'0 32px 64px rgba(0,0,0,.6)', animation:'fadeUp .2s ease both' }}>
+        <p style={{ fontFamily:T.serif, fontSize:22, color:T.cream, margin:'0 0 24px' }}>
+          {initial ? 'Edit Flashcard' : 'New Flashcard'}
+        </p>
+        {[['Question', q, setQ], ['Answer', a, setA]].map(([label, val, set]) => (
+          <div key={label} style={{ marginBottom:16 }}>
+            <label style={{ display:'block', fontSize:11, fontWeight:700, letterSpacing:1, textTransform:'uppercase', color:T.muted, marginBottom:8, fontFamily:T.font }}>{label}</label>
+            <textarea className="fc-input" value={val} onChange={e => set(e.target.value)}
+              rows={3} placeholder={`Enter ${label.toLowerCase()}…`} />
+          </div>
+        ))}
+        <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:8 }}>
+          <button className="fc-btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="fc-btn-amber" onClick={() => valid && onSave(q.trim(), a.trim())}
+            style={{ opacity: valid ? 1 : 0.4 }}>Save Card</button>
         </div>
       </div>
     </div>
   );
 }
 
-
-function DotNav({ total, current, learned, onChange }) {
+function DotNav({ total, current, onChange }) {
   return (
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", maxWidth: 480 }}>
+    <div style={{ display:'flex', gap:6, flexWrap:'wrap', justifyContent:'center', maxWidth:400 }}>
       {Array.from({ length: total }).map((_, i) => (
-        <button
-          key={i}
-          onClick={() => onChange(i)}
-          title={`Card ${i + 1}`}
+        <button key={i} onClick={() => onChange(i)} title={`Card ${i + 1}`}
           style={{
-            width: 10, height: 10, borderRadius: "50%", border: "none", padding: 0, cursor: "pointer",
-            background: learned[i] ? "#34D399" : i === current ? "#fff" : "rgba(255,255,255,0.35)",
-            transform: i === current ? "scale(1.4)" : "scale(1)",
-            transition: "all .2s",
+            width:8, height:8, borderRadius:'50%', border:'none', padding:0, cursor:'pointer',
+            background: i === current ? T.amber : T.border,
+            transform: i === current ? 'scale(1.5)' : 'scale(1)',
+            transition: 'all .2s',
           }}
         />
       ))}
@@ -64,313 +150,146 @@ function DotNav({ total, current, learned, onChange }) {
   );
 }
 
-
 export default function FlashcardsPage({ onBack }) {
-  const { cards, addCard, deleteCard, editCard, toggleLearned, resetAll } = useCards();
-  const [index, setIndex]       = useState(0);
-  const [flipped, setFlipped]   = useState(false);
-  const [animDir, setAnimDir]   = useState(null); 
-  const [showAdd, setShowAdd]   = useState(false);
-  const [editTarget, setEdit]   = useState(null);
-  const [filter, setFilter]     = useState("all"); 
+  const { cards, addCard, deleteCard, editCard } = useCards();
+  const [index,      setIndex]   = useState(0);
+  const [flipped,    setFlipped] = useState(false);
+  const [animDir,    setAnimDir] = useState(null);
+  const [showAdd,    setShowAdd] = useState(false);
+  const [editTarget, setEdit]    = useState(null);
 
-  const visible = filter === "unlearned" ? cards.filter(c => !c.learned) : cards;
-  const card    = visible[index];
-  const learned = visible.map(c => c.learned);
-  const learnedCount = cards.filter(c => c.learned).length;
-  const pct     = cards.length ? Math.round((learnedCount / cards.length) * 100) : 0;
+  const card = cards[index];
 
- 
   const go = (dir) => {
     if (animDir) return;
     const next = dir === 1
-      ? Math.min(index + 1, visible.length - 1)
+      ? Math.min(index + 1, cards.length - 1)
       : Math.max(index - 1, 0);
     if (next === index) return;
-    setAnimDir(dir === 1 ? "left" : "right");
+    setAnimDir(dir === 1 ? 'left' : 'right');
     setFlipped(false);
-    setTimeout(() => { setIndex(next); setAnimDir(null); }, 240);
+    setTimeout(() => { setIndex(next); setAnimDir(null); }, 220);
   };
 
- 
   const handleKey = (e) => {
-    if (e.key === "ArrowRight") go(1);
-    if (e.key === "ArrowLeft")  go(-1);
-    if (e.key === " ")          { e.preventDefault(); setFlipped(f => !f); }
+    if (e.key === 'ArrowRight') go(1);
+    if (e.key === 'ArrowLeft')  go(-1);
+    if (e.key === ' ')          { e.preventDefault(); setFlipped(f => !f); }
   };
 
   const handleDelete = () => {
     deleteCard(card.id);
-    setIndex(i => Math.min(i, visible.length - 2));
+    setIndex(i => Math.min(i, cards.length - 2));
     setFlipped(false);
   };
 
   const jumpTo = (i) => { setIndex(i); setFlipped(false); };
 
-  if (visible.length === 0) return (
-    <div style={{ ...S.page, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
-      <p style={{ color: "rgba(255,255,255,.6)", fontSize: 18 }}>
-        {filter === "unlearned" ? "All cards learned! 🎉" : "No cards yet."}
-      </p>
-      {filter === "unlearned" && <button onClick={() => setFilter("all")} style={S.solidBtn}>Show All Cards</button>}
-      <button onClick={() => setShowAdd(true)} style={S.solidBtn}>+ Add Card</button>
+  if (cards.length === 0) return (
+    <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16 }}>
+      <p style={{ color:T.muted, fontSize:14 }}>No cards yet.</p>
+      <button className="fc-btn-amber" onClick={() => setShowAdd(true)}>
+        <Icon d="M12 4v16m8-8H4" size={14} color="#0E1117" /> Add Card
+      </button>
       {showAdd && <CardModal onSave={(q, a) => { addCard(q, a); setShowAdd(false); }} onClose={() => setShowAdd(false)} />}
     </div>
   );
 
   return (
-    <div style={S.page} onKeyDown={handleKey} tabIndex={0}>
+    <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream, display:'flex', flexDirection:'column', alignItems:'center', padding:'0 16px 48px', outline:'none' }}
+      onKeyDown={handleKey} tabIndex={0}>
 
-      <div style={S.topBar}>
-        <button onClick={onBack ?? (() => {})} style={S.backBtn}>
-          ← Back to Results
+      {/* Top bar */}
+      <div style={{ width:'100%', maxWidth:720, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'20px 0 16px', gap:12, flexWrap:'wrap' }}>
+        <button className="fc-btn-ghost" onClick={onBack ?? (() => {})}>
+          <Icon d="M15 19l-7-7 7-7" size={14} /> Back
         </button>
-        <div style={S.topCenter}>
-          <span style={S.deckTitle}>Introduction to Machine Learning</span>
-          <span style={S.cardCount}>{index + 1} / {visible.length}</span>
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+          <p style={{ fontFamily:T.serif, fontSize:18, color:T.cream, margin:0 }}>Flashcards</p>
+          <span style={{ fontSize:12, color:T.muted }}>{index + 1} / {cards.length}</span>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={() => { setFilter(f => f === "all" ? "unlearned" : "all"); setIndex(0); setFlipped(false); }}
-            style={{ ...S.topBtn, background: filter === "unlearned" ? "rgba(52,211,153,.25)" : "rgba(255,255,255,.12)" }}
-          >
-            {filter === "unlearned" ? "🟢 Unlearned only" : "All cards"}
+        <div style={{ display:'flex', gap:8 }}>
+          <button className="fc-btn-ghost" onClick={() => setShowAdd(true)} style={{ padding:'7px 14px', fontSize:12 }}>
+            <Icon d="M12 4v16m8-8H4" size={13} /> Add Card
           </button>
-          <button onClick={() => setShowAdd(true)} style={S.topBtn}>+ Add</button>
-          <button onClick={() => { resetAll(); setIndex(0); setFlipped(false); }} style={S.topBtn}>↺ Reset</button>
         </div>
       </div>
 
-     
-      <div style={S.progressWrap}>
-        <div style={S.progressTrack}>
-          <div style={{ ...S.progressFill, width: `${pct}%` }} />
-        </div>
-        <span style={S.progressLabel}>{learnedCount}/{cards.length} learned</span>
-      </div>
-
-     
-      <div style={S.stage}>
-        <div
-          style={{
-            ...S.cardWrap,
-            transform: animDir === "left"  ? "translateX(-80px) scale(.96)" :
-                       animDir === "right" ? "translateX(80px) scale(.96)"  : "none",
-            opacity: animDir ? 0 : 1,
-            transition: "transform .22s ease, opacity .22s ease",
-          }}
-        >
-       
-          <div
-            onClick={() => setFlipped(f => !f)}
-            style={{
-              width: "100%", height: "100%",
-              transformStyle: "preserve-3d",
-              transition: "transform .6s cubic-bezier(.4,0,.2,1)",
-              transform: flipped ? "rotateY(180deg)" : "none",
-              cursor: "pointer",
-              position: "relative",
-            }}
-          >
-         
-            <div style={{ ...S.face, ...S.front, background: card.learned ? "linear-gradient(135deg,#064E3B,#065F46)" : "linear-gradient(135deg,#1E1B4B,#312E81)" }}>
-              <span style={S.faceTag}>QUESTION {card.learned ? "✓" : ""}</span>
-              <p style={S.faceText}>{card.question}</p>
-              <span style={S.tapHint}>tap to flip · space bar</span>
+      {/* Card */}
+      <div style={{ width:'100%', maxWidth:680, flex:1, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px 0', perspective:1200 }}>
+        <div style={{
+          width:'100%', height:320,
+          transform: animDir === 'left'  ? 'translateX(-60px) scale(.96)' :
+                     animDir === 'right' ? 'translateX(60px) scale(.96)'  : 'none',
+          opacity: animDir ? 0 : 1,
+          transition: 'transform .22s ease, opacity .22s ease',
+        }}>
+          <div onClick={() => setFlipped(f => !f)} style={{
+            width:'100%', height:'100%',
+            transformStyle:'preserve-3d',
+            transition:'transform .55s cubic-bezier(.4,0,.2,1)',
+            transform: flipped ? 'rotateY(180deg)' : 'none',
+            cursor:'pointer', position:'relative',
+          }}>
+            {/* Front — Question */}
+            <div style={{
+              position:'absolute', inset:0, backfaceVisibility:'hidden', WebkitBackfaceVisibility:'hidden',
+              borderRadius:20, border:`1px solid ${T.border}`,
+              background:`linear-gradient(135deg, ${T.surface} 0%, ${T.surfaceHi} 100%)`,
+              display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+              padding:'40px 48px', boxShadow:'0 24px 48px rgba(0,0,0,.4)',
+            }}>
+              <span style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, marginBottom:20, fontFamily:T.font }}>Question</span>
+              <p style={{ fontFamily:T.serif, fontSize:'clamp(18px,3vw,26px)', fontWeight:400, color:T.cream, textAlign:'center', lineHeight:1.5, margin:0 }}>{card.question}</p>
+              <span style={{ marginTop:28, fontSize:11, color:T.muted, fontFamily:T.font }}>tap to reveal answer · space bar</span>
             </div>
-            
-            <div style={{ ...S.face, ...S.back, background: "linear-gradient(135deg,#1C1917,#292524)" }}>
-              <span style={S.faceTag}>ANSWER</span>
-              <p style={{ ...S.faceText, fontWeight: 400, fontSize: "clamp(16px,2.5vw,22px)" }}>{card.answer}</p>
-              <span style={S.tapHint}>tap to flip back</span>
+
+            {/* Back — Answer */}
+            <div style={{
+              position:'absolute', inset:0, backfaceVisibility:'hidden', WebkitBackfaceVisibility:'hidden',
+              borderRadius:20, border:`1px solid rgba(129,140,248,.2)`,
+              background:`linear-gradient(135deg, #1a1535 0%, #1E1B4B 100%)`,
+              display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+              padding:'40px 48px', boxShadow:'0 24px 48px rgba(0,0,0,.4)',
+              transform:'rotateY(180deg)',
+            }}>
+              <span style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.purple, marginBottom:20, fontFamily:T.font }}>Answer</span>
+              <p style={{ fontFamily:T.font, fontSize:'clamp(15px,2.5vw,20px)', fontWeight:400, color:T.cream, textAlign:'center', lineHeight:1.6, margin:0 }}>{card.answer}</p>
+              <span style={{ marginTop:28, fontSize:11, color:T.muted, fontFamily:T.font }}>tap to flip back</span>
             </div>
           </div>
         </div>
       </div>
 
-      
-      <div style={S.actions}>
-        <button
-          onClick={() => toggleLearned(card.id)}
-          style={{ ...S.actionBtn, background: card.learned ? "rgba(52,211,153,.2)" : "rgba(255,255,255,.1)", borderColor: card.learned ? "#34D399" : "rgba(255,255,255,.2)", color: card.learned ? "#34D399" : "#fff" }}
-        >
-          {card.learned ? "✓ Learned" : "Mark Learned"}
+      {/* Actions */}
+      <div style={{ display:'flex', gap:8, marginBottom:24, flexWrap:'wrap', justifyContent:'center' }}>
+        <button className="fc-action-btn" onClick={() => setEdit(card)}>
+          <Icon d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" size={13} />
+          Edit
         </button>
-        <button onClick={() => setEdit(card)} style={S.actionBtn}>✏️ Edit</button>
-        <button onClick={handleDelete} style={{ ...S.actionBtn, borderColor: "#F87171", color: "#F87171" }}>🗑 Delete</button>
-      </div>
-
-     
-      <div style={S.navRow}>
-        <button onClick={() => go(-1)} disabled={index === 0} style={{ ...S.navBtn, opacity: index === 0 ? 0.3 : 1 }}>
-          ← Prev
-        </button>
-        <DotNav total={visible.length} current={index} learned={learned} onChange={jumpTo} />
-        <button onClick={() => go(1)} disabled={index === visible.length - 1} style={{ ...S.navBtn, opacity: index === visible.length - 1 ? 0.3 : 1 }}>
-          Next →
+        <button className="fc-action-btn danger" onClick={handleDelete}>
+          <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" size={13} />
+          Delete
         </button>
       </div>
 
-      <p style={S.keyHint}>← → arrow keys to navigate · space to flip</p>
+      {/* Nav */}
+      <div style={{ display:'flex', alignItems:'center', gap:24, marginBottom:20, width:'100%', maxWidth:600, justifyContent:'space-between' }}>
+        <button className="fc-nav-btn" onClick={() => go(-1)} disabled={index === 0}>← Prev</button>
+        <DotNav total={cards.length} current={index} onChange={jumpTo} />
+        <button className="fc-nav-btn" onClick={() => go(1)} disabled={index === cards.length - 1}>Next →</button>
+      </div>
+
+      <p style={{ color:T.muted, fontSize:11, fontFamily:T.font, letterSpacing:.3 }}>← → arrow keys to navigate · space to flip</p>
 
       {showAdd && (
         <CardModal onSave={(q, a) => { addCard(q, a); setShowAdd(false); }} onClose={() => setShowAdd(false)} />
       )}
       {editTarget && (
-        <CardModal
-          initial={editTarget}
+        <CardModal initial={editTarget}
           onSave={(q, a) => { editCard(editTarget.id, q, a); setEdit(null); setFlipped(false); }}
-          onClose={() => setEdit(null)}
-        />
+          onClose={() => setEdit(null)} />
       )}
     </div>
   );
 }
-
-
-const S = {
-  page: {
-    minHeight: "100vh",
-    background: "linear-gradient(160deg, #0F0C29 0%, #1a1040 50%, #0F0C29 100%)",
-    display: "flex", flexDirection: "column", alignItems: "center",
-    padding: "0 16px 40px",
-    fontFamily: "'Georgia', 'Times New Roman', serif",
-    outline: "none",
-  },
-  topBar: {
-    width: "100%", maxWidth: 900,
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-    padding: "20px 0 10px", gap: 12, flexWrap: "wrap",
-  },
-  backBtn: {
-    background: "none", border: "none", color: "rgba(255,255,255,.55)",
-    fontSize: 14, cursor: "pointer", fontFamily: "inherit", padding: "6px 0",
-    letterSpacing: .3,
-  },
-  topCenter: {
-    display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
-  },
-  deckTitle: {
-    color: "#fff", fontSize: 15, fontWeight: 700, letterSpacing: .4,
-  },
-  cardCount: {
-    color: "rgba(255,255,255,.45)", fontSize: 13,
-  },
-  topBtn: {
-    padding: "7px 14px", border: "1px solid rgba(255,255,255,.2)", borderRadius: 8,
-    background: "rgba(255,255,255,.12)", color: "#fff", fontSize: 13,
-    cursor: "pointer", fontFamily: "inherit", backdropFilter: "blur(6px)",
-  },
-  progressWrap: {
-    width: "100%", maxWidth: 600,
-    display: "flex", alignItems: "center", gap: 12, marginBottom: 8,
-  },
-  progressTrack: {
-    flex: 1, height: 5, borderRadius: 99,
-    background: "rgba(255,255,255,.12)", overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%", borderRadius: 99,
-    background: "linear-gradient(90deg,#34D399,#10B981)",
-    transition: "width .5s ease",
-  },
-  progressLabel: {
-    color: "rgba(255,255,255,.4)", fontSize: 12, whiteSpace: "nowrap",
-  },
-  stage: {
-    flex: 1, width: "100%", maxWidth: 680,
-    display: "flex", alignItems: "center", justifyContent: "center",
-    padding: "24px 0 16px",
-    perspective: 1200,
-  },
-  cardWrap: {
-    width: "100%", height: 340,
-  },
-  face: {
-    position: "absolute", inset: 0,
-    backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden",
-    borderRadius: 24,
-    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-    padding: "40px 48px",
-    boxShadow: "0 32px 64px rgba(0,0,0,.5)",
-    border: "1px solid rgba(255,255,255,.08)",
-  },
-  front: {},
-  back: { transform: "rotateY(180deg)" },
-  faceTag: {
-    fontSize: 11, fontWeight: 700, letterSpacing: 2,
-    color: "rgba(255,255,255,.35)", marginBottom: 20, fontFamily: "system-ui, sans-serif",
-  },
-  faceText: {
-    fontSize: "clamp(18px,3vw,26px)", fontWeight: 700,
-    color: "#fff", textAlign: "center", lineHeight: 1.5, margin: 0,
-  },
-  tapHint: {
-    marginTop: 28, fontSize: 12,
-    color: "rgba(255,255,255,.2)", fontFamily: "system-ui, sans-serif",
-  },
-  actions: {
-    display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center",
-    marginBottom: 28,
-  },
-  actionBtn: {
-    padding: "9px 20px",
-    border: "1px solid rgba(255,255,255,.2)", borderRadius: 10,
-    background: "rgba(255,255,255,.08)", color: "#fff",
-    fontSize: 13, cursor: "pointer", fontFamily: "system-ui, sans-serif",
-    backdropFilter: "blur(6px)", transition: "all .15s",
-  },
-  navRow: {
-    display: "flex", alignItems: "center", gap: 24,
-    marginBottom: 20, width: "100%", maxWidth: 600,
-    justifyContent: "space-between",
-  },
-  navBtn: {
-    padding: "10px 24px",
-    border: "1px solid rgba(255,255,255,.25)", borderRadius: 10,
-    background: "rgba(255,255,255,.1)", color: "#fff",
-    fontSize: 14, fontWeight: 600, cursor: "pointer",
-    fontFamily: "system-ui, sans-serif", backdropFilter: "blur(6px)",
-    transition: "opacity .2s",
-  },
-  keyHint: {
-    color: "rgba(255,255,255,.2)", fontSize: 12,
-    fontFamily: "system-ui, sans-serif", letterSpacing: .3,
-  },
-  /* modal */
-  overlay: {
-    position: "fixed", inset: 0, background: "rgba(0,0,0,.6)",
-    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
-    backdropFilter: "blur(4px)",
-  },
-  modal: {
-    background: "#1E1B4B", border: "1px solid rgba(255,255,255,.12)",
-    borderRadius: 18, padding: 32, width: 440, maxWidth: "90vw",
-    boxShadow: "0 32px 64px rgba(0,0,0,.5)",
-  },
-  modalTitle: {
-    margin: "0 0 20px", fontSize: 18, fontWeight: 700, color: "#fff",
-  },
-  label: {
-    display: "block", fontSize: 12, fontWeight: 600,
-    color: "rgba(255,255,255,.5)", marginBottom: 6, fontFamily: "system-ui, sans-serif",
-  },
-  textarea: {
-    width: "100%", boxSizing: "border-box",
-    background: "rgba(255,255,255,.07)", border: "1.5px solid rgba(255,255,255,.15)",
-    borderRadius: 10, padding: "10px 14px", fontSize: 14,
-    fontFamily: "Georgia, serif", color: "#fff", resize: "vertical",
-    outline: "none", display: "block", marginBottom: 14,
-  },
-  solidBtn: {
-    padding: "10px 22px", background: "#6366F1", color: "#fff",
-    border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600,
-    cursor: "pointer", fontFamily: "system-ui, sans-serif",
-  },
-  ghostBtn: {
-    padding: "10px 22px", background: "transparent",
-    border: "1.5px solid rgba(255,255,255,.2)", borderRadius: 10,
-    color: "rgba(255,255,255,.7)", fontSize: 14, cursor: "pointer",
-    fontFamily: "system-ui, sans-serif",
-  },
-};

@@ -702,15 +702,7 @@ const ResultsPage = ({ onBack }) => {
           {/* Flashcards */}
           {activeTab === 'flashcards' && (
             <div key="flashcards" className="ns-tab-panel">
-              <div style={{ marginBottom:28 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, color:T.muted, marginBottom:10 }}>
-                  <span>{learnedCount} of {cards.length} cards learned</span>
-                  <span style={{ color:pct === 100 ? T.green : T.amber, fontWeight:600 }}>{pct}%</span>
-                </div>
-                <div style={{ height:5, borderRadius:99, background:T.surfaceHi, overflow:'hidden' }}>
-                  <div style={{ height:'100%', width:`${pct}%`, background:`linear-gradient(90deg,${T.amber},${T.purple})`, borderRadius:99, transition:'width .5s cubic-bezier(.4,0,.2,1)' }} />
-                </div>
-              </div>
+              
               <div style={{ display:'flex', flexWrap:'wrap', gap:14, marginBottom:28 }}>
                 {cards.map(c => <PreviewCard key={c.id} card={c} />)}
                 <div onClick={() => setShowAdd(true)}
@@ -722,7 +714,7 @@ const ResultsPage = ({ onBack }) => {
                   <span style={{ fontSize:12, color:T.muted, fontFamily:T.font }}>Add card</span>
                 </div>
               </div>
-              <button className="ns-study-btn" onClick={() => setPage('flashcards')}>
+              <button className="ns-btn-amber" onClick={() => setPage('flashcards')} style={{ width:'100%', padding:'14px 20px', justifyContent:'center', fontSize:15, fontWeight:700, borderRadius:12, boxShadow:'0 4px 24px rgba(245,166,35,.25)' }}>
                 <Icon d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" size={17} color="#fff" />
                 Study All {cards.length} Flashcards
               </button>
