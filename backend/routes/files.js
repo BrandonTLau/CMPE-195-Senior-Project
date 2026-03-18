@@ -40,8 +40,8 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
       currentContent: { transcribedText: '', summary: '', studyGuide: '', flashCards: [], quiz: [] },
     });
 
-    //const saved = await newFile.save();
-    const saved = await UploadedFile.findById(req.params.id);
+    const saved = await newFile.save();
+    //const saved = await UploadedFile.findById(req.params.id);
     await User.findByIdAndUpdate(userId, { $push: { fileUploads: saved._id } });
 
     /** >>> FUTURE INTEGRATIONS GO HERE: 
