@@ -1,10 +1,156 @@
 import React, { useState, useEffect, useRef } from "react";
 import UploadPage from "./UploadPage";
-import ProcessingScreen from "./ProcessingPage";
 import ResultsPage from "./ResultsPage";
 import FavoritesPage from "./FavoritesPage";
 
-// ── Initial data ──────────────────────────────────────────────────────────────
+//design tokens
+const T = {
+  bg:        '#0E1117',
+  surface:   '#161B27',
+  surfaceHi: '#1E2537',
+  border:    'rgba(255,255,255,0.07)',
+  borderHi:  'rgba(255,255,255,0.13)',
+  amber:     '#F5A623',
+  amberDim:  'rgba(245,166,35,0.12)',
+  cream:     '#EDE8DC',
+  muted:     '#6B7694',
+  green:     '#34D399',
+  greenDim:  'rgba(52,211,153,0.12)',
+  purple:    '#818CF8',
+  purpleDim: 'rgba(129,140,248,0.12)',
+  red:       '#F87171',
+  redDim:    'rgba(248,113,113,0.12)',
+  font:      '"DM Sans", system-ui, sans-serif',
+  serif:     '"DM Serif Display", Georgia, serif',
+};
+
+// inject fonts + global styles once
+const _fontLink = document.createElement('link');
+_fontLink.rel = 'stylesheet';
+_fontLink.href = 'https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap';
+document.head.appendChild(_fontLink);
+
+const _style = document.createElement('style');
+_style.textContent = `
+  @keyframes fadeUp   { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:translateY(0) } }
+  @keyframes slideIn  { from { opacity:0; transform:translateX(-8px) } to { opacity:1; transform:translateX(0) } }
+  @keyframes pulse    { 0%,100% { opacity:1 } 50% { opacity:0.55 } }
+  @keyframes shimmer  { from { background-position: -200% 0 } to { background-position: 200% 0 } }
+
+  .ud-nav-item {
+    display:flex; align-items:center; gap:10px;
+    padding:9px 12px; border-radius:10px; cursor:pointer;
+    font-family:${T.font}; font-size:13px; font-weight:500;
+    color:${T.muted}; border:none; background:transparent; width:100%;
+    transition:color .15s, background .15s; position:relative;
+  }
+  .ud-nav-item:hover  { color:${T.cream}; background:rgba(255,255,255,0.05); }
+  .ud-nav-item.active { color:${T.cream}; background:${T.surfaceHi}; }
+  .ud-nav-item.active::before {
+    content:''; position:absolute; left:0; top:20%; bottom:20%;
+    width:3px; border-radius:0 3px 3px 0; background:${T.amber};
+  }
+
+  .ud-card {
+    background:${T.surface}; border:1px solid ${T.border}; border-radius:16px;
+    transition:border-color .2s, box-shadow .2s;
+    position:relative; overflow:hidden;
+  }
+  .ud-card:hover { border-color:${T.borderHi}; box-shadow:0 8px 32px rgba(0,0,0,.3); }
+
+  .ud-tag {
+    display:inline-block; font-size:10px; font-weight:700; letter-spacing:1px;
+    text-transform:uppercase; padding:2px 8px; border-radius:99px;
+    font-family:${T.font};
+  }
+
+  .ud-btn-ghost {
+    background:transparent; border:1px solid ${T.border}; color:${T.muted};
+    border-radius:8px; padding:6px 14px; font-family:${T.font}; font-size:12px;
+    font-weight:500; cursor:pointer; display:inline-flex; align-items:center; gap:5px;
+    transition:border-color .2s, color .2s, background .2s;
+  }
+  .ud-btn-ghost:hover { border-color:${T.borderHi}; color:${T.cream}; background:${T.surfaceHi}; }
+
+  .ud-btn-amber {
+    background:${T.amber}; border:none; color:#0E1117; border-radius:9px;
+    padding:8px 18px; font-family:${T.font}; font-size:13px; font-weight:600;
+    cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+    transition:opacity .2s, transform .15s;
+  }
+  .ud-btn-amber:hover { opacity:.88; transform:translateY(-1px); }
+
+  .ud-input {
+    background:${T.surfaceHi}; border:1px solid ${T.border}; color:${T.cream};
+    border-radius:9px; padding:9px 14px; font-family:${T.font}; font-size:13px;
+    outline:none; transition:border-color .2s; width:100%; box-sizing:border-box;
+  }
+  .ud-input:focus { border-color:${T.amber}; }
+  .ud-input::placeholder { color:${T.muted}; }
+
+  .ud-scrollbar::-webkit-scrollbar       { width:4px; }
+  .ud-scrollbar::-webkit-scrollbar-track { background:transparent; }
+  .ud-scrollbar::-webkit-scrollbar-thumb { background:${T.border}; border-radius:99px; }
+
+  .ud-folder-chip {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:6px 12px 6px 8px; border-radius:8px;
+    border:1px solid ${T.border}; background:${T.surface};
+    font-family:${T.font}; font-size:12px; font-weight:500; color:${T.muted};
+    cursor:pointer; transition:all .15s; white-space:nowrap;
+  }
+  .ud-folder-chip:hover  { border-color:${T.borderHi}; color:${T.cream}; background:${T.surfaceHi}; }
+  .ud-folder-chip.active { border-color:rgba(245,166,35,.35); color:${T.amber}; background:${T.amberDim}; }
+  .ud-folder-chip.dragover { border-color:${T.green}; color:${T.green}; background:${T.greenDim}; }
+
+  .ud-note-open {
+    padding:6px 14px; border-radius:7px; font-size:12px; font-weight:600;
+    font-family:${T.font}; cursor:pointer; border:1px solid ${T.border};
+    background:transparent; color:${T.muted};
+    transition:border-color .15s, color .15s, background .15s;
+  }
+  .ud-note-open:hover { border-color:${T.amber}; color:${T.amber}; background:${T.amberDim}; }
+
+  .ud-sort-btn {
+    padding:5px 12px; border-radius:7px; border:1px solid transparent;
+    background:transparent; color:${T.muted}; font-family:${T.font};
+    font-size:12px; font-weight:500; cursor:pointer; transition:all .15s;
+  }
+  .ud-sort-btn:hover  { color:${T.cream}; }
+  .ud-sort-btn.active { border-color:${T.border}; color:${T.cream}; background:${T.surfaceHi}; }
+
+  .ud-view-btn {
+    padding:6px 8px; border-radius:7px; border:none;
+    background:transparent; color:${T.muted}; cursor:pointer;
+    display:flex; align-items:center; transition:color .15s, background .15s;
+  }
+  .ud-view-btn:hover  { color:${T.cream}; }
+  .ud-view-btn.active { color:${T.amber}; background:${T.amberDim}; }
+
+  .ud-modal-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,.7); backdrop-filter:blur(6px);
+    display:flex; align-items:center; justify-content:center; z-index:1000;
+  }
+  .ud-modal {
+    background:${T.surface}; border:1px solid ${T.border}; border-radius:20px;
+    padding:28px; width:380px; max-width:90vw;
+    box-shadow:0 32px 64px rgba(0,0,0,.6); animation:fadeUp .2s ease both;
+  }
+
+  .ud-toast {
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px);
+    background:${T.surface}; border:1px solid ${T.border}; color:${T.cream};
+    padding:10px 18px; border-radius:99px; font-family:${T.font}; font-size:13px; font-weight:500;
+    box-shadow:0 8px 32px rgba(0,0,0,.4); z-index:2000; pointer-events:none;
+    display:flex; align-items:center; gap:8px;
+    transition:transform .35s cubic-bezier(.34,1.56,.64,1), opacity .3s;
+    opacity:0;
+  }
+  .ud-toast.visible { transform:translateX(-50%) translateY(0); opacity:1; }
+`;
+document.head.appendChild(_style);
+
+//initial data
 const INITIAL_NOTES = [
   { id: 1, title: "Introduction to Machine Learning", date: "Dec 6, 2025", folderId: null,
     preview: "Machine learning is a subset of artificial intelligence that focuses on building systems that learn from data...",
@@ -13,7 +159,7 @@ const INITIAL_NOTES = [
     preview: "Integration techniques and applications including u-substitution and integration by parts...",
     tags: ["Math", "Calculus"], confidence: 92, favorite: false, deleted: false },
   { id: 3, title: "History Lecture Notes", date: "Dec 3, 2025", folderId: null,
-    preview: "World War II timeline and key events that shaped the modern world and geopolitical landscape...",
+    preview: "World War II timeline and key events that shaped the modern world...",
     tags: ["History"], confidence: 85, favorite: false, deleted: false },
   { id: 4, title: "Chemistry Lab Report", date: "Dec 1, 2025", folderId: "f3",
     preview: "Experiment results and analysis of chemical reactions observed during the titration experiment...",
@@ -33,52 +179,49 @@ const INITIAL_FOLDERS = [
   { id: "f4", name: "Humanities" },
 ];
 
-const TAG_COLORS = [
-  { bg: "#EDE9FE", text: "#6D28D9" }, { bg: "#DBEAFE", text: "#1D4ED8" },
-  { bg: "#D1FAE5", text: "#065F46" }, { bg: "#FEF3C7", text: "#92400E" },
-  { bg: "#FCE7F3", text: "#9D174D" },
+const TAG_PALETTE = [
+  { bg: 'rgba(129,140,248,0.15)', text: '#818CF8' },
+  { bg: 'rgba(52,211,153,0.15)',  text: '#34D399' },
+  { bg: 'rgba(245,166,35,0.15)',  text: '#F5A623' },
+  { bg: 'rgba(248,113,113,0.15)', text: '#F87171' },
+  { bg: 'rgba(96,165,250,0.15)',  text: '#60A5FA' },
 ];
-const tagColor = (tag) => TAG_COLORS[tag.charCodeAt(0) % TAG_COLORS.length];
-
+const tagColor = (tag) => TAG_PALETTE[tag.charCodeAt(0) % TAG_PALETTE.length];
 
 const DragContext = React.createContext(null);
 
-
-const NoteIcon = ({ size = 18, color = "#6366F1" }) => (
-  <svg fill="none" stroke={color} viewBox="0 0 24 24" style={{ width: size, height: size, flexShrink: 0 }}>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+//icons
+const Icon = ({ d, size = 16, color = 'currentColor' }) => (
+  <svg width={size} height={size} fill="none" stroke={color} viewBox="0 0 24 24" style={{ flexShrink:0 }}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={d} />
   </svg>
 );
 
 const ConfidencePill = ({ score }) => {
-  const color = score >= 90 ? { bg: "#D1FAE5", text: "#065F46" }
-              : score >= 80 ? { bg: "#FEF3C7", text: "#92400E" }
-              : { bg: "#FEE2E2", text: "#991B1B" };
+  const color = score >= 90 ? { bg: T.greenDim, text: T.green }
+              : score >= 80 ? { bg: T.amberDim, text: T.amber }
+              : { bg: T.redDim, text: T.red };
   return (
-    <span style={{ fontSize: "0.7rem", fontWeight: "700", padding: "0.2rem 0.55rem",
-      borderRadius: "999px", backgroundColor: color.bg, color: color.text, whiteSpace: "nowrap" }}>
-      {score}%
-    </span>
+    <span className="ud-tag" style={{ background: color.bg, color: color.text }}>{score}%</span>
   );
 };
 
-// ── New folder modal ──────────────────────────────────────────────────────────
+//new folder modal
 const NewFolderModal = ({ onSave, onClose }) => {
-  const [name, setName] = useState("");
+  const [name, setName] = useState('');
   return (
-    <div style={mo.overlay}>
-      <div style={mo.box}>
-        <h3 style={mo.title}>New Folder</h3>
-        <label style={mo.label}>Folder name</label>
-        <input style={mo.input} value={name} onChange={e => setName(e.target.value)}
-          placeholder="e.g. Math, Science…" autoFocus
-          onKeyDown={e => e.key === "Enter" && name.trim() && onSave(name.trim())} />
-        <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
-          <button style={mo.cancel} onClick={onClose}>Cancel</button>
-          <button style={{ ...mo.save, opacity: name.trim() ? 1 : 0.5 }}
+    <div className="ud-modal-overlay">
+      <div className="ud-modal">
+        <p style={{ fontFamily: T.serif, fontSize: 20, color: T.cream, margin: '0 0 20px' }}>New Folder</p>
+        <label style={{ display:'block', fontSize:11, fontWeight:700, letterSpacing:1, textTransform:'uppercase', color:T.muted, marginBottom:8, fontFamily:T.font }}>Folder name</label>
+        <input className="ud-input" value={name} onChange={e => setName(e.target.value)}
+          placeholder="e.g. Math, Biology…" autoFocus
+          onKeyDown={e => e.key === 'Enter' && name.trim() && onSave(name.trim())} />
+        <div style={{ display:'flex', gap:10, marginTop:20, justifyContent:'flex-end' }}>
+          <button className="ud-btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="ud-btn-amber" style={{ opacity: name.trim() ? 1 : 0.4 }}
             onClick={() => name.trim() && onSave(name.trim())}>
-            Create Folder
+            <Icon d="M12 4v16m8-8H4" size={13} color="#0E1117" /> Create
           </button>
         </div>
       </div>
@@ -86,896 +229,598 @@ const NewFolderModal = ({ onSave, onClose }) => {
   );
 };
 
-const mo = {
-  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex",
-    alignItems: "center", justifyContent: "center", zIndex: 1000 },
-  box: { background: "#fff", borderRadius: "1rem", padding: "1.5rem", width: "360px",
-    maxWidth: "90vw", boxShadow: "0 20px 40px rgba(0,0,0,0.15)" },
-  title: { fontSize: "1rem", fontWeight: "700", margin: "0 0 1rem", color: "#111827" },
-  label: { display: "block", fontSize: "0.78rem", fontWeight: "600", color: "#374151", margin: "0 0 0.35rem" },
-  input: { width: "100%", padding: "0.55rem 0.75rem", borderRadius: "0.5rem", border: "1px solid #D1D5DB",
-    fontSize: "0.88rem", boxSizing: "border-box", marginBottom: "0.85rem", outline: "none" },
-  cancel: { flex: 1, padding: "0.6rem", borderRadius: "0.5rem", border: "1px solid #E5E7EB",
-    background: "#F9FAFB", cursor: "pointer", fontSize: "0.85rem", color: "#6B7280" },
-  save: { flex: 1, padding: "0.6rem", borderRadius: "0.5rem", border: "none",
-    background: "linear-gradient(to right,#6366F1,#8B5CF6)", color: "#fff",
-    cursor: "pointer", fontSize: "0.85rem", fontWeight: "600" },
-};
-
-
-const DropToast = ({ message, visible }) => (
-  <div style={{
-    position: "fixed", bottom: "1.5rem", left: "50%", transform: `translateX(-50%) translateY(${visible ? "0" : "80px"})`,
-    background: "linear-gradient(to right, #6366F1, #8B5CF6)",
-    color: "white", padding: "0.65rem 1.25rem", borderRadius: "2rem",
-    fontSize: "0.82rem", fontWeight: "600", boxShadow: "0 4px 20px rgba(99,102,241,0.4)",
-    transition: "transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s",
-    opacity: visible ? 1 : 0, zIndex: 2000, pointerEvents: "none",
-    display: "flex", alignItems: "center", gap: "0.5rem",
-  }}>
-    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: "14px", height: "14px" }}>
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-    </svg>
-    {message}
-  </div>
-);
-
-// ── Folders strip (collapsible) ───────────────────────────────────────────────
-const FoldersStrip = ({ folders, notes, selectedFolderId, onSelect, onAdd, onDelete, onRename, onDropNote, search = "" }) => {
-  const [expanded, setExpanded] = useState(true);
+//folders strip
+const FoldersStrip = ({ folders, notes, selectedFolderId, onSelect, onAdd, onDelete, onRename, onDropNote, search = '' }) => {
   const [renamingId, setRenamingId] = useState(null);
-  const [renameVal, setRenameVal] = useState("");
-  const [hoveredId, setHoveredId] = useState(null);
-  const [dragOverId, setDragOverId] = useState(null); 
+  const [renameVal,  setRenameVal]  = useState('');
+  const [dragOverId, setDragOverId] = useState(undefined);
   const { draggingNoteId } = React.useContext(DragContext);
 
-  const allRootFolders = folders;
-  const rootFolders = search.trim()
-    ? allRootFolders.filter(f => f.name.toLowerCase().includes(search.toLowerCase()))
-    : allRootFolders;
+  const visible = search.trim()
+    ? folders.filter(f => f.name.toLowerCase().includes(search.toLowerCase()))
+    : folders;
 
-  const getFolderNoteCount = (folderId) =>
-    notes.filter(n => n.folderId === folderId).length;
+  const count = (fid) => notes.filter(n => n.folderId === fid).length;
 
-  const handleDragOver = (e, targetId) => {
-    if (!draggingNoteId) return;
+  const handleDragOver = (e, id) => { if (!draggingNoteId) return; e.preventDefault(); setDragOverId(id); };
+  const handleDrop = (e, fid) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setDragOverId(targetId);
-  };
-
-  const handleDragLeave = () => setDragOverId(undefined);
-
-  const handleDrop = (e, targetFolderId) => {
-    e.preventDefault();
-    const noteId = parseInt(e.dataTransfer.getData("noteId"), 10);
-    if (noteId) onDropNote(noteId, targetFolderId);
+    const nid = parseInt(e.dataTransfer.getData('noteId'), 10);
+    if (nid) onDropNote(nid, fid);
     setDragOverId(undefined);
   };
 
-  const isOver = (id) => draggingNoteId && dragOverId === id;
-
   return (
-    <div style={fs.wrap}>
-      <button style={fs.header} onClick={() => setExpanded(e => !e)}>
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"
-          style={{ width: "14px", height: "14px", transition: "transform 0.2s",
-            transform: expanded ? "rotate(0deg)" : "rotate(-90deg)", flexShrink: 0 }}>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-        </svg>
-        <span style={fs.headerLabel}>Folders</span>
-        <span style={fs.folderCount}>{allRootFolders.length}</span>
-        <div style={{ flex: 1 }} />
-        <button style={fs.addBtn}
-          onClick={e => { e.stopPropagation(); onAdd(); }}
-          title="New folder">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: "13px", height: "13px" }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          New Folder
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
+        <span style={{ fontSize:10, fontWeight:700, letterSpacing:1.5, textTransform:'uppercase', color:T.muted, fontFamily:T.font }}>Folders</span>
+        <span style={{ fontSize:10, fontWeight:700, background:T.surfaceHi, color:T.muted, borderRadius:99, padding:'1px 7px', fontFamily:T.font }}>{folders.length}</span>
+        <div style={{ flex:1 }} />
+        <button className="ud-btn-ghost" onClick={onAdd} style={{ padding:'4px 10px', fontSize:11 }}>
+          <Icon d="M12 4v16m8-8H4" size={12} /> New Folder
         </button>
-      </button>
+      </div>
 
-      {expanded && (
-        <div style={fs.strip}>
-          
-          <button
-            style={{
-              ...fs.card,
-              ...(selectedFolderId === null ? fs.cardSelected : {}),
-              ...(isOver(null) ? fs.cardDropOver : {}),
-            }}
-            onClick={() => onSelect(null)}
-            onDragOver={e => handleDragOver(e, null)}
-            onDragLeave={handleDragLeave}
-            onDrop={e => handleDrop(e, null)}>
-            <div style={{ ...fs.cardIcon, backgroundColor: selectedFolderId === null && !isOver(null) ? "#6366F1" : isOver(null) ? "#10B981" : "#E5E7EB" }}>
-              {isOver(null) ? (
-                <svg fill="none" stroke="white" viewBox="0 0 24 24" style={{ width: "18px", height: "18px" }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                </svg>
-              ) : (
-                <svg fill="none" stroke={selectedFolderId === null ? "white" : "#6B7280"} viewBox="0 0 24 24"
-                  style={{ width: "18px", height: "18px" }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                </svg>
-              )}
+      <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+        {/* All notes chip */}
+        <button className={`ud-folder-chip${selectedFolderId === null ? ' active' : ''}${draggingNoteId && dragOverId === null ? ' dragover' : ''}`}
+          onClick={() => onSelect(null)}
+          onDragOver={e => handleDragOver(e, null)}
+          onDragLeave={() => setDragOverId(undefined)}
+          onDrop={e => handleDrop(e, null)}>
+          <Icon d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" size={13} />
+          {draggingNoteId && dragOverId === null ? 'Remove folder' : 'All Notes'}
+          <span style={{ fontSize:10, fontWeight:700, color:'inherit', opacity:.7 }}>{notes.length}</span>
+        </button>
+
+        {visible.map(folder => {
+          const isActive   = selectedFolderId === folder.id;
+          const isDragOver = draggingNoteId && dragOverId === folder.id;
+          return renamingId === folder.id ? (
+            <input key={folder.id} className="ud-input" autoFocus value={renameVal}
+              onChange={e => setRenameVal(e.target.value)}
+              style={{ width:120, padding:'5px 10px', fontSize:12 }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && renameVal.trim()) { onRename(folder.id, renameVal.trim()); setRenamingId(null); }
+                if (e.key === 'Escape') setRenamingId(null);
+              }}
+              onBlur={() => setRenamingId(null)} />
+          ) : (
+            <div key={folder.id} style={{ position:'relative', display:'inline-flex' }}>
+              <button className={`ud-folder-chip${isActive ? ' active' : ''}${isDragOver ? ' dragover' : ''}`}
+                onClick={() => onSelect(folder.id)}
+                onDragOver={e => handleDragOver(e, folder.id)}
+                onDragLeave={() => setDragOverId(undefined)}
+                onDrop={e => handleDrop(e, folder.id)}
+                onDoubleClick={() => { setRenamingId(folder.id); setRenameVal(folder.name); }}>
+                <Icon d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" size={13} />
+                {isDragOver ? `Move to ${folder.name}` : folder.name}
+                <span style={{ fontSize:10, fontWeight:700, color:'inherit', opacity:.7 }}>{count(folder.id)}</span>
+                <button style={{ background:'none', border:'none', cursor:'pointer', color:'inherit', opacity:.5, padding:0, display:'flex', lineHeight:1, marginLeft:2 }}
+                  onClick={e => { e.stopPropagation(); onDelete(folder.id); }}
+                  title="Delete folder">
+                  <Icon d="M6 18L18 6M6 6l12 12" size={10} />
+                </button>
+              </button>
             </div>
-            <span style={fs.cardName}>{isOver(null) ? "Remove folder" : "All Notes"}</span>
-            <span style={fs.cardCount}>{notes.length}</span>
-          </button>
-
-          {/* Folder cards */}
-          {rootFolders.map(folder => {
-            const isSelected = selectedFolderId === folder.id;
-            const isHovered  = hoveredId === folder.id;
-            const isDragOver = isOver(folder.id);
-            const count      = getFolderNoteCount(folder.id);
-
-            return (
-              <div key={folder.id} style={{ position: "relative" }}
-                onMouseEnter={() => setHoveredId(folder.id)}
-                onMouseLeave={() => setHoveredId(null)}>
-                {renamingId === folder.id ? (
-                  <div style={{ ...fs.card, padding: "0.5rem 0.65rem" }}>
-                    <input autoFocus value={renameVal}
-                      onChange={e => setRenameVal(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === "Enter" && renameVal.trim()) { onRename(folder.id, renameVal.trim()); setRenamingId(null); }
-                        if (e.key === "Escape") setRenamingId(null);
-                      }}
-                      onBlur={() => setRenamingId(null)}
-                      style={{ width: "100%", border: "1.5px solid #6366F1", borderRadius: "0.4rem",
-                        padding: "0.3rem 0.5rem", fontSize: "0.82rem", outline: "none", boxSizing: "border-box" }} />
-                  </div>
-                ) : (
-                  <button
-                    style={{
-                      ...fs.card,
-                      ...(isSelected ? fs.cardSelected : {}),
-                      ...(isDragOver ? fs.cardDropOver : {}),
-                    }}
-                    onClick={() => onSelect(folder.id)}
-                    onDragOver={e => handleDragOver(e, folder.id)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={e => handleDrop(e, folder.id)}>
-                    <div style={{
-                      ...fs.cardIcon,
-                      backgroundColor: isDragOver ? "#10B981" : isSelected ? "#6366F1" : "#EEF2FF",
-                    }}>
-                      {isDragOver ? (
-                        <svg fill="none" stroke="white" viewBox="0 0 24 24" style={{ width: "18px", height: "18px" }}>
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                        </svg>
-                      ) : (
-                        <svg fill="none" stroke={isSelected ? "white" : "#6366F1"} viewBox="0 0 24 24"
-                          style={{ width: "18px", height: "18px" }}>
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-                        </svg>
-                      )}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                      <div style={{
-                        ...fs.cardName,
-                        color: isDragOver ? "#111827" : (search.trim() && folder.name.toLowerCase().includes(search.toLowerCase()) ? "#4F46E5" : "#111827"),
-                      }}>{isDragOver ? `Move to ${folder.name}` : folder.name}</div>
-                    </div>
-                    <span style={fs.cardCount}>{count}</span>
-                  </button>
-                )}
-
-                {isHovered && renamingId !== folder.id && !isDragOver && (
-                  <div style={fs.hoverActions}>
-                    <button style={fs.hoverBtn} title="Rename"
-                      onClick={e => { e.stopPropagation(); setRenamingId(folder.id); setRenameVal(folder.name); }}>
-                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: "11px", height: "11px" }}>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-1.414A2 2 0 019 13z" />
-                      </svg>
-                    </button>
-                    <button style={{ ...fs.hoverBtn, color: "#EF4444" }} title="Delete"
-                      onClick={e => { e.stopPropagation(); onDelete(folder.id); }}>
-                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: "11px", height: "11px" }}>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {rootFolders.length === 0 && (
-            <p style={fs.empty}>
-              {search.trim() ? `No folders match "${search}"` : "No folders yet — click New Folder to create one."}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Drag hint */}
-      {draggingNoteId && (
-        <div style={fs.dragHint}>
-          <svg fill="none" stroke="#6366F1" viewBox="0 0 24 24" style={{ width: "12px", height: "12px" }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4" />
-          </svg>
-          Drop onto a folder to move the note
-        </div>
-      )}
-
-      <div style={fs.divider} />
-    </div>
-  );
-};
-
-const fs = {
-  wrap: { marginBottom: "0.5rem" },
-  header: { display: "flex", alignItems: "center", gap: "0.5rem", width: "100%",
-    background: "none", border: "none", cursor: "pointer", padding: "0.4rem 0",
-    marginBottom: "0.65rem" },
-  headerLabel: { fontSize: "0.8rem", fontWeight: "700", color: "#374151",
-    textTransform: "uppercase", letterSpacing: "0.05em" },
-  folderCount: { fontSize: "0.68rem", fontWeight: "700", backgroundColor: "#E5E7EB",
-    color: "#6B7280", borderRadius: "999px", padding: "0.05rem 0.45rem" },
-  addBtn: { display: "flex", alignItems: "center", gap: "0.3rem",
-    background: "none", border: "1px solid #E5E7EB", borderRadius: "0.45rem",
-    color: "#6366F1", cursor: "pointer", padding: "0.3rem 0.65rem",
-    fontSize: "0.75rem", fontWeight: "600" },
-  strip: { display: "flex", gap: "0.65rem", flexWrap: "wrap", marginBottom: "1rem" },
-  card: { display: "flex", alignItems: "center", gap: "0.6rem",
-    padding: "0.65rem 0.85rem", borderRadius: "0.75rem",
-    border: "1.5px solid #E5E7EB", backgroundColor: "#fff",
-    cursor: "pointer", minWidth: "140px", maxWidth: "200px",
-    transition: "all 0.15s", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" },
-  cardSelected: { borderColor: "#6366F1", backgroundColor: "#EEF2FF",
-    boxShadow: "0 2px 8px rgba(99,102,241,0.15)" },
-  cardDropOver: {
-    borderColor: "#10B981", backgroundColor: "#ECFDF5",
-    boxShadow: "0 0 0 3px rgba(16,185,129,0.2), 0 4px 12px rgba(16,185,129,0.15)",
-    transform: "scale(1.04)",
-  },
-  cardIcon: { width: "34px", height: "34px", borderRadius: "8px",
-    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-    transition: "background-color 0.15s" },
-  cardName: { fontSize: "0.85rem", fontWeight: "700", color: "#111827",
-    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  cardCount: { fontSize: "0.68rem", fontWeight: "700", backgroundColor: "#F3F4F6",
-    color: "#6B7280", borderRadius: "999px", padding: "0.1rem 0.45rem", flexShrink: 0 },
-  hoverActions: { position: "absolute", top: "0.35rem", right: "0.35rem",
-    display: "flex", gap: "0.2rem", background: "rgba(255,255,255,0.9)",
-    borderRadius: "0.35rem", padding: "0.15rem" },
-  hoverBtn: { background: "none", border: "none", cursor: "pointer",
-    color: "#6B7280", padding: "0.15rem", display: "flex", alignItems: "center",
-    borderRadius: "0.25rem" },
-  empty: { fontSize: "0.8rem", color: "#9CA3AF", margin: "0.25rem 0 0.75rem",
-    fontStyle: "italic" },
-  divider: { height: "1px", backgroundColor: "#F3F4F6", marginBottom: "1.25rem" },
-  dragHint: { display: "flex", alignItems: "center", gap: "0.35rem",
-    fontSize: "0.72rem", color: "#6366F1", fontWeight: "500",
-    backgroundColor: "#EEF2FF", border: "1px dashed #C7D2FE",
-    borderRadius: "0.5rem", padding: "0.35rem 0.75rem",
-    marginBottom: "0.75rem", animation: "pulse 1.5s ease-in-out infinite" },
-};
-
-// ── Grid card ─────────────────────────────────────────────────────────────────
-const GridCard = ({ note, folders, onOpen, onToggleFavorite, onDelete }) => {
-  const [hovered, setHovered] = useState(false);
-  const { draggingNoteId, setDraggingNoteId } = React.useContext(DragContext);
-  const isDragging = draggingNoteId === note.id;
-  const folder = folders.find(f => f.id === note.folderId);
-
-  return (
-    <div
-      draggable
-      onDragStart={e => {
-        e.dataTransfer.setData("noteId", note.id);
-        e.dataTransfer.effectAllowed = "move";
-        setDraggingNoteId(note.id);
-      }}
-      onDragEnd={() => setDraggingNoteId(null)}
-      style={{
-        ...gc.card,
-        boxShadow: isDragging
-          ? "0 16px 40px rgba(99,102,241,0.3)"
-          : hovered
-          ? "0 4px 20px rgba(99,102,241,0.13)"
-          : "0 1px 4px rgba(0,0,0,0.06)",
-        opacity: isDragging ? 0.55 : 1,
-        transform: isDragging ? "rotate(2deg) scale(1.03)" : "none",
-        cursor: isDragging ? "grabbing" : "grab",
-        transition: "box-shadow 0.2s, opacity 0.15s, transform 0.15s",
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}>
-      <div style={gc.top}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-          <div style={gc.iconWrap}><NoteIcon size={16} /></div>
-          {folder && <span style={gc.folderChip}>{folder.name}</span>}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-          <ConfidencePill score={note.confidence} />
-          <button style={{ ...gc.iconBtn, color: note.favorite ? "#F59E0B" : "#D1D5DB" }}
-            onClick={() => onToggleFavorite && onToggleFavorite(note.id)} title="Toggle favorite">
-            <svg fill={note.favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24" style={{ width: "14px", height: "14px" }}>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-            </svg>
-          </button>
-          <button style={{ ...gc.iconBtn, color: "#D1D5DB" }}
-            onClick={() => onDelete && onDelete(note.id)} title="Move to trash">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: "14px", height: "14px" }}>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-        </div>
-      </div>
-      <div>
-        <h3 style={gc.title}>{note.title}</h3>
-        <p style={gc.preview}>{note.preview}</p>
-      </div>
-      <div style={gc.footer}>
-        <div style={gc.tags}>
-          {note.tags.slice(0, 2).map(tag => {
-            const c = tagColor(tag);
-            return <span key={tag} style={{ ...gc.tag, backgroundColor: c.bg, color: c.text }}>{tag}</span>;
-          })}
-        </div>
-        <span style={gc.date}>{note.date}</span>
-      </div>
-      <button style={gc.openBtn} onClick={() => onOpen && onOpen(note)}>Open →</button>
-
-      
-      {hovered && !isDragging && (
-        <div style={gc.dragHandle}>
-          <svg fill="none" stroke="#9CA3AF" viewBox="0 0 24 24" style={{ width: "12px", height: "12px" }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M4 8h16M4 16h16" />
-          </svg>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const gc = {
-  card: { backgroundColor: "#fff", borderRadius: "1rem", padding: "1.1rem",
-    border: "1px solid #E5E7EB", display: "flex", flexDirection: "column", gap: "0.65rem",
-    position: "relative", userSelect: "none" },
-  top: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  iconWrap: { width: "28px", height: "28px", backgroundColor: "#EEF2FF", borderRadius: "7px",
-    display: "flex", alignItems: "center", justifyContent: "center" },
-  folderChip: { fontSize: "0.65rem", fontWeight: "600", color: "#4F46E5",
-    backgroundColor: "#EEF2FF", padding: "0.1rem 0.45rem", borderRadius: "999px" },
-  title: { fontSize: "0.9rem", fontWeight: "700", color: "#111827", margin: "0 0 0.3rem", lineHeight: 1.35 },
-  preview: { fontSize: "0.78rem", color: "#6B7280", margin: 0, lineHeight: 1.5,
-    display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" },
-  footer: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  tags: { display: "flex", gap: "0.3rem", flexWrap: "wrap" },
-  tag: { fontSize: "0.65rem", fontWeight: "600", padding: "0.15rem 0.45rem", borderRadius: "999px" },
-  date: { fontSize: "0.7rem", color: "#9CA3AF", whiteSpace: "nowrap" },
-  openBtn: { padding: "0.4rem 1rem", borderRadius: "0.5rem",
-    background: "linear-gradient(to right, #6366F1, #8B5CF6)",
-    border: "none", color: "white", cursor: "pointer", fontSize: "0.76rem", fontWeight: "600", alignSelf: "flex-end" },
-  iconBtn: { background: "none", border: "none", cursor: "pointer", padding: "0.15rem",
-    display: "flex", alignItems: "center", borderRadius: "0.3rem", transition: "color 0.15s" },
-  dragHandle: { position: "absolute", top: "0.5rem", left: "50%", transform: "translateX(-50%)",
-    backgroundColor: "#F3F4F6", borderRadius: "4px", padding: "0.15rem 0.4rem",
-    display: "flex", alignItems: "center", pointerEvents: "none" },
-};
-
-// ── List row ──────────────────────────────────────────────────────────────────
-const ListRow = ({ note, folders, onOpen, onToggleFavorite, onDelete }) => {
-  const [hovered, setHovered] = useState(false);
-  const { draggingNoteId, setDraggingNoteId } = React.useContext(DragContext);
-  const isDragging = draggingNoteId === note.id;
-  const folder = folders.find(f => f.id === note.folderId);
-
-  return (
-    <div
-      draggable
-      onDragStart={e => {
-        e.dataTransfer.setData("noteId", note.id);
-        e.dataTransfer.effectAllowed = "move";
-        setDraggingNoteId(note.id);
-      }}
-      onDragEnd={() => setDraggingNoteId(null)}
-      style={{
-        ...lr.row,
-        backgroundColor: hovered ? "#F9FAFB" : "#fff",
-        opacity: isDragging ? 0.5 : 1,
-        transform: isDragging ? "scale(1.01)" : "none",
-        cursor: isDragging ? "grabbing" : "grab",
-        boxShadow: isDragging ? "0 8px 24px rgba(99,102,241,0.2)" : "none",
-        transition: "background-color 0.15s, opacity 0.15s, transform 0.15s, box-shadow 0.15s",
-        userSelect: "none",
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}>
-      {/* Drag grip */}
-      <div style={{ ...lr.grip, opacity: hovered ? 1 : 0 }}>
-        <svg fill="none" stroke="#9CA3AF" viewBox="0 0 24 24" style={{ width: "12px", height: "12px" }}>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-        </svg>
-      </div>
-      <div style={lr.iconWrap}><NoteIcon size={15} /></div>
-      <div style={lr.info}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-          <span style={lr.title}>{note.title}</span>
-          {folder && <span style={lr.folderChip}>{folder.name}</span>}
-        </div>
-        <span style={lr.preview}>{note.preview}</span>
-      </div>
-      <div style={lr.tags}>
-        {note.tags.slice(0, 2).map(tag => {
-          const c = tagColor(tag);
-          return <span key={tag} style={{ ...lr.tag, backgroundColor: c.bg, color: c.text }}>{tag}</span>;
+          );
         })}
       </div>
-      <ConfidencePill score={note.confidence} />
-      <span style={lr.date}>{note.date}</span>
-      <button style={{ ...lr.iconBtn, color: note.favorite ? "#F59E0B" : "#D1D5DB" }}
-        onClick={() => onToggleFavorite && onToggleFavorite(note.id)}>
-        <svg fill={note.favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24" style={{ width: "14px", height: "14px" }}>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-        </svg>
-      </button>
-      <button style={{ ...lr.iconBtn, color: "#D1D5DB" }}
-        onClick={() => onDelete && onDelete(note.id)}>
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: "14px", height: "14px" }}>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-        </svg>
-      </button>
-      <button style={lr.openBtn} onClick={() => onOpen && onOpen(note)}>Open</button>
+
+      {draggingNoteId && (
+        <p style={{ fontSize:11, color:T.muted, fontFamily:T.font, margin:'8px 0 0', fontStyle:'italic' }}>
+          Drop onto a folder to move the note
+        </p>
+      )}
+
+      <div style={{ height:1, background:T.border, margin:'16px 0' }} />
     </div>
   );
 };
 
-const lr = {
-  row: { display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.8rem 1rem",
-    borderRadius: "0.75rem", border: "1px solid #E5E7EB", position: "relative" },
-  grip: { display: "flex", alignItems: "center", flexShrink: 0, transition: "opacity 0.15s" },
-  iconWrap: { width: "28px", height: "28px", backgroundColor: "#EEF2FF", borderRadius: "7px",
-    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  info: { flex: 1, display: "flex", flexDirection: "column", gap: "0.15rem", minWidth: 0 },
-  title: { fontSize: "0.86rem", fontWeight: "700", color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  folderChip: { fontSize: "0.63rem", fontWeight: "600", color: "#4F46E5",
-    backgroundColor: "#EEF2FF", padding: "0.08rem 0.4rem", borderRadius: "999px", whiteSpace: "nowrap", flexShrink: 0 },
-  preview: { fontSize: "0.74rem", color: "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  tags: { display: "flex", gap: "0.3rem", flexShrink: 0 },
-  tag: { fontSize: "0.64rem", fontWeight: "600", padding: "0.12rem 0.4rem", borderRadius: "999px" },
-  date: { fontSize: "0.72rem", color: "#9CA3AF", whiteSpace: "nowrap", flexShrink: 0, width: "76px", textAlign: "right" },
-  openBtn: { padding: "0.32rem 0.85rem", borderRadius: "0.45rem",
-    background: "linear-gradient(to right, #6366F1, #8B5CF6)",
-    border: "none", color: "white", cursor: "pointer", fontSize: "0.74rem", fontWeight: "600", flexShrink: 0 },
-  iconBtn: { background: "none", border: "none", cursor: "pointer", padding: "0.2rem",
-    display: "flex", alignItems: "center", borderRadius: "0.3rem", transition: "color 0.15s", flexShrink: 0 },
+//tag editor
+const TagEditor = ({ tags, onSave, onClose }) => {
+  const [localTags, setLocalTags] = useState([...tags]);
+  const [input, setInput]         = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const addTag = () => {
+    const val = input.trim();
+    if (val && !localTags.includes(val)) setLocalTags(p => [...p, val]);
+    setInput('');
+  };
+
+  const removeTag = (tag) => setLocalTags(p => p.filter(t => t !== tag));
+
+  return (
+    <div style={{ background:T.surfaceHi, border:`1px solid ${T.borderHi}`, borderRadius:10, padding:'10px 12px', marginTop:4 }}
+      onClick={e => e.stopPropagation()}>
+      {/* Existing tags */}
+      <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginBottom: localTags.length ? 8 : 0 }}>
+        {localTags.map(tag => {
+          const c = tagColor(tag);
+          return (
+            <span key={tag} style={{ display:'inline-flex', alignItems:'center', gap:4, background:c.bg, color:c.text,
+              fontSize:10, fontWeight:700, letterSpacing:1, textTransform:'uppercase', padding:'2px 7px', borderRadius:99, fontFamily:T.font }}>
+              {tag}
+              <button style={{ background:'none', border:'none', cursor:'pointer', color:'inherit', padding:0, display:'flex', opacity:.7, lineHeight:1 }}
+                onClick={() => removeTag(tag)}>
+                <Icon d="M6 18L18 6M6 6l12 12" size={9} />
+              </button>
+            </span>
+          );
+        })}
+      </div>
+      {/* Input */}
+      <div style={{ display:'flex', gap:6 }}>
+        <input ref={inputRef} className="ud-input" value={input} onChange={e => setInput(e.target.value)}
+          placeholder="Add tag…" style={{ padding:'5px 10px', fontSize:12, flex:1 }}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); addTag(); }
+            if (e.key === 'Escape') onClose();
+          }} />
+        <button className="ud-btn-amber" style={{ padding:'5px 12px', fontSize:12 }} onClick={() => {
+          const val = input.trim();
+          const finalTags = val && !localTags.includes(val) ? [...localTags, val] : localTags;
+          onSave(finalTags);
+          onClose();
+        }}>
+          Save
+        </button>
+        <button className="ud-btn-ghost" style={{ padding:'5px 10px', fontSize:12 }} onClick={onClose}>Cancel</button>
+      </div>
+    </div>
+  );
 };
 
-// ── Notes home ────────────────────────────────────────────────────────────────
+//note card grid
+const NoteCard = ({ note, folders, onOpen, onToggleFavorite, onDelete, onUpdateTags }) => {
+  const [hovered,     setHovered]     = useState(false);
+  const [editingTags, setEditingTags] = useState(false);
+  const { draggingNoteId, setDraggingNoteId } = React.useContext(DragContext);
+  const isDragging = draggingNoteId === note.id;
+  const folder = folders.find(f => f.id === note.folderId);
+
+  return (
+    <div className="ud-card"
+      draggable
+      onDragStart={e => { e.dataTransfer.setData('noteId', note.id); e.dataTransfer.effectAllowed = 'move'; setDraggingNoteId(note.id); }}
+      onDragEnd={() => setDraggingNoteId(null)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ padding:18, display:'flex', flexDirection:'column', gap:12, cursor: isDragging ? 'grabbing' : 'grab',
+        opacity: isDragging ? 0.5 : 1, transform: isDragging ? 'rotate(1.5deg) scale(1.02)' : 'none',
+        transition:'opacity .15s, transform .15s', animation:'fadeUp .3s ease both' }}>
+
+      {/* Top row */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <div style={{ width:30, height:30, borderRadius:8, background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={14} color={T.amber} />
+          </div>
+          {folder && <span className="ud-tag" style={{ background:T.purpleDim, color:T.purple }}>{folder.name}</span>}
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+          <ConfidencePill score={note.confidence} />
+          <button style={{ background:'none', border:'none', cursor:'pointer', color: note.favorite ? T.amber : T.muted, padding:3, display:'flex', transition:'color .15s' }}
+            onClick={() => onToggleFavorite(note.id)}>
+            <Icon d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" size={14} />
+          </button>
+          <button style={{ background:'none', border:'none', cursor:'pointer', color:T.muted, padding:3, display:'flex', transition:'color .15s' }}
+            onClick={() => onDelete(note.id)}>
+            <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div>
+        <p style={{ fontFamily:T.font, fontSize:14, fontWeight:600, color:T.cream, margin:'0 0 6px', lineHeight:1.3 }}>{note.title}</p>
+        <p style={{ fontFamily:T.font, fontSize:12, color:T.muted, margin:0, lineHeight:1.6,
+          display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{note.preview}</p>
+      </div>
+
+      {/* Footer */}
+      <div style={{ marginTop:'auto' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: editingTags ? 6 : 0 }}>
+          <div style={{ display:'flex', gap:5, flexWrap:'wrap', alignItems:'center' }}>
+            {note.tags.slice(0,3).map(tag => {
+              const c = tagColor(tag);
+              return <span key={tag} className="ud-tag" style={{ background:c.bg, color:c.text }}>{tag}</span>;
+            })}
+            {hovered && !editingTags && (
+              <button style={{ background:'none', border:'none', cursor:'pointer', color:T.muted, padding:2, display:'flex', transition:'color .15s' }}
+                title="Edit tags" onClick={e => { e.stopPropagation(); setEditingTags(true); }}>
+                <Icon d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-1.414A2 2 0 019 13z" size={13} />
+              </button>
+            )}
+          </div>
+          <span style={{ fontFamily:T.font, fontSize:11, color:T.muted }}>{note.date}</span>
+        </div>
+        {editingTags && (
+          <TagEditor tags={note.tags} onSave={(tags) => onUpdateTags(note.id, tags)} onClose={() => setEditingTags(false)} />
+        )}
+      </div>
+
+      <button className="ud-note-open" onClick={() => onOpen(note)}>Open →</button>
+    </div>
+  );
+};
+
+//note row
+const NoteRow = ({ note, folders, onOpen, onToggleFavorite, onDelete, onUpdateTags }) => {
+  const [hovered,     setHovered]     = useState(false);
+  const [editingTags, setEditingTags] = useState(false);
+  const { draggingNoteId, setDraggingNoteId } = React.useContext(DragContext);
+  const isDragging = draggingNoteId === note.id;
+  const folder = folders.find(f => f.id === note.folderId);
+
+  return (
+    <div className="ud-card"
+      draggable
+      onDragStart={e => { e.dataTransfer.setData('noteId', note.id); e.dataTransfer.effectAllowed = 'move'; setDraggingNoteId(note.id); }}
+      onDragEnd={() => setDraggingNoteId(null)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ padding:'14px 18px', display:'flex', flexDirection:'column', gap:0, borderRadius:12,
+        opacity: isDragging ? 0.5 : 1, cursor: isDragging ? 'grabbing' : 'grab',
+        transition:'opacity .15s', animation:'fadeUp .25s ease both' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+        <div style={{ width:32, height:32, borderRadius:8, background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+          <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={15} color={T.amber} />
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
+            <span style={{ fontFamily:T.font, fontSize:13, fontWeight:600, color:T.cream, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{note.title}</span>
+            {folder && <span className="ud-tag" style={{ background:T.purpleDim, color:T.purple, flexShrink:0 }}>{folder.name}</span>}
+          </div>
+          <span style={{ fontFamily:T.font, fontSize:12, color:T.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block' }}>{note.preview}</span>
+        </div>
+        <div style={{ display:'flex', gap:5, flexShrink:0, alignItems:'center' }}>
+          {note.tags.slice(0,2).map(tag => { const c = tagColor(tag); return <span key={tag} className="ud-tag" style={{ background:c.bg, color:c.text }}>{tag}</span>; })}
+          {hovered && !editingTags && (
+            <button style={{ background:'none', border:'none', cursor:'pointer', color:T.muted, padding:2, display:'flex' }}
+              title="Edit tags" onClick={e => { e.stopPropagation(); setEditingTags(true); }}>
+              <Icon d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-1.414A2 2 0 019 13z" size={13} />
+            </button>
+          )}
+        </div>
+        <ConfidencePill score={note.confidence} />
+        <span style={{ fontFamily:T.font, fontSize:11, color:T.muted, whiteSpace:'nowrap', width:70, textAlign:'right' }}>{note.date}</span>
+        <button style={{ background:'none', border:'none', cursor:'pointer', color: note.favorite ? T.amber : T.muted, padding:3, display:'flex' }} onClick={() => onToggleFavorite(note.id)}>
+          <Icon d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" size={14} />
+        </button>
+      <button style={{ background:'none', border:'none', cursor:'pointer', color:T.muted, padding:3, display:'flex' }} onClick={() => onDelete(note.id)}>
+        <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" size={14} />
+      </button>
+      <button className="ud-note-open" onClick={() => onOpen(note)}>Open</button>
+      </div>
+      {editingTags && (
+        <div style={{ marginTop:8 }}>
+          <TagEditor tags={note.tags} onSave={(tags) => onUpdateTags(note.id, tags)} onClose={() => setEditingTags(false)} />
+        </div>
+      )}
+    </div>
+  );
+};
+
+//notes home
 const NotesHome = ({ notes, folders, onNewScan, onNoteSelect, onToggleFavorite, onDelete,
-  onAddFolder, onDeleteFolder, onRenameFolder, onMoveNote }) => {
+  onAddFolder, onDeleteFolder, onRenameFolder, onMoveNote, onUpdateTags }) => {
   const [selectedFolderId, setSelectedFolderId] = useState(null);
-  const [viewMode, setViewMode] = useState("grid");
-  const [sortBy, setSortBy] = useState("date");
-  const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState('grid');
+  const [sortBy,   setSortBy]   = useState('date');
+  const [search,   setSearch]   = useState('');
 
-  const visibleNotes = selectedFolderId === null
-    ? notes
-    : notes.filter(n => n.folderId === selectedFolderId);
-
-  const filtered = visibleNotes.filter(n => {
+  const visible = selectedFolderId === null ? notes : notes.filter(n => n.folderId === selectedFolderId);
+  const filtered = visible.filter(n => {
     const q = search.toLowerCase();
-    const folderName = folders.find(f => f.id === n.folderId)?.name || "";
-    return (
-      n.title.toLowerCase().includes(q) ||
-      n.preview.toLowerCase().includes(q) ||
-      n.tags.some(t => t.toLowerCase().includes(q)) ||
-      folderName.toLowerCase().includes(q)
-    );
+    const folderName = folders.find(f => f.id === n.folderId)?.name || '';
+    return n.title.toLowerCase().includes(q) || n.preview.toLowerCase().includes(q) ||
+      n.tags.some(t => t.toLowerCase().includes(q)) || folderName.toLowerCase().includes(q);
   });
-
   const sorted = [...filtered].sort((a, b) => {
-    if (sortBy === "alpha") return a.title.localeCompare(b.title);
-    if (sortBy === "confidence") return b.confidence - a.confidence;
+    if (sortBy === 'alpha')      return a.title.localeCompare(b.title);
+    if (sortBy === 'confidence') return b.confidence - a.confidence;
     return 0;
   });
 
-  const selectedFolder = folders.find(f => f.id === selectedFolderId);
-  const heading = selectedFolder ? selectedFolder.name : "My Notes";
-
   return (
-    <>
-      <div style={nh.header}>
+    <div style={{ animation:'fadeUp .35s ease both' }}>
+      {/* Header */}
+      <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', marginBottom:28 }}>
         <div>
-          <h1 style={nh.title}>{heading}</h1>
-          <p style={nh.subtitle}>{sorted.length} note{sorted.length !== 1 ? "s" : ""}
-            {notes[0] ? ` · last edited ${notes[0].date}` : ""}</p>
+          <p style={{ fontFamily:T.font, fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 6px' }}>Your Library</p>
+          <h1 style={{ fontFamily:T.serif, fontSize:32, fontWeight:400, color:T.cream, margin:0, lineHeight:1.1 }}>My Notes</h1>
+          <p style={{ fontFamily:T.font, fontSize:13, color:T.muted, margin:'6px 0 0' }}>{sorted.length} note{sorted.length !== 1 ? 's' : ''}</p>
         </div>
-        <button style={nh.newBtn} onClick={onNewScan}>
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: "15px", height: "15px" }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          New Scan
+        <button className="ud-btn-amber" onClick={onNewScan}>
+          <Icon d="M12 4v16m8-8H4" size={14} color="#0E1117" /> New Scan
         </button>
       </div>
 
-      <div style={nh.searchWrap}>
-        <svg fill="none" stroke="#9CA3AF" viewBox="0 0 24 24" style={{ width: "15px", height: "15px", flexShrink: 0 }}>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-        </svg>
-        <input style={nh.searchInput} type="text"
-          placeholder="Search notes and folders…"
+      {/* Search */}
+      <div style={{ display:'flex', alignItems:'center', gap:10, background:T.surface, border:`1px solid ${T.border}`, borderRadius:10, padding:'9px 14px', marginBottom:20 }}>
+        <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" size={15} color={T.muted} />
+        <input className="ud-input" style={{ border:'none', background:'transparent', padding:0, flex:1, fontSize:13 }}
+          type="text" placeholder="Search notes, tags, folders…"
           value={search} onChange={e => setSearch(e.target.value)} />
-        {search && <button style={nh.clearBtn} onClick={() => setSearch("")}>
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: "13px", height: "13px" }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
+        {search && <button style={{ background:'none', border:'none', cursor:'pointer', color:T.muted, display:'flex', padding:0 }} onClick={() => setSearch('')}>
+          <Icon d="M6 18L18 6M6 6l12 12" size={13} />
         </button>}
       </div>
 
-      <FoldersStrip
-        folders={folders} notes={notes}
-        selectedFolderId={selectedFolderId}
-        onSelect={setSelectedFolderId}
-        onAdd={onAddFolder}
-        onDelete={onDeleteFolder}
-        onRename={onRenameFolder}
-        onDropNote={onMoveNote}
-        search={search}
-      />
+      {/* Folders */}
+      <FoldersStrip folders={folders} notes={notes} selectedFolderId={selectedFolderId}
+        onSelect={setSelectedFolderId} onAdd={onAddFolder} onDelete={onDeleteFolder}
+        onRename={onRenameFolder} onDropNote={onMoveNote} search={search} />
 
-      <div style={nh.toolbar}>
-        <div style={nh.sortGroup}>
-          {[{ key: "date", label: "Recent" }, { key: "alpha", label: "A – Z" }, { key: "confidence", label: "Confidence" }].map(opt => (
-            <button key={opt.key}
-              style={{ ...nh.sortBtn, ...(sortBy === opt.key ? nh.sortBtnActive : {}) }}
-              onClick={() => setSortBy(opt.key)}>{opt.label}</button>
+      {/* Toolbar */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+        <div style={{ display:'flex', gap:4 }}>
+          {[{k:'date',label:'Recent'},{k:'alpha',label:'A–Z'},{k:'confidence',label:'Confidence'}].map(o => (
+            <button key={o.k} className={`ud-sort-btn${sortBy===o.k?' active':''}`} onClick={() => setSortBy(o.k)}>{o.label}</button>
           ))}
         </div>
-        <div style={nh.toggleGroup}>
-          <button style={{ ...nh.toggleBtn, ...(viewMode === "grid" ? nh.toggleActive : {}) }} onClick={() => setViewMode("grid")}>
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: "14px", height: "14px" }}>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-            </svg>
+        <div style={{ display:'flex', gap:2, background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:3 }}>
+          <button className={`ud-view-btn${viewMode==='grid'?' active':''}`} onClick={() => setViewMode('grid')}>
+            <Icon d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" size={15} />
           </button>
-          <button style={{ ...nh.toggleBtn, ...(viewMode === "list" ? nh.toggleActive : {}) }} onClick={() => setViewMode("list")}>
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: "14px", height: "14px" }}>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-            </svg>
+          <button className={`ud-view-btn${viewMode==='list'?' active':''}`} onClick={() => setViewMode('list')}>
+            <Icon d="M4 6h16M4 10h16M4 14h16M4 18h16" size={15} />
           </button>
         </div>
       </div>
 
+      {/* Notes */}
       {sorted.length === 0 ? (
-        <div style={nh.empty}>
-          <NoteIcon size={36} color="#C7D2FE" />
-          <p style={{ color: "#9CA3AF", marginTop: "0.5rem" }}>
-            {search ? `No notes found for "${search}"` : "No notes here yet."}
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'60px 0', gap:12 }}>
+          <div style={{ width:60, height:60, borderRadius:16, background:T.surface, border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={24} color={T.muted} />
+          </div>
+          <p style={{ fontFamily:T.font, fontSize:14, color:T.muted, margin:0 }}>
+            {search ? `No notes found for "${search}"` : 'No notes here yet.'}
           </p>
-          {!search && <button style={nh.newBtn} onClick={onNewScan}>New Scan</button>}
+          {!search && <button className="ud-btn-amber" onClick={onNewScan}>
+            <Icon d="M12 4v16m8-8H4" size={14} color="#0E1117" /> New Scan
+          </button>}
         </div>
-      ) : viewMode === "grid" ? (
-        <div style={nh.grid}>
-          {sorted.map(note => (
-            <GridCard key={note.id} note={note} folders={folders}
-              onOpen={onNoteSelect} onToggleFavorite={onToggleFavorite} onDelete={onDelete} />
-          ))}
+      ) : viewMode === 'grid' ? (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:12 }}>
+          {sorted.map(n => <NoteCard key={n.id} note={n} folders={folders} onOpen={onNoteSelect}
+            onToggleFavorite={onToggleFavorite} onDelete={onDelete} onUpdateTags={onUpdateTags} />)}
         </div>
       ) : (
-        <div style={nh.list}>
-          {sorted.map(note => (
-            <ListRow key={note.id} note={note} folders={folders}
-              onOpen={onNoteSelect} onToggleFavorite={onToggleFavorite} onDelete={onDelete} />
-          ))}
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {sorted.map(n => <NoteRow key={n.id} note={n} folders={folders} onOpen={onNoteSelect}
+            onToggleFavorite={onToggleFavorite} onDelete={onDelete} onUpdateTags={onUpdateTags} />)}
         </div>
       )}
-    </>
+    </div>
   );
 };
 
-const nh = {
-  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem" },
-  title: { fontSize: "1.85rem", fontWeight: "800", margin: "0 0 0.15rem", color: "#111827" },
-  subtitle: { fontSize: "0.83rem", color: "#9CA3AF", margin: 0 },
-  newBtn: { display: "flex", alignItems: "center", gap: "0.4rem",
-    background: "linear-gradient(to right, #6366F1, #8B5CF6)",
-    padding: "0.65rem 1.2rem", borderRadius: "0.7rem",
-    border: "none", color: "white", cursor: "pointer", fontSize: "0.85rem", fontWeight: "600", flexShrink: 0 },
-  searchWrap: { display: "flex", alignItems: "center", gap: "0.5rem",
-    backgroundColor: "#fff", border: "1px solid #E5E7EB", borderRadius: "0.7rem",
-    padding: "0.55rem 0.85rem", marginBottom: "0.85rem", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" },
-  searchInput: { flex: 1, border: "none", outline: "none", fontSize: "0.875rem", color: "#111827", backgroundColor: "transparent" },
-  clearBtn: { background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", display: "flex", alignItems: "center", padding: 0 },
-  toolbar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" },
-  sortGroup: { display: "flex", gap: "0.3rem" },
-  sortBtn: { padding: "0.38rem 0.85rem", borderRadius: "0.5rem", border: "1px solid #E5E7EB",
-    backgroundColor: "#fff", color: "#6B7280", cursor: "pointer", fontSize: "0.78rem", fontWeight: "500" },
-  sortBtnActive: { backgroundColor: "#EEF2FF", color: "#4F46E5", borderColor: "#C7D2FE", fontWeight: "700" },
-  toggleGroup: { display: "flex", gap: "0.2rem", backgroundColor: "#F3F4F6", padding: "0.2rem", borderRadius: "0.5rem" },
-  toggleBtn: { padding: "0.35rem 0.5rem", borderRadius: "0.4rem", border: "none",
-    backgroundColor: "transparent", cursor: "pointer", color: "#9CA3AF", display: "flex", alignItems: "center" },
-  toggleActive: { backgroundColor: "#fff", color: "#4F46E5", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" },
-  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "0.9rem" },
-  list: { display: "flex", flexDirection: "column", gap: "0.45rem" },
-  empty: { display: "flex", flexDirection: "column", alignItems: "center", padding: "3rem 0", gap: "0.5rem" },
-};
-
-// ── Trash page ────────────────────────────────────────────────────────────────
+//trash
 const TrashPage = ({ notes, onRestore, onPermanentDelete, onEmptyTrash }) => (
-  <>
-    <div style={tp.header}>
+  <div style={{ animation:'fadeUp .35s ease both' }}>
+    <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', marginBottom:28 }}>
       <div>
-        <h1 style={tp.title}>Trash</h1>
-        <p style={tp.subtitle}>{notes.length === 0 ? "Trash is empty" : `${notes.length} deleted note${notes.length !== 1 ? "s" : ""}`}</p>
+        <p style={{ fontFamily:T.font, fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.muted, margin:'0 0 6px' }}>Deleted</p>
+        <h1 style={{ fontFamily:T.serif, fontSize:32, fontWeight:400, color:T.cream, margin:0 }}>Trash</h1>
+        <p style={{ fontFamily:T.font, fontSize:13, color:T.muted, margin:'6px 0 0' }}>{notes.length} deleted note{notes.length !== 1 ? 's' : ''}</p>
       </div>
-      {notes.length > 0 && <button style={tp.emptyBtn} onClick={onEmptyTrash}>Empty Trash</button>}
+      {notes.length > 0 && (
+        <button className="ud-btn-ghost" onClick={onEmptyTrash} style={{ borderColor:'rgba(248,113,113,.3)', color:T.red }}>
+          <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" size={13} />
+          Empty Trash
+        </button>
+      )}
     </div>
     {notes.length === 0 ? (
-      <div style={tp.empty}>
-        <svg fill="none" stroke="#C7D2FE" viewBox="0 0 24 24" style={{ width: "40px", height: "40px" }}>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-        </svg>
-        <p style={{ color: "#9CA3AF", marginTop: "0.75rem" }}>Nothing in trash</p>
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'60px 0', gap:12 }}>
+        <div style={{ width:60, height:60, borderRadius:16, background:T.surface, border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" size={24} color={T.muted} />
+        </div>
+        <p style={{ fontFamily:T.font, fontSize:14, color:T.muted, margin:0 }}>Trash is empty</p>
       </div>
     ) : (
-      <div style={tp.list}>
+      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
         {notes.map(note => (
-          <div key={note.id} style={tp.row}>
-            <div style={tp.iconWrap}><NoteIcon size={15} color="#9CA3AF" /></div>
-            <div style={tp.info}>
-              <span style={tp.noteTitle}>{note.title}</span>
-              <span style={tp.preview}>{note.preview}</span>
+          <div key={note.id} className="ud-card" style={{ padding:'14px 18px', display:'flex', alignItems:'center', gap:14, borderRadius:12 }}>
+            <div style={{ width:32, height:32, borderRadius:8, background:T.redDim, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={15} color={T.red} />
             </div>
-            <span style={tp.date}>{note.date}</span>
-            <button style={tp.restoreBtn} onClick={() => onRestore(note.id)}>Restore</button>
-            <button style={tp.deleteBtn} onClick={() => onPermanentDelete(note.id)}>Delete</button>
+            <div style={{ flex:1, minWidth:0 }}>
+              <p style={{ fontFamily:T.font, fontSize:13, fontWeight:600, color:T.muted, margin:'0 0 3px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{note.title}</p>
+              <p style={{ fontFamily:T.font, fontSize:12, color:T.muted, margin:0, opacity:.6, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{note.preview}</p>
+            </div>
+            <span style={{ fontFamily:T.font, fontSize:11, color:T.muted, whiteSpace:'nowrap' }}>{note.date}</span>
+            <button className="ud-btn-ghost" onClick={() => onRestore(note.id)} style={{ fontSize:12, padding:'5px 12px' }}>Restore</button>
+            <button className="ud-btn-ghost" onClick={() => onPermanentDelete(note.id)} style={{ fontSize:12, padding:'5px 12px', borderColor:'rgba(248,113,113,.3)', color:T.red }}>Delete</button>
           </div>
         ))}
       </div>
     )}
-  </>
+  </div>
 );
 
-const tp = {
-  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem" },
-  title: { fontSize: "2rem", fontWeight: "800", margin: "0 0 0.2rem", color: "#111827" },
-  noteTitle: { fontSize: "0.86rem", fontWeight: "700", color: "#6B7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  subtitle: { fontSize: "0.85rem", color: "#9CA3AF", margin: 0 },
-  emptyBtn: { padding: "0.65rem 1.3rem", borderRadius: "0.7rem", border: "1px solid #FCA5A5",
-    backgroundColor: "#FEF2F2", color: "#DC2626", cursor: "pointer", fontSize: "0.85rem", fontWeight: "600" },
-  empty: { display: "flex", flexDirection: "column", alignItems: "center", padding: "4rem 0", gap: "0.5rem" },
-  list: { display: "flex", flexDirection: "column", gap: "0.5rem" },
-  row: { display: "flex", alignItems: "center", gap: "1rem", padding: "0.8rem 1rem",
-    backgroundColor: "#fff", borderRadius: "0.75rem", border: "1px solid #E5E7EB" },
-  iconWrap: { width: "28px", height: "28px", backgroundColor: "#F3F4F6", borderRadius: "6px",
-    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  info: { flex: 1, display: "flex", flexDirection: "column", gap: "0.15rem", minWidth: 0 },
-  preview: { fontSize: "0.74rem", color: "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  date: { fontSize: "0.72rem", color: "#9CA3AF", whiteSpace: "nowrap", flexShrink: 0, width: "76px", textAlign: "right" },
-  restoreBtn: { padding: "0.32rem 0.85rem", borderRadius: "0.45rem",
-    backgroundColor: "#EEF2FF", border: "1px solid #C7D2FE", color: "#4F46E5",
-    cursor: "pointer", fontSize: "0.74rem", fontWeight: "600", flexShrink: 0 },
-  deleteBtn: { padding: "0.32rem 0.85rem", borderRadius: "0.45rem",
-    backgroundColor: "#FEF2F2", border: "1px solid #FCA5A5", color: "#DC2626",
-    cursor: "pointer", fontSize: "0.74rem", fontWeight: "600", flexShrink: 0 },
-};
-
-// ── Main component ────────────────────────────────────────────────────────────
+//main component
 const UserDashboard = ({
   onLogout, onProcess, onFinishProcessing, onNewScan, onNoteSelect,
   showUploadPage = false, showProcessingPage = false, showResultsPage = false,
   initialTab = null, onInitialTabConsumed,
 }) => {
-  const [activeTab, setActiveTab] = useState(initialTab || "notes");
-  const [notes, setNotes] = useState(INITIAL_NOTES);
-  const [folders, setFolders] = useState(INITIAL_FOLDERS);
-  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [activeTab,      setActiveTab]      = useState(initialTab || 'notes');
+  const [notes,          setNotes]          = useState(INITIAL_NOTES);
+  const [folders,        setFolders]        = useState(INITIAL_FOLDERS);
+  const [showNewFolder,  setShowNewFolder]  = useState(false);
   const [draggingNoteId, setDraggingNoteId] = useState(null);
-  const [toast, setToast] = useState({ visible: false, message: "" });
+  const [toast,          setToast]          = useState({ visible: false, message: '' });
   const nextFolderId = useRef(200);
-  const toastTimer = useRef(null);
+  const toastTimer   = useRef(null);
 
   useEffect(() => {
     if (initialTab) { setActiveTab(initialTab); if (onInitialTabConsumed) onInitialTabConsumed(); }
   }, [initialTab]);
 
   useEffect(() => {
-    const body = document.body, html = document.documentElement;
-    const bm = body.style.margin, bp = body.style.padding, hm = html.style.margin, hp = html.style.padding;
-    body.style.margin = body.style.padding = html.style.margin = html.style.padding = "0";
-
-    // Inject pulse keyframe
-    const style = document.createElement("style");
-    style.textContent = `@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.6 } }`;
-    document.head.appendChild(style);
-
-    return () => {
-      body.style.margin = bm; body.style.padding = bp;
-      html.style.margin = hm; html.style.padding = hp;
-      document.head.removeChild(style);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (showProcessingPage) { setActiveTab("processing"); return; }
-    if (showResultsPage)    { setActiveTab("results");    return; }
-    if (showUploadPage)     { setActiveTab("upload");     return; }
+    if (showProcessingPage) { setActiveTab('processing'); return; }
+    if (showResultsPage)    { setActiveTab('results');    return; }
+    if (showUploadPage)     { setActiveTab('upload');     return; }
   }, [showUploadPage, showProcessingPage, showResultsPage]);
 
-  const showToast = (message) => {
+  const showToast = (msg) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast({ visible: true, message });
+    setToast({ visible: true, message: msg });
     toastTimer.current = setTimeout(() => setToast(t => ({ ...t, visible: false })), 2500);
   };
 
-  const handleNewScan = () => { setActiveTab("upload"); if (onNewScan) onNewScan(); };
-
+  const handleNewScan         = () => { setActiveTab('upload'); if (onNewScan) onNewScan(); };
   const handleToggleFavorite  = id => setNotes(p => p.map(n => n.id === id ? { ...n, favorite: !n.favorite } : n));
   const handleDeleteNote      = id => setNotes(p => p.map(n => n.id === id ? { ...n, deleted: true, favorite: false } : n));
   const handleRestoreNote     = id => setNotes(p => p.map(n => n.id === id ? { ...n, deleted: false } : n));
   const handlePermanentDelete = id => setNotes(p => p.filter(n => n.id !== id));
   const handleEmptyTrash      = () => setNotes(p => p.filter(n => !n.deleted));
-
+  const handleUpdateTags  = (id, tags) => setNotes(p => p.map(n => n.id === id ? { ...n, tags } : n));
   const handleMoveNote = (noteId, targetFolderId) => {
     setNotes(p => p.map(n => n.id === noteId ? { ...n, folderId: targetFolderId } : n));
-    const noteName = notes.find(n => n.id === noteId)?.title || "Note";
-    const folderName = targetFolderId
-      ? folders.find(f => f.id === targetFolderId)?.name
-      : null;
-    showToast(folderName ? `"${noteName.slice(0, 20)}…" moved to ${folderName}` : `Removed from folder`);
+    const noteName   = notes.find(n => n.id === noteId)?.title || 'Note';
+    const folderName = targetFolderId ? folders.find(f => f.id === targetFolderId)?.name : null;
+    showToast(folderName ? `Moved to ${folderName}` : 'Removed from folder');
   };
-
-  const handleAddFolder    = (name) => {
-    setFolders(p => [...p, { id: `f${nextFolderId.current++}`, name }]);
-    setShowNewFolder(false);
-  };
-  const handleDeleteFolder = folderId => {
-    setNotes(p => p.map(n => n.folderId === folderId ? { ...n, folderId: null } : n));
-    setFolders(p => p.filter(f => f.id !== folderId));
-  };
+  const handleAddFolder    = name => { setFolders(p => [...p, { id: `f${nextFolderId.current++}`, name }]); setShowNewFolder(false); };
+  const handleDeleteFolder = fid  => { setNotes(p => p.map(n => n.folderId === fid ? { ...n, folderId: null } : n)); setFolders(p => p.filter(f => f.id !== fid)); };
   const handleRenameFolder = (id, name) => setFolders(p => p.map(f => f.id === id ? { ...f, name } : f));
 
   const activeNotes  = notes.filter(n => !n.deleted);
   const trashedNotes = notes.filter(n => n.deleted);
+  const favoriteNotes = activeNotes.filter(n => n.favorite);
 
-  const navItems = [
-    { key: "notes",     label: "My Notes",  path: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",      onClick: () => setActiveTab("notes") },
-    { key: "upload",    label: "New Scan",  path: "M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12", onClick: handleNewScan },
-    { key: "favorites", label: "Favorites", path: "M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z", onClick: () => setActiveTab("favorites") },
-    { key: "trash",     label: "Trash",     path: "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16", onClick: () => setActiveTab("trash") },
+  const NAV = [
+    { key:'notes',     label:'My Notes',  icon:'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z',     onClick: () => setActiveTab('notes') },
+    { key:'upload',    label:'New Scan',  icon:'M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12', onClick: handleNewScan },
+    { key:'favorites', label:'Favorites', icon:'M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z', onClick: () => setActiveTab('favorites') },
+    { key:'trash',     label:'Trash',     icon:'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16', onClick: () => setActiveTab('trash') },
   ];
 
   return (
     <DragContext.Provider value={{ draggingNoteId, setDraggingNoteId }}>
-      <div style={s.container}>
-        <div style={s.layout}>
-          <aside style={s.sidebar}>
-            <div style={s.sidebarContent}>
-              <div style={s.logo}>
-                <div style={s.logoIcon}><NoteIcon size={22} color="white" /></div>
-                <span style={s.logoText}>NoteScan</span>
+      <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, display:'flex' }}>
+
+        {/* ── Sidebar ── */}
+        <aside style={{ width:220, background:T.surface, borderRight:`1px solid ${T.border}`, display:'flex', flexDirection:'column', flexShrink:0, position:'sticky', top:0, height:'100vh' }}>
+          {/* Logo */}
+          <div style={{ padding:'20px 16px 16px', borderBottom:`1px solid ${T.border}` }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <div style={{ width:32, height:32, borderRadius:9, background:T.amber, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={17} color="#0E1117" />
               </div>
-              <nav style={s.nav}>
-                {navItems.map(item => (
-                  <button key={item.key}
-                    style={{ ...s.navItem, ...(activeTab === item.key ? s.navItemActive : {}) }}
-                    onClick={item.onClick}>
-                    <svg style={s.navIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.path} />
-                    </svg>
-                    {item.label}
-                    {item.key === "favorites" && activeNotes.filter(n => n.favorite).length > 0 && (
-                      <span style={s.badge}>{activeNotes.filter(n => n.favorite).length}</span>
-                    )}
-                    {item.key === "trash" && trashedNotes.length > 0 && (
-                      <span style={{ ...s.badge, backgroundColor: "#FCA5A5", color: "#7F1D1D" }}>{trashedNotes.length}</span>
-                    )}
-                  </button>
-                ))}
-                {activeTab === "processing" && (
-                  <button style={{ ...s.navItem, ...s.navItemActive }} disabled>
-                    <svg style={s.navIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6l4 2" />
-                    </svg>
-                    Processing…
-                  </button>
+              <span style={{ fontFamily:T.serif, fontSize:18, color:T.cream }}>NoteScan</span>
+            </div>
+          </div>
+
+          {/* Nav */}
+          <nav style={{ padding:'12px 10px', flex:1, display:'flex', flexDirection:'column', gap:2 }}>
+            {/* Section label */}
+            <p style={{ fontFamily:T.font, fontSize:10, fontWeight:700, letterSpacing:1.5, textTransform:'uppercase', color:T.muted, margin:'4px 4px 8px', opacity:.6 }}>Navigation</p>
+
+            {NAV.map(item => (
+              <button key={item.key} className={`ud-nav-item${activeTab === item.key ? ' active' : ''}`} onClick={item.onClick}>
+                <Icon d={item.icon} size={15} />
+                {item.label}
+                {item.key === 'favorites' && favoriteNotes.length > 0 && (
+                  <span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, background:T.amberDim, color:T.amber, borderRadius:99, padding:'1px 7px' }}>{favoriteNotes.length}</span>
                 )}
-                {activeTab === "results" && (
-                  <button style={{ ...s.navItem, ...s.navItemActive }} disabled>
-                    <svg style={s.navIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Results
-                  </button>
+                {item.key === 'trash' && trashedNotes.length > 0 && (
+                  <span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, background:T.redDim, color:T.red, borderRadius:99, padding:'1px 7px' }}>{trashedNotes.length}</span>
                 )}
-              </nav>
-              <div style={{ flexGrow: 1 }} />
-              <button style={s.logoutButton} onClick={onLogout}>
-                <svg style={s.navIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                Logout
               </button>
+            ))}
+
+            {(activeTab === 'processing' || activeTab === 'results') && (
+              <>
+                <div style={{ height:1, background:T.border, margin:'8px 4px' }} />
+                <button className="ud-nav-item active" disabled style={{ opacity:.7 }}>
+                  <Icon d={activeTab === 'processing' ? 'M12 6v6l4 2' : 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'} size={15} />
+                  {activeTab === 'processing' ? 'Processing…' : 'Results'}
+                </button>
+              </>
+            )}
+
+            {/* Stats section */}
+            <div style={{ marginTop:'auto' }}>
+              <div style={{ height:1, background:T.border, margin:'12px 4px 12px' }} />
+              <div style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:10, padding:'12px 14px' }}>
+                <p style={{ fontFamily:T.font, fontSize:10, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 10px', opacity:.7 }}>Library</p>
+                {[
+                  { label:'Total notes', value: activeNotes.length },
+                  { label:'Favorites',   value: favoriteNotes.length },
+                  { label:'Folders',     value: folders.length },
+                ].map(s => (
+                  <div key={s.label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+                    <span style={{ fontFamily:T.font, fontSize:12, color:T.muted }}>{s.label}</span>
+                    <span style={{ fontFamily:T.font, fontSize:12, fontWeight:700, color:T.cream }}>{s.value}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </aside>
+          </nav>
 
-          <main style={s.main}>
-            <div style={s.wrapper}>
-              {activeTab === "notes" && (
-                <NotesHome
-                  notes={activeNotes} folders={folders}
-                  onNewScan={handleNewScan} onNoteSelect={onNoteSelect}
-                  onToggleFavorite={handleToggleFavorite} onDelete={handleDeleteNote}
-                  onAddFolder={() => setShowNewFolder(true)}
-                  onDeleteFolder={handleDeleteFolder}
-                  onRenameFolder={handleRenameFolder}
-                  onMoveNote={handleMoveNote}
-                />
-              )}
-              {activeTab === "upload" && (
-                <UploadPage onProcess={() => { setActiveTab("processing"); if (onProcess) onProcess(); }} />
-              )}
-              {activeTab === "processing" && (
-                <ProcessingScreen onAutoFinish={() => { setActiveTab("results"); if (onFinishProcessing) onFinishProcessing(); }} />
-              )}
-              {activeTab === "results" && <ResultsPage onBack={() => setActiveTab("notes")} />}
-              {activeTab === "favorites" && (
-                <FavoritesPage notes={activeNotes} onNoteSelect={onNoteSelect}
-                  onRemoveFavorite={handleToggleFavorite} onNewScan={handleNewScan} />
-              )}
-              {activeTab === "trash" && (
-                <TrashPage notes={trashedNotes} onRestore={handleRestoreNote}
-                  onPermanentDelete={handlePermanentDelete} onEmptyTrash={handleEmptyTrash} />
-              )}
-            </div>
-          </main>
-        </div>
+          {/* Logout */}
+          <div style={{ padding:'12px 10px', borderTop:`1px solid ${T.border}` }}>
+            <button className="ud-nav-item" onClick={onLogout} style={{ color:T.red }}>
+              <Icon d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" size={15} />
+              Logout
+            </button>
+          </div>
+        </aside>
 
-        {showNewFolder && (
-          <NewFolderModal onSave={handleAddFolder} onClose={() => setShowNewFolder(false)} />
-        )}
+        {/* ── Main ── */}
+        <main className="ud-scrollbar" style={{ flex:1, overflowY:'auto', height:'100vh', boxSizing:'border-box' }}>
+  {/* Results lives outside the padded wrapper so it can be full width */}
+  <div style={{ display: activeTab === 'results' ? 'block' : 'none' }}>
+    <ResultsPage onBack={() => setActiveTab('notes')} />
+  </div>
 
-        <DropToast visible={toast.visible} message={toast.message} />
+  {activeTab !== 'results' && (
+    <div style={{ padding:'32px 40px', maxWidth:1100, margin:'0 auto' }}>
+      {activeTab === 'notes' && (
+        <NotesHome notes={activeNotes} folders={folders} onNewScan={handleNewScan}
+          onNoteSelect={onNoteSelect} onToggleFavorite={handleToggleFavorite}
+          onDelete={handleDeleteNote} onAddFolder={() => setShowNewFolder(true)}
+          onDeleteFolder={handleDeleteFolder} onRenameFolder={handleRenameFolder}
+          onMoveNote={handleMoveNote} onUpdateTags={handleUpdateTags} />
+      )}
+      {activeTab === 'upload' && (
+        <UploadPage onProcess={() => { setActiveTab('results'); if (onProcess) onProcess(); }} />
+      )}
+      {activeTab === 'processing' && (
+        <ProcessingScreen onAutoFinish={() => { setActiveTab('results'); if (onFinishProcessing) onFinishProcessing(); }} />
+      )}
+      {activeTab === 'favorites' && (
+        <FavoritesPage notes={activeNotes} onNoteSelect={onNoteSelect}
+          onRemoveFavorite={handleToggleFavorite} onNewScan={handleNewScan} />
+      )}
+      {activeTab === 'trash' && (
+        <TrashPage notes={trashedNotes} onRestore={handleRestoreNote}
+          onPermanentDelete={handlePermanentDelete} onEmptyTrash={handleEmptyTrash} />
+      )}
+    </div>
+  )}
+</main>
+      </div>
+
+      {showNewFolder && <NewFolderModal onSave={handleAddFolder} onClose={() => setShowNewFolder(false)} />}
+
+      {/* Toast */}
+      <div className={`ud-toast${toast.visible ? ' visible' : ''}`}>
+        <Icon d="M5 13l4 4L19 7" size={13} color={T.green} />
+        {toast.message}
       </div>
     </DragContext.Provider>
   );
-};
-
-const s = {
-  container: { minHeight: "100vh", backgroundColor: "#E8EEF5",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" },
-  layout: { display: "flex", height: "100vh", width: "100%", overflow: "hidden" },
-  sidebar: { width: "220px", background: "linear-gradient(to bottom, #6366F1, #8B5CF6)",
-    padding: "1.25rem 0.75rem 1rem", display: "flex", flexDirection: "column",
-    color: "white", flexShrink: 0 },
-  sidebarContent: { display: "flex", flexDirection: "column", height: "100%" },
-  logo: { display: "flex", alignItems: "center", gap: "0.65rem", marginBottom: "1.25rem", padding: "0 0.25rem" },
-  logoIcon: { width: "34px", height: "34px", background: "rgba(255,255,255,0.2)",
-    borderRadius: "9px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  logoText: { fontSize: "1.2rem", fontWeight: "700" },
-  nav: { display: "flex", flexDirection: "column", gap: "0.2rem" },
-  navItem: { padding: "0.65rem 0.75rem", background: "transparent", border: "none",
-    borderRadius: "0.7rem", display: "flex", alignItems: "center", gap: "0.7rem",
-    color: "white", cursor: "pointer", fontSize: "0.9rem", transition: "0.15s" },
-  navItemActive: { background: "rgba(255,255,255,0.25)" },
-  navIcon: { width: "18px", height: "18px", flexShrink: 0 },
-  badge: { marginLeft: "auto", backgroundColor: "#FCD34D", color: "#78350F",
-    borderRadius: "999px", fontSize: "0.68rem", fontWeight: "700",
-    padding: "0.1rem 0.45rem", minWidth: "1.2rem", textAlign: "center" },
-  logoutButton: { display: "flex", alignItems: "center", gap: "0.7rem",
-    padding: "0.65rem 0.75rem", backgroundColor: "rgba(255,255,255,0.1)",
-    border: "none", borderRadius: "0.7rem", color: "white",
-    cursor: "pointer", fontSize: "0.9rem", marginTop: "0.5rem" },
-  main: { flex: 1, overflowY: "auto", height: "100vh", padding: "2rem 2.5rem", boxSizing: "border-box" },
-  wrapper: { width: "100%", maxWidth: "1200px", margin: "0 auto", boxSizing: "border-box" },
 };
 
 export default UserDashboard;

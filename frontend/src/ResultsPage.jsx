@@ -2,12 +2,6 @@ import { createPortal } from "react-dom";
 import React, { useState, useRef, useEffect } from 'react';
 import FlashcardsPage from './FlashcardsPage';
 
-//Google fonts
-const fontLink = document.createElement('link');
-fontLink.rel  = 'stylesheet';
-fontLink.href = 'https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap';
-document.head.appendChild(fontLink);
-
 //Design tokens
 const T = {
   bg:        '#0E1117',
@@ -27,6 +21,12 @@ const T = {
   serif:     '"DM Serif Display", Georgia, serif',
 };
 
+const fontLink = document.createElement('link');
+fontLink.rel  = 'stylesheet';
+fontLink.href = 'https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap';
+if (!document.head.querySelector('link[href*="DM+Sans"]')) {
+  document.head.appendChild(fontLink);
+}
 
 const styleEl = document.createElement('style');
 styleEl.textContent = `
@@ -132,6 +132,17 @@ styleEl.textContent = `
   .ns-editable p  { margin:0 0 4px; }
   .ns-editable ::selection { background:${T.amberDim}; }
 
+  .ns-title-input {
+    font-family:${T.serif}; font-size:38px; font-weight:400;
+    line-height:1.1; letter-spacing:-.4px;
+    color:${T.cream}; background:transparent;
+    border:none; border-bottom:1px solid ${T.border};
+    outline:none; width:100%; padding:0 0 4px;
+    margin:0 0 8px; transition:border-color .2s;
+  }
+  .ns-title-input:focus { border-bottom-color:${T.amber}; }
+  .ns-title-input::placeholder { color:${T.muted}; }
+
   .ns-fullscreen {
     position:fixed; inset:0; background:${T.bg}; z-index:500;
     display:flex; flex-direction:column;
@@ -144,7 +155,7 @@ styleEl.textContent = `
   .ns-export-menu {
     position:absolute; top:calc(100% + 6px); right:0;
     background:${T.surface}; border:1px solid ${T.border};
-    border-radius:12px; padding:6px; min-width:170px;
+    border-radius:12px; padding:6px; min-width:190px;
     box-shadow:0 16px 40px rgba(0,0,0,.5); z-index:600;
     animation:tabIn .15s ease both;
   }
@@ -197,16 +208,16 @@ const Icon = ({ d, size = 18, color = 'currentColor', fill = 'none' }) => (
 
 //mock data
 const INITIAL_CARDS = [
-  { id: 1, question: 'What is machine learning?',                        answer: 'A subset of AI that enables systems to improve through experience.',     learned: false },
+  { id: 1, question: 'What is machine learning?',                         answer: 'A subset of AI that enables systems to improve through experience.',     learned: false },
   { id: 2, question: 'What are the three main types of machine learning?', answer: 'Supervised Learning, Unsupervised Learning, and Reinforcement Learning.', learned: false },
-  { id: 3, question: 'What is supervised learning?',                     answer: 'Training ML models with labeled data.',                                  learned: false },
+  { id: 3, question: 'What is supervised learning?',                      answer: 'Training ML models with labeled data.',                                  learned: false },
 ];
 
 function useCards() {
   const [cards, setCards] = useState(INITIAL_CARDS.map(c => ({ ...c })));
   const nextId = useRef(INITIAL_CARDS.length + 1);
-  const addCard    = (q, a) => setCards(p => [...p, { id: nextId.current++, question: q, answer: a, learned: false }]);
-  const toggleLearned = (id) => setCards(p => p.map(c => c.id === id ? { ...c, learned: !c.learned } : c));
+  const addCard       = (q, a) => setCards(p => [...p, { id: nextId.current++, question: q, answer: a, learned: false }]);
+  const toggleLearned = (id)   => setCards(p => p.map(c => c.id === id ? { ...c, learned: !c.learned } : c));
   return { cards, addCard, toggleLearned };
 }
 
@@ -253,58 +264,6 @@ function PreviewCard({ card }) {
   );
 }
 
-function ExportMenu({ editorRef, onClose }) {
-  const [copied, setCopied] = useState(false);
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) onClose(); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
-
-  const getPlainText = () => editorRef.current?.innerText || '';
-  const getHTML      = () => editorRef.current?.innerHTML || '';
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(getPlainText());
-    setCopied(true);
-    setTimeout(() => { setCopied(false); onClose(); }, 1200);
-  };
-
-  const handleTXT = () => {
-    const blob = new Blob([getPlainText()], { type: 'text/plain' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = 'recognized-text.txt'; a.click();
-    URL.revokeObjectURL(url);
-    onClose();
-  };
-
-  const handlePDF = () => {
-    printDiv.innerHTML = getHTML();
-    window.print();
-    setTimeout(() => { printDiv.innerHTML = ''; onClose(); }, 500);
-  };
-
-  const items = [
-    { label: copied ? 'Copied!' : 'Copy to clipboard', icon: copied ? 'M5 13l4 4L19 7' : 'M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z', action: handleCopy, cls: copied ? 'copied' : '' },
-    { label: 'Export as TXT', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', action: handleTXT },
-    { label: 'Export as PDF', icon: 'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z', action: handlePDF },
-  ];
-
-  return (
-    <div ref={menuRef} className="ns-export-menu">
-      {items.map(item => (
-        <button key={item.label} className={`ns-export-item ${item.cls || ''}`} onClick={item.action}>
-          <Icon d={item.icon} size={14} color="currentColor" />
-          {item.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen }) {
   const editorRef = useRef(null);
   const [editorHTML,    setEditorHTML]    = useState('');
@@ -312,8 +271,8 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
   const [isDirty,       setIsDirty]       = useState(false);
   const [activeFormats, setActiveFormats] = useState({});
   const [showExport,    setShowExport]    = useState(false);
+  const exportMenuRef = useRef(null);
 
-  // Re-populate editor whenever initialText arrives from the backend
   useEffect(() => {
     if (!editorRef.current) return;
     const html = (initialText || '')
@@ -325,12 +284,18 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
     editorRef.current.innerHTML = html;
   }, [initialText]);
 
-  // ESC to exit fullscreen
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape' && isFullscreen) onToggleFullscreen(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [isFullscreen, onToggleFullscreen]);
+
+  // Re-populate editor from current state when toggling fullscreen
+  useEffect(() => {
+    if (editorRef.current && editorHTML) {
+      editorRef.current.innerHTML = editorHTML;
+    }
+  }, [isFullscreen]);
 
   const exec = (cmd, value = null) => {
     editorRef.current?.focus();
@@ -361,6 +326,29 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
     setIsDirty(false);
   };
 
+  const getPlainText = () => editorRef.current?.innerText || '';
+  const getHTML      = () => editorRef.current?.innerHTML || '';
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(getPlainText());
+    setShowExport(false);
+  };
+
+  const handleTXT = () => {
+    const blob = new Blob([getPlainText()], { type: 'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'recognized-text.txt'; a.click();
+    URL.revokeObjectURL(url);
+    setShowExport(false);
+  };
+
+  const handlePDF = () => {
+    printDiv.innerHTML = getHTML();
+    window.print();
+    setTimeout(() => { printDiv.innerHTML = ''; setShowExport(false); }, 500);
+  };
+
   const toolbar = (fullscreen = false) => (
     <div className={`ns-toolbar${fullscreen ? ' fullscreen-bar' : ''}`}>
       {['h1','h2','h3'].map((h, i) => (
@@ -378,13 +366,6 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
       <button className="ns-tool" title="Undo" onMouseDown={e => { e.preventDefault(); exec('undo'); }}><Icon d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" size={13} /></button>
       <button className="ns-tool" title="Redo" onMouseDown={e => { e.preventDefault(); exec('redo'); }}><Icon d="M21 10H11a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6" size={13} /></button>
       <div className="ns-tool-sep" />
-      <div style={{ position:'relative' }}>
-        <button className="ns-tool" title="Export" onMouseDown={e => { e.preventDefault(); setShowExport(v => !v); }}>
-          <Icon d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" size={13} />
-          Export
-        </button>
-        {showExport && <ExportMenu editorRef={editorRef} onClose={() => setShowExport(false)} />}
-      </div>
       <div style={{ flex:1 }} />
       <button className="ns-tool" title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Expand to fullscreen'} onMouseDown={e => { e.preventDefault(); onToggleFullscreen(); }}>
         {isFullscreen
@@ -443,21 +424,25 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
 }
 
 const TABS = [
-  { id:'image',      label:'Original',        icon:'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
-  { id:'ocr',        label:'Recognized Text',  icon:'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-  { id:'summary',    label:'AI Summary',       icon:'M13 10V3L4 14h7v7l9-11h-7z' },
-  { id:'flashcards', label:'Flashcards',       icon:'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
+  { id:'scan_edit',  label:'Scan & Edit',  icon:'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
+  { id:'summary',    label:'AI Summary',   icon:'M13 10V3L4 14h7v7l9-11h-7z' },
+  { id:'flashcards', label:'Flashcards',   icon:'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
 ];
 
 const ResultsPage = ({ onBack }) => {
   const [page,             setPage]             = useState('results');
-  const [activeTab,        setActiveTab]        = useState('image');
+  const [activeTab,        setActiveTab]        = useState('scan_edit');
   const [isSaved,          setIsSaved]          = useState(false);
   const [showAdd,          setShowAdd]          = useState(false);
   const [editorFullscreen, setEditorFullscreen] = useState(false);
+  const [scanEditView,     setScanEditView]     = useState('both');
+  const [title,            setTitle]            = useState('');
+  const [showExportMenu,   setShowExportMenu]   = useState(false);
+  const [confidence,       setConfidence]       = useState(null);
+  const exportMenuRef = useRef(null);
   const { cards, addCard } = useCards();
 
-  //backend wiring
+  // backend wiring
   const fileId  = sessionStorage.getItem('lastUploadId');
   const token   = localStorage.getItem('token') || sessionStorage.getItem('token');
   const headers = token
@@ -469,8 +454,8 @@ const ResultsPage = ({ onBack }) => {
   const [aiSummary,           setAiSummary]           = useState('');
   const [studyGuideText,      setStudyGuideText]      = useState('');
   const [transcriptionEdited, setTranscriptionEdited] = useState(false);
-  const [summaryEdited, setSummaryEdited]     = useState(false);
-  const [overlayUrl, setOverlayUrl] = useState(sessionStorage.getItem("lastOcrOverlayUrl") || "");
+  const [summaryEdited,       setSummaryEdited]       = useState(false);
+  const [overlayUrl,          setOverlayUrl]          = useState(sessionStorage.getItem('lastOcrOverlayUrl') || '');
 
   useEffect(() => {
     if (!fileId) return;
@@ -478,17 +463,31 @@ const ResultsPage = ({ onBack }) => {
       .then(r => r.json())
       .then(data => {
         setFileData(data);
+        if (data.title) setTitle(data.title);
+        else if (data.originalName) setTitle(data.originalName.replace(/\.[^/.]+$/, ''));
+        if (data.confidence)                  setConfidence(data.confidence);
         if (data.currentContent?.transcribedText) setRecognizedText(data.currentContent.transcribedText);
         if (data.currentContent?.summary)         setAiSummary(data.currentContent.summary);
         if (data.currentContent?.studyGuide)      setStudyGuideText(data.currentContent.studyGuide);
-        const ssOverlay = sessionStorage.getItem("lastOcrOverlayUrl");
+        const ssOverlay = sessionStorage.getItem('lastOcrOverlayUrl');
         if (ssOverlay) setOverlayUrl(ssOverlay);
-
-        const ssMerged = sessionStorage.getItem("lastOcrMergedText");
+        const ssMerged = sessionStorage.getItem('lastOcrMergedText');
         if (ssMerged) setRecognizedText(ssMerged);
+        const ssConfidence = sessionStorage.getItem('lastOcrConfidence');
+        if (ssConfidence) setConfidence(Math.round(parseFloat(ssConfidence)));
       })
       .catch(err => console.error('Failed to load file data:', err));
   }, [fileId]);
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handler = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target))
+        setShowExportMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const saveEdit = async (endpoint, payload, onSuccess, setEdited) => {
     if (!fileId) return;
@@ -504,6 +503,27 @@ const ResultsPage = ({ onBack }) => {
     await fetch(`/api/files/${fileId}/regenerate`, { method: 'POST', headers, body: JSON.stringify({ contentType }) });
   };
 
+  // Export handlers
+  const handleExportCopy = async () => {
+    await navigator.clipboard.writeText(recognizedText);
+    setShowExportMenu(false);
+  };
+
+  const handleExportTXT = () => {
+    const blob = new Blob([recognizedText], { type: 'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `${title || 'notes'}.txt`; a.click();
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+  };
+
+  const handleExportPDF = () => {
+    printDiv.innerHTML = `<h1>${title || 'Notes'}</h1><div>${recognizedText}</div>`;
+    window.print();
+    setTimeout(() => { printDiv.innerHTML = ''; setShowExportMenu(false); }, 500);
+  };
+
   const learnedCount = cards.filter(c => c.learned).length;
   const pct          = cards.length ? Math.round((learnedCount / cards.length) * 100) : 0;
 
@@ -513,40 +533,71 @@ const ResultsPage = ({ onBack }) => {
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream }}>
 
       {/* Top bar */}
-      <div style={{ borderBottom:`1px solid ${T.border}`, padding:'0 32px', display:'flex', alignItems:'center', justifyContent:'space-between', height:58, position:'sticky', top:0, background:`${T.bg}ee`, backdropFilter:'blur(12px)', zIndex:100 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:20 }}>
+      <div style={{ borderBottom:`1px solid ${T.border}`, padding:'0 20px', display:'flex', alignItems:'center', justifyContent:'space-between', height:58, background:T.bg }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           {onBack && (
             <button className="ns-btn-ghost" onClick={onBack} style={{ padding:'6px 12px', fontSize:13 }}>
               <Icon d="M15 19l-7-7 7-7" size={14} /> Back
             </button>
           )}
-          <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-            <div style={{ width:28, height:28, borderRadius:7, background:T.amber, display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={15} color="#0E1117" />
-            </div>
-            <span style={{ fontFamily:T.serif, fontSize:17, color:T.cream }}>NoteScan</span>
-          </div>
         </div>
-        <button className="ns-btn-amber" onClick={() => setIsSaved(true)} disabled={isSaved} style={{ opacity:isSaved ? .7 : 1 }}>
-          {isSaved
-            ? <><Icon d="M5 13l4 4L19 7" size={14} color="#0E1117" />Saved</>
-            : <><Icon d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" size={14} color="#0E1117" />Save Notes</>
-          }
-        </button>
+
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          {/* Export dropdown */}
+          <div ref={exportMenuRef} style={{ position:'relative' }}>
+            <button className="ns-btn-ghost" onClick={() => setShowExportMenu(v => !v)} style={{ padding:'6px 12px', fontSize:13 }}>
+              <Icon d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" size={14} />
+              Export
+              <Icon d="M19 9l-7 7-7-7" size={12} />
+            </button>
+            {showExportMenu && (
+              <div className="ns-export-menu">
+                <button className="ns-export-item" onClick={handleExportCopy}>
+                  <Icon d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" size={14} color="currentColor" />
+                  Copy to clipboard
+                </button>
+                <button className="ns-export-item" onClick={handleExportTXT}>
+                  <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={14} color="currentColor" />
+                  Download TXT
+                </button>
+                <button className="ns-export-item" onClick={handleExportPDF}>
+                  <Icon d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" size={14} color="currentColor" />
+                  Download PDF
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Save Notes */}
+          <button className="ns-btn-amber" onClick={() => setIsSaved(true)} disabled={isSaved} style={{ opacity:isSaved ? .7 : 1 }}>
+            {isSaved
+              ? <><Icon d="M5 13l4 4L19 7" size={14} color="#0E1117" />Saved</>
+              : <><Icon d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" size={14} color="#0E1117" />Save Notes</>
+            }
+          </button>
+        </div>
       </div>
 
       {/* Hero */}
-      <div style={{ padding:'40px 40px 0', animation:'fadeUp .4s ease both' }}>
+      <div style={{ padding:'40px 20px 0', animation:'fadeUp .4s ease both' }}>
         <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 10px' }}>Processing Complete</p>
         <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', flexWrap:'wrap', gap:16, marginBottom:32 }}>
-          <div>
-            <h1 style={{ fontFamily:T.serif, fontSize:38, fontWeight:400, margin:'0 0 8px', lineHeight:1.1, letterSpacing:'-.4px' }}>OCR Results</h1>
+          <div style={{ flex:1, minWidth:0 }}>
+            {/* Editable title */}
+            <input
+              className="ns-title-input"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Enter a title for your notes…"
+            />
             <p style={{ color:T.muted, fontSize:14, margin:0 }}>Your notes have been scanned and processed successfully.</p>
           </div>
-          <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 16px', background:T.greenDim, border:`1px solid rgba(52,211,153,.2)`, borderRadius:99, flexShrink:0 }}>
-            <Icon d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" size={15} color={T.green} />
-            <span style={{ fontSize:13, fontWeight:600, color:T.green }}>87% Confidence</span>
-          </div>
+          {/* Confidence score display */}
+          {confidence !== null && (
+            <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 16px', background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:99, flexShrink:0 }}>
+              <span style={{ fontSize:13, fontWeight:600, color:T.cream }}>{confidence}% Confidence</span>
+            </div>
+          )}
         </div>
 
         {/* Tab bar */}
@@ -567,52 +618,21 @@ const ResultsPage = ({ onBack }) => {
         </div>
       </div>
 
-        {/* Content grid */}
-        <div style={styles.contentGrid}>
-          <div style={styles.card}>
-            <h3 style={styles.cardTitle}>
-              <svg style={styles.cardIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              Original Image
-            </h3>
-            <div style={styles.imagePreview}>
-              {overlayUrl ? (
-                <img src={overlayUrl} alt="OCR overlay" style={styles.imageActual} />
-              ) : (
-                <>
-                  <svg style={styles.imagePlaceholder} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <p style={styles.imagePlaceholderText}>{fileData?.originalName || "Uploaded image"}</p>
-                </>
-              )}
-            </div>
-          </div>
       {/* Tab panels */}
-      <div style={{ padding:'0 40px 64px' }}>
+      <div style={{ padding:'0 20px 64px' }}>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderTop:'none', borderRadius:'0 0 16px 16px', padding:'32px 36px', minHeight:400 }}>
 
-          {/* Original */}
-          {activeTab === 'image' && (
-            <div key="image" className="ns-tab-panel">
-              <div style={{ display:'flex', alignItems:'center', gap:20, background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:14, padding:'24px 28px' }}>
-                <div style={{ width:64, height:64, borderRadius:16, background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <Icon d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" size={28} color={T.amber} />
-                </div>
-                <div>
-                  <p style={{ margin:'0 0 5px', fontSize:16, fontWeight:600, color:T.cream }}>lecture_notes_01.jpg</p>
-                  <p style={{ margin:0, fontSize:13, color:T.muted }}>Source document uploaded for OCR processing</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Recognized Text */}
-          {activeTab === 'ocr' && (
-            <div key="ocr" className="ns-tab-panel">
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
-                <p style={{ margin:0, fontSize:13, color:T.muted }}>Edit, format, and export your recognized text.</p>
+          {/* Scan & Edit */}
+          {activeTab === 'scan_edit' && (
+            <div key="scan_edit" className="ns-tab-panel">
+              <div style={{ display:'flex', gap:6, marginBottom:16 }}>
+                {[['both','Both'],['image','Scan'],['editor','Editor']].map(([val, label]) => (
+                  <button key={val} onClick={() => setScanEditView(val)}
+                    style={{ padding:'5px 14px', borderRadius:8, fontSize:12, fontWeight:600, fontFamily:T.font, cursor:'pointer', border:`1px solid ${scanEditView===val ? T.amber : T.border}`, background:scanEditView===val ? T.amberDim : 'transparent', color:scanEditView===val ? T.amber : T.muted, transition:'all .15s' }}>
+                    {label}
+                  </button>
+                ))}
+                <div style={{ flex:1 }} />
                 {transcriptionEdited && (
                   <button className="ns-regen" onClick={() => requestRegenerate('all')}>
                     <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} />
@@ -620,17 +640,48 @@ const ResultsPage = ({ onBack }) => {
                   </button>
                 )}
               </div>
-              <RichTextEditor
-                initialText={recognizedText}
-                isFullscreen={editorFullscreen}
-                onToggleFullscreen={() => setEditorFullscreen(f => !f)}
-                onSave={(payload) => saveEdit(
-                  'edit/transcription',
-                  payload,
-                  (c) => { setRecognizedText(c.transcribedText); setTranscriptionEdited(true); },
-                  setTranscriptionEdited
+
+              <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
+                {(scanEditView === 'both' || scanEditView === 'image') && (
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 10px', fontFamily:T.font }}>Original Scan</p>
+                    <div style={{ background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:14, overflow:'hidden', minHeight:400, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:12, padding: overlayUrl ? 0 : 24 }}>
+                      {overlayUrl ? (
+                        <img src={overlayUrl} alt="OCR overlay" style={{ width:'100%', height:'auto', display:'block' }} />
+                      ) : (
+                        <>
+                          <div style={{ width:80, height:80, borderRadius:20, background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                            <Icon d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" size={36} color={T.amber} />
+                          </div>
+                          <p style={{ fontSize:14, fontWeight:600, color:T.cream, margin:0 }}>{fileData?.originalName || 'lecture_notes_01.jpg'}</p>
+                          <p style={{ fontSize:12, color:T.muted, margin:0, textAlign:'center' }}>Scanned image will appear here once<br/>image serving is wired up.</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 )}
-              />
+
+                {scanEditView === 'both' && (
+                  <div style={{ width:1, alignSelf:'stretch', background:T.border, flexShrink:0 }} />
+                )}
+
+                {(scanEditView === 'both' || scanEditView === 'editor') && (
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 10px', fontFamily:T.font }}>Recognized Text</p>
+                    <RichTextEditor
+                      initialText={recognizedText}
+                      isFullscreen={editorFullscreen}
+                      onToggleFullscreen={() => setEditorFullscreen(f => !f)}
+                      onSave={(payload) => saveEdit(
+                        'edit/transcription',
+                        payload,
+                        (c) => { setRecognizedText(c.transcribedText); setTranscriptionEdited(true); },
+                        setTranscriptionEdited
+                      )}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -684,85 +735,6 @@ const ResultsPage = ({ onBack }) => {
       {showAdd && <CardModal onSave={(q, a) => { addCard(q, a); setShowAdd(false); }} onClose={() => setShowAdd(false)} />}
     </div>
   );
-};
-
-const previewFace = {
-  position: 'absolute', inset: 0,
-  backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
-  borderRadius: 10, border: '1.5px solid',
-  display: 'flex', flexDirection: 'column', padding: '10px 14px', overflow: 'hidden',
-};
-const previewTag = { fontSize: 10, fontWeight: 700, letterSpacing: 1, color: '#9CA3AF', marginBottom: 6 };
-const previewText = {
-  fontSize: 12, fontWeight: 600, color: '#1F2937', margin: 0, lineHeight: 1.45,
-  display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-};
-
-const modalStyles = {
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  box: { background: '#fff', borderRadius: 16, padding: 28, width: 420, maxWidth: '90vw', boxShadow: '0 24px 48px rgba(0,0,0,.18)' },
-  label: { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 },
-  textarea: { width: '100%', boxSizing: 'border-box', border: '1.5px solid #D1D5DB', borderRadius: 10, padding: '10px 12px', fontSize: 14, fontFamily: 'inherit', color: '#111827', resize: 'vertical', outline: 'none', display: 'block', marginBottom: 14 },
-  solid: { padding: '9px 18px', background: '#6366F1', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' },
-  ghost: { padding: '9px 18px', background: 'transparent', color: '#374151', border: '1.5px solid #D1D5DB', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' },
-};
-
-const styles = {
-  container: { minHeight: '100vh', backgroundColor: '#F9FAFB', padding: '2rem' },
-  wrapper: { maxWidth: '1400px', margin: '0 auto' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' },
-  backButton: {
-    display: 'inline-flex', alignItems: 'center', gap: '0.375rem',
-    marginBottom: '1rem',
-    padding: '0.5rem 1rem',
-    backgroundColor: 'white', color: '#4F46E5',
-    border: '1px solid #E5E7EB', borderRadius: '0.625rem',
-    fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer',
-    fontFamily: 'inherit',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.07)',
-  },
-  backIcon: { width: '16px', height: '16px' },
-  logo: { display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' },
-  logoIcon: { width: '28px', height: '28px', color: '#4F46E5' },
-  logoText: { fontSize: '1.25rem', fontWeight: '700', color: '#1F2937' },
-  title: { fontSize: '2rem', fontWeight: '700', color: '#1F2937', marginBottom: '0.25rem' },
-  subtitle: { color: '#6B7280' },
-  headerActions: { display: 'flex', gap: '0.75rem', flexWrap: 'wrap' },
-  exportButton: { padding: '0.625rem 1.25rem', backgroundColor: 'white', color: '#374151', border: '1px solid #D1D5DB', borderRadius: '0.5rem', fontSize: '0.875rem', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.2s', fontFamily: 'inherit' },
-  saveButton: { padding: '0.625rem 1.25rem', backgroundColor: '#22C55E', color: 'white', border: 'none', borderRadius: '0.5rem', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.2s', fontFamily: 'inherit' },
-  saveButtonSaved: { backgroundColor: '#10B981', cursor: 'default' },
-  buttonIcon: { width: '18px', height: '18px' },
-  contentGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem', marginBottom: '2rem' },
-  card: { backgroundColor: 'white', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' },
-  cardTitle: { fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#1F2937' },
-  cardIcon: { width: '20px', height: '20px', color: '#4F46E5' },
-  imagePreview: { backgroundColor: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: '0.75rem', height: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' },
-  imageActual: { width: "100%", height: "100%", objectFit: "contain", borderRadius: "0.75rem" },
-  imagePlaceholder: { width: '64px', height: '64px', color: '#9CA3AF' },
-  imagePlaceholderText: { color: '#6B7280', fontSize: '0.875rem' },
-  textContent: { backgroundColor: '#F9FAFB', border: '1px solid #F3F4F6', borderRadius: '0.75rem', padding: '1rem', maxHeight: '300px', overflowY: 'auto', marginBottom: '1rem' },
-  textPre: { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif', fontSize: '0.875rem', lineHeight: '1.6', margin: 0, whiteSpace: 'pre-wrap', color: '#1F2937' },
-  confidenceBadge: { display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '0.5rem' },
-  badgeIcon: { width: '20px', height: '20px', color: '#3B82F6' },
-  badgeText: { fontSize: '0.875rem', fontWeight: '500', color: '#1E40AF' },
-  aiSection: { marginTop: '2rem' },
-  aiSectionTitle: { fontSize: '1.5rem', fontWeight: '700', color: '#1F2937', marginBottom: '1.5rem' },
-  aiGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem' },
-  aiCard: { backgroundColor: 'white', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' },
-  aiCardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' },
-  aiCardTitle: { fontSize: '1.125rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#1F2937', margin: 0 },
-  regenerateButton: { padding: '0.5rem 0.75rem', backgroundColor: '#F3F4F6', color: '#374151', border: 'none', borderRadius: '0.375rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem', transition: 'background-color 0.2s', fontFamily: 'inherit' },
-  smallIcon: { width: '14px', height: '14px' },
-  summaryBox: { padding: '1.25rem', background: 'linear-gradient(135deg, #F3E8FF 0%, #FCE7F3 100%)', border: '1px solid #E9D5FF', borderRadius: '0.75rem' },
-  summaryText: { fontSize: '0.875rem', lineHeight: '1.6', color: '#1F2937', margin: 0 },
-  studyButton: {
-    width: '100%', padding: '12px 20px',
-    background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
-    color: '#fff', border: 'none', borderRadius: '0.75rem',
-    fontSize: '0.9375rem', fontWeight: '700', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-    fontFamily: 'inherit', boxShadow: '0 4px 14px rgba(79,70,229,.35)',
-  },
 };
 
 export default ResultsPage;
