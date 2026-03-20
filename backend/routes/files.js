@@ -1,18 +1,129 @@
 /**
  * UPLOADED FILE EXTRAPOLATED DATA MANIPULATION:
- *  - edit history apending
+ *  - edit history appending
  *  - file deletion
- *  - study aid regeneration requests */
+ *  - study aid generation requests
+ */
 
 const express = require('express');
 const router = express.Router();
-const path    = require('path');
-const fs      = require('fs');
+const path = require('path');
+const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const auth = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const UploadedFile = require('../models/UploadedFile');
 const User = require('../models/User');
+const { generateSummary, generateFlashcards, getOllamaConfig } = require('../services/ollama');
+
+function requireOwnedFile(file, userId) {
+  if (!file) return { err: 'File not found', status: 404 };
+  if (file.userID.toString() !== userId) return { err: 'Access denied', status: 403 };
+  return null;
+}
+
+function normalizeFlashCards(cards = []) {
+  return cards
+    .map((card, index) => ({
+      cardId: String(card?.cardId || card?.id || `card-${index + 1}`),
+      question: String(card?.question || '').trim(),
+      answer: String(card?.answer || '').trim(),
+    }))
+    .filter((card) => card.question && card.answer);
+}
+
+function getSourceText(file, sourceText) {
+  const candidate = typeof sourceText === 'string' && sourceText.trim()
+    ? sourceText
+    : file.currentContent?.transcribedText || file.extractionData?.rawText || '';
+
+  return String(candidate || '').trim();
+}
+
+async function applyTextEdit(fileId, userId, field, historyKey, { previousText, newText, selectionStart, selectionEnd }) {
+  const file = await UploadedFile.findById(fileId);
+  const access = requireOwnedFile(file, userId);
+  if (access) return access;
+
+  file.editHistory[historyKey].push({
+    previousText: previousText ?? (file.currentContent[field] || ''),
+    newText,
+    selectionStart: selectionStart ?? null,
+    selectionEnd: selectionEnd ?? null,
+    editedAt: new Date(),
+    editedBy: userId,
+  });
+  file.currentContent[field] = newText;
+  file.currentContent.lastUpdated = new Date();
+  await file.save();
+  return { file };
+}
+
+async function generateRequestedContent(file, userId, contentType, sourceText) {
+  const valid = ['summary', 'flashCards', 'all'];
+  if (!valid.includes(contentType)) {
+    return { err: `contentType must be one of: ${valid.join(', ')}`, status: 400 };
+  }
+
+  const source = getSourceText(file, sourceText);
+  if (!source) {
+    return {
+      err: 'No note text is available yet. Save OCR text first or provide text from the current editor before generating AI content.',
+      status: 400,
+    };
+  }
+
+  const entry = {
+    requestedAt: new Date(),
+    requestedBy: userId,
+    contentType,
+    basedOnText: source,
+    status: 'pending',
+  };
+
+  file.regenerationLog.push(entry);
+  const logEntry = file.regenerationLog[file.regenerationLog.length - 1];
+
+  try {
+    const generated = {};
+
+    if (contentType === 'summary' || contentType === 'all') {
+      generated.summary = await generateSummary(source);
+      file.aiGeneratedContent.summary = generated.summary;
+      file.currentContent.summary = generated.summary;
+    }
+
+    if (contentType === 'flashCards' || contentType === 'all') {
+      const cards = await generateFlashcards(source);
+      const normalizedCards = normalizeFlashCards(cards.map((card, index) => ({
+        cardId: card.cardId || `card-${Date.now()}-${index + 1}`,
+        question: card.question,
+        answer: card.answer,
+      })));
+
+      generated.flashCards = normalizedCards;
+      file.aiGeneratedContent.flashCards = normalizedCards;
+      file.currentContent.flashCards = normalizedCards;
+    }
+
+    file.aiGeneratedContent.aiEngine = `ollama/${getOllamaConfig().model}`;
+    file.aiGeneratedContent.generatedAt = new Date();
+    file.currentContent.lastUpdated = new Date();
+    logEntry.status = 'completed';
+    await file.save();
+
+    return {
+      file,
+      generated,
+      entry: logEntry,
+    };
+  } catch (err) {
+    logEntry.status = 'failed';
+    file.processingError = err.message;
+    await file.save();
+    return { err: `AI generation failed: ${err.message}`, status: 502 };
+  }
+}
 
 // ____________________________________________________
 // TO HANDLE FILE USER UPLOADING:
@@ -22,33 +133,26 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ msg: 'No file uploaded' });
 
-    const userId   = req.user.id;
+    const userId = req.user.id;
     const uploadId = req.uploadId;
 
     const newFile = new UploadedFile({
       uploadId,
-      userID:       userId,
+      userID: userId,
       originalName: req.file.originalname,
-      fileType:     req.file.mimetype.startsWith('image/') ? 'image' : 'pdf',
-      mimeType:     req.file.mimetype,
-      fileSize:     req.file.size,
+      fileType: req.file.mimetype.startsWith('image/') ? 'image' : 'pdf',
+      mimeType: req.file.mimetype,
+      fileSize: req.file.size,
       fileLocation: path.join('uploads', userId, uploadId, req.file.originalname),
-      folderPath:   `${userId}/${uploadId}`,
-      contentType:  req.file.mimetype === 'application/pdf' ? 'pdf' : 'unknown',
-      status:       'uploaded',
-      title:        req.file.originalname.replace(/\.[^/.]+$/, ''),
+      folderPath: `${userId}/${uploadId}`,
+      contentType: req.file.mimetype === 'application/pdf' ? 'pdf' : 'unknown',
+      status: 'uploaded',
+      title: req.file.originalname.replace(/\.[^/.]+$/, ''),
       currentContent: { transcribedText: '', summary: '', studyGuide: '', flashCards: [], quiz: [] },
     });
 
     const saved = await newFile.save();
-    //const saved = await UploadedFile.findById(req.params.id);
     await User.findByIdAndUpdate(userId, { $push: { fileUploads: saved._id } });
-
-    /** >>> FUTURE INTEGRATIONS GO HERE: 
-     * trigger OCR/AI pipeline:
-     *  - const { spawn } = require('child_process');
-     *  - spawn('python3', [path.join(__dirname, '..', 'integrations', 'pipeline.py'), saved._id.toString(), req.file.path]);
-    */
 
     res.status(201).json(saved);
   } catch (err) {
@@ -82,8 +186,8 @@ router.get('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const file = await UploadedFile.findById(req.params.id);
-    if (!file) return res.status(404).json({ msg: 'File not found' });
-    if (file.userID.toString() !== req.user.id) return res.status(403).json({ msg: 'Access denied' });
+    const access = requireOwnedFile(file, req.user.id);
+    if (access) return res.status(access.status).json({ msg: access.err });
     res.json(file);
   } catch (err) {
     console.error('Get file error:', err.message);
@@ -99,11 +203,12 @@ router.get('/:id', auth, async (req, res) => {
 router.patch('/:id/meta', auth, async (req, res) => {
   try {
     const file = await UploadedFile.findById(req.params.id);
-    if (!file) return res.status(404).json({ msg: 'File not found' });
-    if (file.userID.toString() !== req.user.id) return res.status(403).json({ msg: 'Access denied' });
+    const access = requireOwnedFile(file, req.user.id);
+    if (access) return res.status(access.status).json({ msg: access.err });
+
     const { title, tags, isFavorite } = req.body;
-    if (title      !== undefined) file.title      = title;
-    if (tags       !== undefined) file.tags       = tags;
+    if (title !== undefined) file.title = title;
+    if (tags !== undefined) file.tags = tags;
     if (isFavorite !== undefined) file.isFavorite = isFavorite;
     await file.save();
     res.json(file);
@@ -113,29 +218,6 @@ router.patch('/:id/meta', auth, async (req, res) => {
   }
 });
 
-// ____________________________________________________
-// TO HANDLE REAL-TIME USER EDIT:
-// shared helper fx;
-// appends an edit record, updates currentContent field
-// ____________________________________________________
-async function applyTextEdit(fileId, userId, field, historyKey, { previousText, newText, selectionStart, selectionEnd }) {
-  const file = await UploadedFile.findById(fileId);
-  if (!file) return { err: 'File not found', status: 404 };
-  if (file.userID.toString() !== userId) return { err: 'Access denied', status: 403 };
-
-  file.editHistory[historyKey].push({
-    previousText: previousText ?? (file.currentContent[field] || ''),
-    newText,
-    selectionStart: selectionStart ?? null,
-    selectionEnd:   selectionEnd   ?? null,
-    editedAt: new Date(),
-    editedBy: userId,
-  });
-  file.currentContent[field]       = newText;
-  file.currentContent.lastUpdated  = new Date();
-  await file.save();
-  return { file };
-}
 // ____________________________________________________
 // ADD TRANSCRIPTION
 // @route   PUT /api/files/:id/edit/transcription
@@ -162,7 +244,6 @@ router.put('/:id/edit/summary', auth, async (req, res) => {
   res.json({ currentContent: file.currentContent, editCount: file.editHistory.summaryEdits.length });
 });
 
-// -------------------- STUDY AIDS --------------------
 // ____________________________________________________
 // ADD STUDY GUIDE
 // @route   PUT /api/files/:id/edit/studyguide
@@ -177,7 +258,33 @@ router.put('/:id/edit/studyguide', auth, async (req, res) => {
 });
 
 // ____________________________________________________
-// ADD FLASHCARDS
+// REPLACE FLASHCARDS ARRAY
+// @route   PUT /api/files/:id/edit/flashcards
+// ____________________________________________________
+router.put('/:id/edit/flashcards', auth, async (req, res) => {
+  if (!Array.isArray(req.body.cards)) {
+    return res.status(400).json({ msg: 'cards must be an array' });
+  }
+
+  try {
+    const file = await UploadedFile.findById(req.params.id);
+    const access = requireOwnedFile(file, req.user.id);
+    if (access) return res.status(access.status).json({ msg: access.err });
+
+    const nextCards = normalizeFlashCards(req.body.cards);
+    file.currentContent.flashCards = nextCards;
+    file.currentContent.lastUpdated = new Date();
+    await file.save();
+
+    res.json({ currentContent: file.currentContent });
+  } catch (err) {
+    console.error('Edit flashcards error:', err.message);
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+// ____________________________________________________
+// ADD FLASHCARD
 // @route   PUT /api/files/:id/edit/flashcard
 // ____________________________________________________
 router.put('/:id/edit/flashcard', auth, async (req, res) => {
@@ -185,16 +292,30 @@ router.put('/:id/edit/flashcard', auth, async (req, res) => {
   if (!cardId || !field || newText === undefined) {
     return res.status(400).json({ msg: 'cardId, field, and newText are required' });
   }
-  try {
-    const file = await File.findById(req.params.id);
-    if (!file) return res.status(404).json({ msg: 'File not found' });
-    if (file.userID.toString() !== req.user.id) return res.status(403).json({ msg: 'Access denied' });
 
-    file.editHistory.flashCardEdits.push({ cardId, field, previousText: previousText ?? '', newText, editedAt: new Date(), editedBy: req.user.id });
-    const card = file.currentContent.flashCards.find(c => c.cardId === cardId);
+  if (!['question', 'answer'].includes(field)) {
+    return res.status(400).json({ msg: 'field must be question or answer' });
+  }
+
+  try {
+    const file = await UploadedFile.findById(req.params.id);
+    const access = requireOwnedFile(file, req.user.id);
+    if (access) return res.status(access.status).json({ msg: access.err });
+
+    file.editHistory.flashCardEdits.push({
+      cardId,
+      field,
+      previousText: previousText ?? '',
+      newText,
+      editedAt: new Date(),
+      editedBy: req.user.id,
+    });
+
+    const card = file.currentContent.flashCards.find((c) => c.cardId === cardId);
     if (card) card[field] = newText;
     file.currentContent.lastUpdated = new Date();
     await file.save();
+
     res.json({ currentContent: file.currentContent });
   } catch (err) {
     console.error('Edit flashcard error:', err.message);
@@ -212,12 +333,12 @@ router.put('/:id/edit/quiz', auth, async (req, res) => {
     return res.status(400).json({ msg: 'itemId, field, and newText are required' });
   }
   try {
-    const file = await File.findById(req.params.id);
-    if (!file) return res.status(404).json({ msg: 'File not found' });
-    if (file.userID.toString() !== req.user.id) return res.status(403).json({ msg: 'Access denied' });
+    const file = await UploadedFile.findById(req.params.id);
+    const access = requireOwnedFile(file, req.user.id);
+    if (access) return res.status(access.status).json({ msg: access.err });
 
     file.editHistory.quizEdits.push({ itemId, field, previousText: previousText ?? '', newText, editedAt: new Date(), editedBy: req.user.id });
-    const item = file.currentContent.quiz.find(q => q.itemId === itemId);
+    const item = file.currentContent.quiz.find((q) => q.itemId === itemId);
     if (item) item[field] = newText;
     file.currentContent.lastUpdated = new Date();
     await file.save();
@@ -230,13 +351,13 @@ router.put('/:id/edit/quiz', auth, async (req, res) => {
 
 // ____________________________________________________
 // GET FULL EDIT HISTORY (APPENDED-ONLY)
-// @route   GET /api/files/:id/edits 
+// @route   GET /api/files/:id/edits
 // ____________________________________________________
 router.get('/:id/edits', auth, async (req, res) => {
   try {
     const file = await UploadedFile.findById(req.params.id).select('editHistory userID');
-    if (!file) return res.status(404).json({ msg: 'File not found' });
-    if (file.userID.toString() !== req.user.id) return res.status(403).json({ msg: 'Access denied' });
+    const access = requireOwnedFile(file, req.user.id);
+    if (access) return res.status(access.status).json({ msg: access.err });
     res.json(file.editHistory);
   } catch (err) {
     console.error('Get edits error:', err.message);
@@ -244,43 +365,45 @@ router.get('/:id/edits', auth, async (req, res) => {
   }
 });
 
-// ____________________________________________________
-// LOG OF STUDY AID REGENERATION REQUEST HISTORY:
-// Left room for AI worker to grab it, once integrated.
-// @route   POST /api/files/:id/regenerate
-// ____________________________________________________
-router.post('/:id/regenerate', auth, async (req, res) => {
-  const { contentType } = req.body;
-  const valid = ['summary', 'studyGuide', 'flashCards', 'quiz', 'all'];
-  if (!contentType || !valid.includes(contentType)) {
-    return res.status(400).json({ msg: `contentType must be one of: ${valid.join(', ')}` });
-  }
+async function handleGenerateRequest(req, res) {
+  const { contentType, sourceText } = req.body || {};
+
   try {
     const file = await UploadedFile.findById(req.params.id);
-    if (!file) return res.status(404).json({ msg: 'File not found' });
-    if (file.userID.toString() !== req.user.id) return res.status(403).json({ msg: 'Access denied' });
+    const access = requireOwnedFile(file, req.user.id);
+    if (access) return res.status(access.status).json({ msg: access.err });
 
-    const entry = {
-      requestedAt: new Date(),
-      requestedBy: req.user.id,
-      contentType,
-      basedOnText: file.currentContent.transcribedText || file.extractionData?.rawText || '',
-      status: 'pending',
-    };
-    file.regenerationLog.push(entry);
-    await file.save();
+    const result = await generateRequestedContent(file, req.user.id, contentType, sourceText);
+    if (result.err) return res.status(result.status).json({ msg: result.err });
 
-    /**
-     * FOR FUTURE AI WORKER INTEGRATION: 
-     * dispatch AI job here:
-     *  - await aiQueue.add({ fileId: file._id, contentType, text: entry.basedOnText });
-     */
-
-    res.json({ msg: 'Regeneration queued. AI integration pending.', entry, currentContent: file.currentContent });
+    res.json({
+      msg: 'AI content generated successfully.',
+      entry: result.entry,
+      currentContent: result.file.currentContent,
+      aiGeneratedContent: result.file.aiGeneratedContent,
+    });
   } catch (err) {
-    console.error('Regenerate error:', err.message);
+    console.error('Generate AI error:', err.message);
     res.status(500).json({ msg: 'Server error' });
   }
+}
+
+// ____________________________________________________
+// MANUAL AI GENERATION
+// @route   POST /api/files/:id/generate
+// ____________________________________________________
+router.post('/:id/generate', auth, handleGenerateRequest);
+
+// ____________________________________________________
+// REGENERATE ALIAS
+// @route   POST /api/files/:id/regenerate
+// ____________________________________________________
+router.post('/:id/regenerate', auth, (req, res) => {
+  req.body = {
+    ...(req.body || {}),
+    contentType: req.body?.contentType || 'all',
+  };
+  return handleGenerateRequest(req, res);
 });
 
 // ____________________________________________________
@@ -290,8 +413,8 @@ router.post('/:id/regenerate', auth, async (req, res) => {
 router.delete('/:id', auth, async (req, res) => {
   try {
     const file = await UploadedFile.findById(req.params.id);
-    if (!file) return res.status(404).json({ msg: 'File not found' });
-    if (file.userID.toString() !== req.user.id) return res.status(403).json({ msg: 'Access denied' });
+    const access = requireOwnedFile(file, req.user.id);
+    if (access) return res.status(access.status).json({ msg: access.err });
 
     const folder = path.join(__dirname, '..', 'uploads', file.userID.toString(), file.uploadId);
     if (fs.existsSync(folder)) fs.rmSync(folder, { recursive: true, force: true });
@@ -305,9 +428,4 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
-// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-// FUTURE ADDITIONS: 
-// PUT /api/files/:id/process  — manually launch OCR and AI features??
-// GET /api/files/:id/status   — pipeline progress status updates polling??
-// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 module.exports = router;

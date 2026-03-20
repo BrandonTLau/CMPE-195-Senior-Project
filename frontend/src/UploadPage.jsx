@@ -186,20 +186,34 @@ const UploadPage = ({ onBack, onProcess }) => {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     const form  = new FormData();
     form.append('file', fileObj.file);
+    const headers = token
+  ? {
+      'x-auth-token': token,
+      Authorization: `Bearer ${token}`,
+    }
+  : {};
+
     const res = await fetch('/api/files/upload', {
       method: 'POST',
-      headers: token ? { 'x-auth-token': token } : {},
+      headers,
       body: form,
     });
-    let data;
-    try { data = await res.json(); } catch {
-      throw new Error(`Server returned status ${res.status} with non-JSON response`);
-    }
+
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (e) {}
+
     if (!res.ok) {
       const msg = data?.msg || data?.message || data?.error || `Server error ${res.status}`;
       console.error('Upload error:', res.status, data);
       throw new Error(msg);
     }
+
+    if (!data || !data._id) {
+      throw new Error('Upload endpoint did not return a file id (_id).');
+    }
+
     return data;
   };
 
@@ -232,16 +246,28 @@ const UploadPage = ({ onBack, onProcess }) => {
         try {
           const ocrData = await runOcr(first.file);
           console.log('OCR response:', ocrData);
-          sessionStorage.setItem('lastOcrOverlayUrl',  ocrData?.overlay_url || '');
-          sessionStorage.setItem('lastOcrMergedText',   ocrData?.merged_text || ocrData?.text || '');
+
+          sessionStorage.setItem('lastOcrOverlayUrl', ocrData?.overlay_url || '');
+          sessionStorage.setItem('lastOcrMergedText', ocrData?.merged_text || ocrData?.text || '');
+          sessionStorage.setItem('lastOcrBlocks', JSON.stringify(ocrData?.blocks || []));
+          sessionStorage.setItem('lastOcrImageUrl', ocrData?.image_url || '');
+          sessionStorage.setItem('lastOcrImageSize', JSON.stringify(ocrData?.image_size || [0, 0]));
+
           const avgConfidence = ocrData?.items?.length
-  ? Math.round((ocrData.items.reduce((sum, item) => sum + (item.score || 0), 0) / ocrData.items.length) * 100)
-  : null;
-sessionStorage.setItem('lastOcrConfidence', avgConfidence ?? '');
+            ? Math.round(
+                (ocrData.items.reduce((sum, item) => sum + (item.score || 0), 0) / ocrData.items.length) * 100
+              )
+            : null;
+
+          sessionStorage.setItem('lastOcrConfidence', avgConfidence ?? '');
         } catch (ocrErr) {
           console.warn('OCR service unavailable, skipping:', ocrErr.message);
           sessionStorage.removeItem('lastOcrOverlayUrl');
           sessionStorage.removeItem('lastOcrMergedText');
+          sessionStorage.removeItem('lastOcrBlocks');
+          sessionStorage.removeItem('lastOcrImageUrl');
+          sessionStorage.removeItem('lastOcrImageSize');
+          sessionStorage.removeItem('lastOcrConfidence');
         }
         setStep('ocr', 'done');
 
@@ -259,6 +285,10 @@ sessionStorage.setItem('lastOcrConfidence', avgConfidence ?? '');
         setStep('results', 'done');
         sessionStorage.removeItem('lastOcrOverlayUrl');
         sessionStorage.removeItem('lastOcrMergedText');
+        sessionStorage.removeItem('lastOcrBlocks');
+        sessionStorage.removeItem('lastOcrImageUrl');
+        sessionStorage.removeItem('lastOcrImageSize');
+        sessionStorage.removeItem('lastOcrConfidence');
       }
 
       // Brief pause so user sees all steps done

@@ -1,6 +1,5 @@
 import { createPortal } from "react-dom";
 import React, { useState, useRef, useEffect } from 'react';
-import FlashcardsPage from './FlashcardsPage';
 
 //Design tokens
 const T = {
@@ -60,15 +59,6 @@ styleEl.textContent = `
   .ns-scrollbar::-webkit-scrollbar       { width:4px; height:4px; }
   .ns-scrollbar::-webkit-scrollbar-track { background:transparent; }
   .ns-scrollbar::-webkit-scrollbar-thumb { background:${T.border}; border-radius:99px; }
-  .ns-study-btn {
-    width:100%; padding:14px 20px;
-    background:linear-gradient(135deg,#4F46E5,#7C3AED);
-    color:#fff; border:none; border-radius:12px; font-size:15px; font-weight:600;
-    font-family:${T.font}; cursor:pointer; display:flex; align-items:center;
-    justify-content:center; gap:8px; box-shadow:0 4px 24px rgba(79,70,229,.4);
-    transition:transform .15s,box-shadow .15s;
-  }
-  .ns-study-btn:hover { transform:translateY(-2px); box-shadow:0 8px 32px rgba(79,70,229,.5); }
   .ns-tag {
     display:inline-block; font-size:9px; font-weight:700; letter-spacing:1.5px;
     text-transform:uppercase; padding:2px 8px; border-radius:99px;
@@ -206,19 +196,37 @@ const Icon = ({ d, size = 18, color = 'currentColor', fill = 'none' }) => (
   </svg>
 );
 
-//mock data
-const INITIAL_CARDS = [
-  { id: 1, question: 'What is machine learning?',                         answer: 'A subset of AI that enables systems to improve through experience.',     learned: false },
-  { id: 2, question: 'What are the three main types of machine learning?', answer: 'Supervised Learning, Unsupervised Learning, and Reinforcement Learning.', learned: false },
-  { id: 3, question: 'What is supervised learning?',                      answer: 'Training ML models with labeled data.',                                  learned: false },
-];
+function makeCardId() {
+  return `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
-function useCards() {
-  const [cards, setCards] = useState(INITIAL_CARDS.map(c => ({ ...c })));
-  const nextId = useRef(INITIAL_CARDS.length + 1);
-  const addCard       = (q, a) => setCards(p => [...p, { id: nextId.current++, question: q, answer: a, learned: false }]);
-  const toggleLearned = (id)   => setCards(p => p.map(c => c.id === id ? { ...c, learned: !c.learned } : c));
-  return { cards, addCard, toggleLearned };
+function toLearnedMap(cards = []) {
+  return Object.fromEntries(
+    (Array.isArray(cards) ? cards : []).map((card) => [String(card.cardId || card.id), Boolean(card.learned)])
+  );
+}
+
+function normalizeFlashcards(cards = [], learnedMap = {}) {
+  return (Array.isArray(cards) ? cards : [])
+    .map((card, index) => {
+      const cardId = String(card?.cardId || card?.id || `card-${index + 1}`);
+      return {
+        id: cardId,
+        cardId,
+        question: String(card?.question || '').trim(),
+        answer: String(card?.answer || '').trim(),
+        learned: Boolean(card?.learned ?? learnedMap[cardId]),
+      };
+    })
+    .filter((card) => card.question || card.answer);
+}
+
+function serializeFlashcards(cards = []) {
+  return normalizeFlashcards(cards).map(({ cardId, question, answer }) => ({
+    cardId,
+    question,
+    answer,
+  }));
 }
 
 function CardModal({ onSave, onClose }) {
@@ -423,28 +431,223 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
   );
 }
 
+function combineBlockText(blocks) {
+  return (blocks || [])
+    .map((block) => (block.text || "").trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function LinkedBlocksWorkspace({
+  imageUrl,
+  imageSize,
+  blocks,
+  activeBlockId,
+  setActiveBlockId,
+  onChangeBlock,
+  onSelectBlock,
+  blockEditorRefs,
+}) {
+  const width = imageSize?.[0] || 1;
+  const height = imageSize?.[1] || 1;
+
+  if (!imageUrl || !blocks.length) {
+    return (
+      <div
+        style={{
+          background: T.surfaceHi,
+          border: `1px solid ${T.border}`,
+          borderRadius: 14,
+          padding: 24,
+          color: T.muted,
+          textAlign: "center",
+        }}
+      >
+        No OCR block data available yet. Upload an image and run OCR first.
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1.1fr 1fr",
+        gap: 20,
+        alignItems: "start",
+      }}
+    >
+      <div
+        style={{
+          background: T.surfaceHi,
+          border: `1px solid ${T.border}`,
+          borderRadius: 14,
+          padding: 14,
+        }}
+      >
+        <div style={{ position: "relative", width: "100%" }}>
+          <img
+            src={imageUrl}
+            alt="OCR source"
+            style={{
+              width: "100%",
+              height: "auto",
+              display: "block",
+              borderRadius: 10,
+            }}
+          />
+          <div style={{ position: "absolute", inset: 0 }}>
+            {blocks.map((block) => {
+              const [x1, y1, x2, y2] = block.box || [0, 0, 0, 0];
+              const isActive = activeBlockId === block.id;
+
+              return (
+                <div
+                  key={block.id}
+                  onMouseEnter={() => setActiveBlockId(block.id)}
+                  onMouseLeave={() => setActiveBlockId(null)}
+                  onClick={() => onSelectBlock(block.id)}
+                  title={block.text}
+                  style={{
+                    position: "absolute",
+                    left: `${(x1 / width) * 100}%`,
+                    top: `${(y1 / height) * 100}%`,
+                    width: `${((x2 - x1) / width) * 100}%`,
+                    height: `${((y2 - y1) / height) * 100}%`,
+                    border: isActive
+                      ? `2px solid ${T.amber}`
+                      : "2px solid rgba(52,211,153,0.95)",
+                    background: isActive
+                      ? "rgba(245,166,35,0.18)"
+                      : "rgba(52,211,153,0.07)",
+                    borderRadius: 6,
+                    boxSizing: "border-box",
+                    cursor: "pointer",
+                    transition: "all .12s ease",
+                  }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div
+        className="ns-scrollbar"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          maxHeight: 720,
+          overflowY: "auto",
+          paddingRight: 4,
+        }}
+      >
+        {blocks.map((block, idx) => {
+          const isActive = activeBlockId === block.id;
+
+          return (
+            <div
+              key={block.id}
+              ref={(el) => {
+                if (el) blockEditorRefs.current[block.id] = el;
+              }}
+              onMouseEnter={() => setActiveBlockId(block.id)}
+              onMouseLeave={() => setActiveBlockId(null)}
+              onClick={() => onSelectBlock(block.id)}
+              style={{
+                background: isActive ? T.amberDim : T.surfaceHi,
+                border: `1px solid ${
+                  isActive ? "rgba(245,166,35,.28)" : T.border
+                }`,
+                borderRadius: 12,
+                padding: 14,
+                transition: "all .12s ease",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 8,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    color: isActive ? T.amber : T.muted,
+                  }}
+                >
+                  Block {idx + 1}
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: T.muted,
+                  }}
+                >
+                  {(block.score ?? 0).toFixed(2)}
+                </span>
+              </div>
+
+              <textarea
+                value={block.text || ""}
+                onChange={(e) => onChangeBlock(block.id, e.target.value)}
+                style={{
+                  width: "100%",
+                  minHeight: 92,
+                  resize: "vertical",
+                  boxSizing: "border-box",
+                  background: "rgba(255,255,255,0.02)",
+                  border: `1px solid ${isActive ? "rgba(245,166,35,.28)" : T.border}`,
+                  borderRadius: 10,
+                  padding: "12px 14px",
+                  color: T.cream,
+                  fontFamily: T.font,
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                  outline: "none",
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const TABS = [
   { id:'scan_edit',  label:'Scan & Edit',  icon:'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
   { id:'summary',    label:'AI Summary',   icon:'M13 10V3L4 14h7v7l9-11h-7z' },
   { id:'flashcards', label:'Flashcards',   icon:'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
 ];
 
-const ResultsPage = ({ onBack }) => {
-  const [page,             setPage]             = useState('results');
+const ResultsPage = ({ onBack, noteId }) => {
   const [activeTab,        setActiveTab]        = useState('scan_edit');
   const [isSaved,          setIsSaved]          = useState(false);
   const [showAdd,          setShowAdd]          = useState(false);
   const [editorFullscreen, setEditorFullscreen] = useState(false);
-  const [scanEditView,     setScanEditView]     = useState('both');
+  const [scanEditView,     setScanEditView]     = useState('image');
   const [title,            setTitle]            = useState('');
   const [showExportMenu,   setShowExportMenu]   = useState(false);
   const [confidence,       setConfidence]       = useState(null);
+  const [cards,            setCards]            = useState([]);
+  const [summaryBusy,      setSummaryBusy]      = useState(false);
+  const [flashcardsBusy,   setFlashcardsBusy]   = useState(false);
+  const [allBusy,          setAllBusy]          = useState(false);
+  const [summaryError,     setSummaryError]     = useState('');
+  const [flashcardsError,  setFlashcardsError]  = useState('');
   const exportMenuRef = useRef(null);
-  const { cards, addCard } = useCards();
+  const cardsRef = useRef([]);
 
   // backend wiring
-  const fileId  = sessionStorage.getItem('lastUploadId');
-  const token   = localStorage.getItem('token') || sessionStorage.getItem('token');
+  const fileId = noteId || sessionStorage.getItem('lastUploadId');
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
   const headers = token
     ? { 'Content-Type': 'application/json', 'x-auth-token': token }
     : { 'Content-Type': 'application/json' };
@@ -454,30 +657,92 @@ const ResultsPage = ({ onBack }) => {
   const [aiSummary,           setAiSummary]           = useState('');
   const [studyGuideText,      setStudyGuideText]      = useState('');
   const [transcriptionEdited, setTranscriptionEdited] = useState(false);
-  const [summaryEdited,       setSummaryEdited]       = useState(false);
   const [overlayUrl,          setOverlayUrl]          = useState(sessionStorage.getItem('lastOcrOverlayUrl') || '');
+
+  const [ocrBlocks, setOcrBlocks] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('lastOcrBlocks') || '[]');
+    } catch {
+      return [];
+    }
+  });
+
+  const [ocrImageUrl, setOcrImageUrl] = useState(
+    sessionStorage.getItem('lastOcrImageUrl') || ''
+  );
+
+  const [ocrImageSize, setOcrImageSize] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('lastOcrImageSize') || '[0,0]');
+    } catch {
+      return [0, 0];
+    }
+  });
+
+  const [activeBlockId, setActiveBlockId] = useState(null);
+  const blockEditorRefs = useRef({});
+
+  useEffect(() => {
+    cardsRef.current = cards;
+  }, [cards]);
 
   useEffect(() => {
     if (!fileId) return;
+
     fetch(`/api/files/${fileId}`, { headers })
-      .then(r => r.json())
-      .then(data => {
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.msg || 'Failed to load file data.');
+        return data;
+      })
+      .then((data) => {
         setFileData(data);
         if (data.title) setTitle(data.title);
         else if (data.originalName) setTitle(data.originalName.replace(/\.[^/.]+$/, ''));
-        if (data.confidence)                  setConfidence(data.confidence);
-        if (data.currentContent?.transcribedText) setRecognizedText(data.currentContent.transcribedText);
-        if (data.currentContent?.summary)         setAiSummary(data.currentContent.summary);
-        if (data.currentContent?.studyGuide)      setStudyGuideText(data.currentContent.studyGuide);
-        const ssOverlay = sessionStorage.getItem('lastOcrOverlayUrl');
-        if (ssOverlay) setOverlayUrl(ssOverlay);
-        const ssMerged = sessionStorage.getItem('lastOcrMergedText');
-        if (ssMerged) setRecognizedText(ssMerged);
-        const ssConfidence = sessionStorage.getItem('lastOcrConfidence');
-        if (ssConfidence) setConfidence(Math.round(parseFloat(ssConfidence)));
+        if (data.confidence) setConfidence(data.confidence);
+
+        const storedMergedText = !noteId ? sessionStorage.getItem('lastOcrMergedText') : '';
+        const resolvedText = storedMergedText || data.currentContent?.transcribedText || data.extractionData?.rawText || '';
+        const resolvedSummary = data.currentContent?.summary || data.aiGeneratedContent?.summary || '';
+        const resolvedCards = data.currentContent?.flashCards || data.aiGeneratedContent?.flashCards || [];
+        const learnedMap = toLearnedMap(cardsRef.current);
+
+        setRecognizedText(resolvedText);
+        setAiSummary(resolvedSummary);
+        setStudyGuideText(data.currentContent?.studyGuide || '');
+        setCards(normalizeFlashcards(resolvedCards, learnedMap));
+
+        if (!noteId) {
+          const ssOverlay = sessionStorage.getItem('lastOcrOverlayUrl');
+          if (ssOverlay) setOverlayUrl(ssOverlay);
+
+          const ssConfidence = sessionStorage.getItem('lastOcrConfidence');
+          if (ssConfidence) setConfidence(Math.round(parseFloat(ssConfidence)));
+
+          const ssBlocksRaw = sessionStorage.getItem('lastOcrBlocks');
+          if (ssBlocksRaw) {
+            try {
+              const parsedBlocks = JSON.parse(ssBlocksRaw);
+              if (Array.isArray(parsedBlocks)) setOcrBlocks(parsedBlocks);
+            } catch {}
+          }
+
+          const ssImageUrl = sessionStorage.getItem('lastOcrImageUrl');
+          if (ssImageUrl) setOcrImageUrl(ssImageUrl);
+
+          const ssImageSizeRaw = sessionStorage.getItem('lastOcrImageSize');
+          if (ssImageSizeRaw) {
+            try {
+              const parsedSize = JSON.parse(ssImageSizeRaw);
+              if (Array.isArray(parsedSize) && parsedSize.length === 2) {
+                setOcrImageSize(parsedSize);
+              }
+            } catch {}
+          }
+        }
       })
-      .catch(err => console.error('Failed to load file data:', err));
-  }, [fileId]);
+      .catch((err) => console.error('Failed to load file data:', err));
+  }, [fileId, noteId]);
 
   // Close export menu when clicking outside
   useEffect(() => {
@@ -492,18 +757,150 @@ const ResultsPage = ({ onBack }) => {
   const saveEdit = async (endpoint, payload, onSuccess, setEdited) => {
     if (!fileId) return;
     try {
-      const res  = await fetch(`/api/files/${fileId}/${endpoint}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
+      const res = await fetch(`/api/files/${fileId}/${endpoint}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
       const data = await res.json();
-      if (res.ok && data.currentContent) { onSuccess(data.currentContent); if (setEdited) setEdited(true); }
-    } catch (err) { console.error('Save edit error:', err); }
+      if (!res.ok) throw new Error(data?.msg || 'Failed to save changes.');
+      if (data.currentContent) {
+        onSuccess(data.currentContent);
+        if (setEdited) setEdited(true);
+      }
+    } catch (err) {
+      console.error('Save edit error:', err);
+    }
   };
 
-  const requestRegenerate = async (contentType) => {
+  const persistFlashcards = async (nextCards) => {
+    if (!fileId) return nextCards;
+
+    const res = await fetch(`/api/files/${fileId}/edit/flashcards`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ cards: serializeFlashcards(nextCards) }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.msg || 'Failed to save flashcards.');
+
+    const learnedMap = toLearnedMap(nextCards);
+    const normalized = normalizeFlashcards(data.currentContent?.flashCards || [], learnedMap);
+    cardsRef.current = normalized;
+    setCards(normalized);
+    return normalized;
+  };
+
+  const updateCards = async (updater, { persist = false } = {}) => {
+    const prev = cardsRef.current;
+    const rawNext = typeof updater === 'function' ? updater(prev) : updater;
+    const learnedMap = toLearnedMap(rawNext);
+    const next = normalizeFlashcards(rawNext, learnedMap);
+
+    cardsRef.current = next;
+    setCards(next);
+    setFlashcardsError('');
+
+    if (persist) {
+      try {
+        return await persistFlashcards(next);
+      } catch (err) {
+        console.error('Save flashcards error:', err);
+        setFlashcardsError(err.message);
+      }
+    }
+
+    return next;
+  };
+
+  const generateAiContent = async (contentType) => {
     if (!fileId) return;
-    await fetch(`/api/files/${fileId}/regenerate`, { method: 'POST', headers, body: JSON.stringify({ contentType }) });
+
+    if (!recognizedText.trim()) {
+      const message = 'No OCR text is available yet. Save or generate text first.';
+      if (contentType === 'summary' || contentType === 'all') setSummaryError(message);
+      if (contentType === 'flashCards' || contentType === 'all') setFlashcardsError(message);
+      return;
+    }
+
+    if (contentType === 'summary') setSummaryBusy(true);
+    if (contentType === 'flashCards') setFlashcardsBusy(true);
+    if (contentType === 'all') setAllBusy(true);
+    setSummaryError('');
+    setFlashcardsError('');
+
+    try {
+      const res = await fetch(`/api/files/${fileId}/generate`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          contentType,
+          sourceText: recognizedText,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.msg || 'AI generation failed.');
+
+      const learnedMap = toLearnedMap(cardsRef.current);
+      if (typeof data.currentContent?.summary === 'string') {
+        setAiSummary(data.currentContent.summary);
+      }
+      if (Array.isArray(data.currentContent?.flashCards)) {
+        const normalized = normalizeFlashcards(data.currentContent.flashCards, learnedMap);
+        cardsRef.current = normalized;
+        setCards(normalized);
+      }
+      setFileData((prev) => prev ? ({ ...prev, currentContent: data.currentContent, aiGeneratedContent: data.aiGeneratedContent }) : prev);
+    } catch (err) {
+      console.error('Generate AI content error:', err);
+      if (contentType === 'summary' || contentType === 'all') setSummaryError(err.message);
+      if (contentType === 'flashCards' || contentType === 'all') setFlashcardsError(err.message);
+    } finally {
+      if (contentType === 'summary') setSummaryBusy(false);
+      if (contentType === 'flashCards') setFlashcardsBusy(false);
+      if (contentType === 'all') setAllBusy(false);
+    }
   };
 
   // Export handlers
+  const handleBlockChange = (blockId, newText) => {
+    setOcrBlocks((prev) => {
+      const next = prev.map((block) =>
+        block.id === blockId ? { ...block, text: newText } : block
+      );
+      const combined = combineBlockText(next);
+      setRecognizedText(combined);
+      sessionStorage.setItem("lastOcrBlocks", JSON.stringify(next));
+      sessionStorage.setItem("lastOcrMergedText", combined);
+      return next;
+    });
+    setTranscriptionEdited(true);
+  };
+
+  const handleSaveBlocks = () => {
+    const newText = combineBlockText(ocrBlocks);
+
+    saveEdit(
+      "edit/transcription",
+      { previousText: recognizedText, newText },
+      (c) => {
+        setRecognizedText(c.transcribedText || newText);
+        setTranscriptionEdited(true);
+      },
+      setTranscriptionEdited
+    );
+  };
+
+  const focusBlockEditor = (blockId) => {
+    setActiveBlockId(blockId);
+
+    const el = blockEditorRefs.current[blockId];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      const textarea = el.querySelector('textarea');
+      if (textarea) {
+        textarea.focus();
+      }
+    }
+  };
+
   const handleExportCopy = async () => {
     await navigator.clipboard.writeText(recognizedText);
     setShowExportMenu(false);
@@ -525,9 +922,7 @@ const ResultsPage = ({ onBack }) => {
   };
 
   const learnedCount = cards.filter(c => c.learned).length;
-  const pct          = cards.length ? Math.round((learnedCount / cards.length) * 100) : 0;
-
-  if (page === 'flashcards') return <FlashcardsPage onBack={() => setPage('results')} />;
+  const pct = cards.length ? Math.round((learnedCount / cards.length) * 100) : 0;
 
   return (
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream }}>
@@ -625,7 +1020,7 @@ const ResultsPage = ({ onBack }) => {
           {/* Scan & Edit */}
           {activeTab === 'scan_edit' && (
             <div key="scan_edit" className="ns-tab-panel">
-              <div style={{ display:'flex', gap:6, marginBottom:16 }}>
+              <div style={{ display:'flex', gap:6, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
                 {[['both','Both'],['image','Scan'],['editor','Editor']].map(([val, label]) => (
                   <button key={val} onClick={() => setScanEditView(val)}
                     style={{ padding:'5px 14px', borderRadius:8, fontSize:12, fontWeight:600, fontFamily:T.font, cursor:'pointer', border:`1px solid ${scanEditView===val ? T.amber : T.border}`, background:scanEditView===val ? T.amberDim : 'transparent', color:scanEditView===val ? T.amber : T.muted, transition:'all .15s' }}>
@@ -633,31 +1028,63 @@ const ResultsPage = ({ onBack }) => {
                   </button>
                 ))}
                 <div style={{ flex:1 }} />
+
+                <button className="ns-btn-amber" onClick={handleSaveBlocks}>
+                  <Icon d="M5 13l4 4L19 7" size={14} color="#0E1117" />
+                  Save OCR Text
+                </button>
+
                 {transcriptionEdited && (
-                  <button className="ns-regen" onClick={() => requestRegenerate('all')}>
+                  <button className="ns-regen" onClick={() => generateAiContent('all')} disabled={allBusy}>
                     <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} />
-                    Regenerate all
+                    {allBusy ? 'Generating…' : 'Regenerate all'}
                   </button>
                 )}
               </div>
 
               <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
-                {(scanEditView === 'both' || scanEditView === 'image') && (
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 10px', fontFamily:T.font }}>Original Scan</p>
-                    <div style={{ background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:14, overflow:'hidden', minHeight:400, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:12, padding: overlayUrl ? 0 : 24 }}>
-                      {overlayUrl ? (
-                        <img src={overlayUrl} alt="OCR overlay" style={{ width:'100%', height:'auto', display:'block' }} />
-                      ) : (
-                        <>
-                          <div style={{ width:80, height:80, borderRadius:20, background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                            <Icon d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" size={36} color={T.amber} />
-                          </div>
-                          <p style={{ fontSize:14, fontWeight:600, color:T.cream, margin:0 }}>{fileData?.originalName || 'lecture_notes_01.jpg'}</p>
-                          <p style={{ fontSize:12, color:T.muted, margin:0, textAlign:'center' }}>Scanned image will appear here once<br/>image serving is wired up.</p>
-                        </>
-                      )}
-                    </div>
+                {(scanEditView === 'both' || scanEditView === 'image') ? (
+                  <LinkedBlocksWorkspace
+                    imageUrl={ocrImageUrl || overlayUrl}
+                    imageSize={ocrImageSize}
+                    blocks={ocrBlocks}
+                    activeBlockId={activeBlockId}
+                    setActiveBlockId={setActiveBlockId}
+                    onChangeBlock={handleBlockChange}
+                    onSelectBlock={focusBlockEditor}
+                    blockEditorRefs={blockEditorRefs}
+                  />
+                ) : (
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: 1.2,
+                        textTransform: 'uppercase',
+                        color: T.muted,
+                        margin: '0 0 10px',
+                        fontFamily: T.font,
+                      }}
+                    >
+                      Recognized Text
+                    </p>
+                    <RichTextEditor
+                      initialText={recognizedText}
+                      isFullscreen={editorFullscreen}
+                      onToggleFullscreen={() => setEditorFullscreen((f) => !f)}
+                      onSave={(payload) =>
+                        saveEdit(
+                          'edit/transcription',
+                          payload,
+                          (c) => {
+                            setRecognizedText(c.transcribedText);
+                            setTranscriptionEdited(true);
+                          },
+                          setTranscriptionEdited
+                        )
+                      }
+                    />
                   </div>
                 )}
 
@@ -688,13 +1115,27 @@ const ResultsPage = ({ onBack }) => {
           {/* AI Summary */}
           {activeTab === 'summary' && (
             <div key="summary" className="ns-tab-panel">
-              <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginBottom:16 }}>
-                <button className="ns-regen" onClick={() => requestRegenerate('summary')}>
-                  <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} /> Regenerate
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:16, flexWrap:'wrap' }}>
+                <p style={{ margin:0, fontSize:13, color:T.muted }}>
+                  Generate a concise summary from the current OCR text when you want it.
+                </p>
+                <button
+                  className={aiSummary ? 'ns-regen' : 'ns-btn-amber'}
+                  onClick={() => generateAiContent('summary')}
+                  disabled={summaryBusy || !recognizedText.trim()}
+                  style={aiSummary ? undefined : { padding:'9px 16px' }}
+                >
+                  <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} />
+                  {summaryBusy ? 'Generating…' : aiSummary ? 'Regenerate Summary' : 'Generate Summary'}
                 </button>
               </div>
-              <div style={{ background:'linear-gradient(135deg,rgba(245,166,35,.06) 0%,rgba(129,140,248,.06) 100%)', border:`1px solid ${T.border}`, borderRadius:12, padding:'20px 24px', fontFamily:T.font, fontSize:14, lineHeight:1.8, color:T.cream }}>
-                {aiSummary || <span style={{ color:T.muted, fontStyle:'italic' }}>Waiting for AI summary…</span>}
+              {summaryError && (
+                <div style={{ marginBottom:12, padding:'10px 12px', borderRadius:10, border:'1px solid rgba(248,113,113,.35)', background:'rgba(248,113,113,.08)', color:'#FCA5A5', fontSize:13 }}>
+                  {summaryError}
+                </div>
+              )}
+              <div style={{ background:'linear-gradient(135deg,rgba(245,166,35,.06) 0%,rgba(129,140,248,.06) 100%)', border:`1px solid ${T.border}`, borderRadius:12, padding:'20px 24px', fontFamily:T.font, fontSize:14, lineHeight:1.8, color:T.cream, whiteSpace:'pre-wrap' }}>
+                {aiSummary || <span style={{ color:T.muted, fontStyle:'italic' }}>No AI summary yet. Click Generate Summary when you are ready.</span>}
               </div>
             </div>
           )}
@@ -702,37 +1143,59 @@ const ResultsPage = ({ onBack }) => {
           {/* Flashcards */}
           {activeTab === 'flashcards' && (
             <div key="flashcards" className="ns-tab-panel">
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:12, alignItems:'center', flexWrap:'wrap', marginBottom:18 }}>
+                <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+                  <button className={cards.length ? 'ns-regen' : 'ns-btn-amber'} onClick={() => generateAiContent('flashCards')} disabled={flashcardsBusy || !recognizedText.trim()} style={cards.length ? undefined : { padding:'9px 16px' }}>
+                    <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} />
+                    {flashcardsBusy ? 'Generating…' : cards.length ? 'Regenerate Flashcards' : 'Generate Flashcards'}
+                  </button>
+                  <button className="ns-btn-ghost" onClick={() => setShowAdd(true)}>
+                    <Icon d="M12 6v6m0 0v6m0-6h6m-6 0H6" size={14} />
+                    Add Card
+                  </button>
+                </div>
+              </div>
+
+              {flashcardsError && (
+                <div style={{ marginBottom:12, padding:'10px 12px', borderRadius:10, border:'1px solid rgba(248,113,113,.35)', background:'rgba(248,113,113,.08)', color:'#FCA5A5', fontSize:13 }}>
+                  {flashcardsError}
+                </div>
+              )}
+
               <div style={{ marginBottom:28 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, color:T.muted, marginBottom:10 }}>
-                  <span>{learnedCount} of {cards.length} cards learned</span>
                   <span style={{ color:pct === 100 ? T.green : T.amber, fontWeight:600 }}>{pct}%</span>
                 </div>
                 <div style={{ height:5, borderRadius:99, background:T.surfaceHi, overflow:'hidden' }}>
                   <div style={{ height:'100%', width:`${pct}%`, background:`linear-gradient(90deg,${T.amber},${T.purple})`, borderRadius:99, transition:'width .5s cubic-bezier(.4,0,.2,1)' }} />
                 </div>
               </div>
-              <div style={{ display:'flex', flexWrap:'wrap', gap:14, marginBottom:28 }}>
-                {cards.map(c => <PreviewCard key={c.id} card={c} />)}
-                <div onClick={() => setShowAdd(true)}
-                  style={{ height:140, flex:'0 0 220px', background:T.surfaceHi, border:`1px dashed ${T.borderHi}`, borderRadius:14, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8, cursor:'pointer', transition:'border-color .2s,background .2s' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor=T.amber; e.currentTarget.style.background=T.amberDim; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor=T.borderHi; e.currentTarget.style.background=T.surfaceHi; }}
-                >
-                  <Icon d="M12 6v6m0 0v6m0-6h6m-6 0H6" size={20} color={T.muted} />
-                  <span style={{ fontSize:12, color:T.muted, fontFamily:T.font }}>Add card</span>
+
+              {cards.length === 0 ? (
+                <div style={{ background:T.surfaceHi, border:`1px dashed ${T.borderHi}`, borderRadius:14, padding:'28px 24px', textAlign:'center', color:T.muted, marginBottom:28 }}>
+                  No flashcards yet. Generate them from the OCR text or add your own card manually.
                 </div>
-              </div>
-              <button className="ns-study-btn" onClick={() => setPage('flashcards')}>
-                <Icon d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" size={17} color="#fff" />
-                Study All {cards.length} Flashcards
-              </button>
+              ) : (
+                <div style={{ display:'flex', flexWrap:'wrap', gap:14, marginBottom:28 }}>
+                  {cards.map(c => <PreviewCard key={c.id} card={c} />)}
+                </div>
+              )}
             </div>
           )}
 
         </div>
       </div>
 
-      {showAdd && <CardModal onSave={(q, a) => { addCard(q, a); setShowAdd(false); }} onClose={() => setShowAdd(false)} />}
+      {showAdd && (
+        <CardModal
+          onSave={async (q, a) => {
+            const newId = makeCardId();
+            await updateCards((prev) => [...prev, { id: newId, cardId: newId, question: q, answer: a, learned: false }], { persist: true });
+            setShowAdd(false);
+          }}
+          onClose={() => setShowAdd(false)}
+        />
+      )}
     </div>
   );
 };
