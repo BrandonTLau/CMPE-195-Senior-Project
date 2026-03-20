@@ -62,75 +62,15 @@ def normalize_image_max_side(input_path: Path, max_side: int = 1600) -> Path:
     cv2.imwrite(str(out_path), img)
     return out_path
 
-def build_overlay_image(image_path: Path, items: list[dict], out_path: Path) -> None:
-    img = cv2.imread(str(image_path))
-    if img is None:
-        raise ValueError(f"Could not read image: {image_path}")
-
-    white = np.full_like(img, 255)
-    img = cv2.addWeighted(img, 0.15, white, 0.85, 0)
-
-    font = cv2.FONT_HERSHEY_SIMPLEX
-
-    for it in items:
-        box = it.get("box")
-        text = (it.get("text") or "").strip()
-        if not box or len(box) != 4:
-            continue
-
-        x1, y1, x2, y2 = box
-        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-        if x2 <= x1 or y2 <= y1:
-            continue
-
-        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 160, 0), 2)
-
-        if not text:
-            continue
-
-        box_w = x2 - x1
-        box_h = y2 - y1
-
-        max_text_w = max(1, box_w - 8)
-        max_text_h = max(1, box_h - 8)
-
-        font_scale = 1.0
-        thickness = 2
-
-        for _ in range(30):
-            (tw, th), base = cv2.getTextSize(text, font, font_scale, thickness)
-            if tw <= max_text_w and (th + base) <= max_text_h:
-                break
-            font_scale *= 0.9
-            if font_scale < 0.35:
-                break
-
-        thickness = max(1, int(round(font_scale * 2)))
-
-        (tw, th), base = cv2.getTextSize(text, font, font_scale, thickness)
-
-        cx = x1 + box_w // 2
-        cy = y1 + box_h // 2
-
-        tx = int(cx - tw / 2)
-        ty = int(cy + th / 2)
-
-        bg_x1 = max(x1 + 2, tx - 4)
-        bg_y1 = max(y1 + 2, ty - th - base - 4)
-        bg_x2 = min(x2 - 2, tx + tw + 4)
-        bg_y2 = min(y2 - 2, ty + base + 4)
-
-        overlay = img.copy()
-        cv2.rectangle(overlay, (bg_x1, bg_y1), (bg_x2, bg_y2), (0, 0, 0), -1)
-        img = cv2.addWeighted(overlay, 0.55, img, 0.45, 0)
-
-        tx = max(x1 + 3, min(tx, x2 - tw - 3))
-        ty = max(y1 + th + 3, min(ty, y2 - 3))
-
-        cv2.putText(img, text, (tx, ty), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
-
-    cv2.imwrite(str(out_path), img)
-
+def rects_overlap(a, b, pad: int = 2) -> bool:
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    return not (
+        ax2 + pad < bx1 or
+        bx2 + pad < ax1 or
+        ay2 + pad < by1 or
+        by2 + pad < ay1
+    )
 
 def merge_items_into_lines(items: list[dict], y_tol: int = 14, gap_for_tab: int = 40) -> str:
     tokens = []
@@ -178,10 +118,193 @@ def merge_items_into_lines(items: list[dict], y_tol: int = 14, gap_for_tab: int 
 
     return "\n".join(out_lines).strip()
 
+
+def _merge_box(boxes: list[list[int]]) -> list[int]:
+    xs1 = [b[0] for b in boxes]
+    ys1 = [b[1] for b in boxes]
+    xs2 = [b[2] for b in boxes]
+    ys2 = [b[3] for b in boxes]
+    return [min(xs1), min(ys1), max(xs2), max(ys2)]
+
+
+def _make_block(entries: list[dict], block_idx: int) -> dict:
+    entries = sorted(entries, key=lambda e: (e["box"][1], e["box"][0]))
+    box = _merge_box([e["box"] for e in entries])
+    text = "\n".join(e["text"] for e in entries if e["text"].strip()).strip()
+    scores = [e["score"] for e in entries if e["score"] is not None]
+    avg_score = sum(scores) / len(scores) if scores else None
+    return {
+        "id": f"block-{block_idx}",
+        "box": box,
+        "text": text,
+        "score": avg_score,
+        "item_indices": [e["idx"] for e in entries],
+    }
+
+def merge_overlapping_blocks(blocks: list[dict], x_pad: int = 4, y_pad: int = 3) -> list[dict]:
+    if not blocks:
+        return []
+
+    def overlaps(a: list[int], b: list[int]) -> bool:
+        ax1, ay1, ax2, ay2 = a
+        bx1, by1, bx2, by2 = b
+        return not (
+            ax2 + x_pad < bx1 or
+            bx2 + x_pad < ax1 or
+            ay2 + y_pad < by1 or
+            by2 + y_pad < ay1
+        )
+
+    changed = True
+    current = blocks[:]
+
+    while changed:
+        changed = False
+        merged = []
+        used = [False] * len(current)
+
+        for i in range(len(current)):
+            if used[i]:
+                continue
+
+            group = [current[i]]
+            used[i] = True
+
+            group_changed = True
+            while group_changed:
+                group_changed = False
+                group_box = _merge_box([g["box"] for g in group])
+
+                for j in range(len(current)):
+                    if used[j]:
+                        continue
+                    if overlaps(group_box, current[j]["box"]):
+                        group.append(current[j])
+                        used[j] = True
+                        group_changed = True
+
+            if len(group) == 1:
+                merged.append(group[0])
+            else:
+                merged.append(
+                    _make_block(
+                        [
+                            {
+                                "idx": item_idx,
+                                "text": text,
+                                "score": score,
+                                "box": box,
+                            }
+                            for block in group
+                            for item_idx, text, score, box in zip(
+                                block["item_indices"],
+                                block["text"].split("\n"),
+                                [block["score"]] * len(block["item_indices"]),
+                                [block["box"]] * len(block["item_indices"]),
+                            )
+                        ],
+                        len(merged) + 1,
+                    )
+                )
+                changed = True
+
+        current = merged
+
+    for i, block in enumerate(current, start=1):
+        block["id"] = f"block-{i}"
+
+    return current
+
+def group_items_into_blocks(
+    items: list[dict],
+    max_line_gap: int = 16,
+    same_edge_tol: int = 55,
+    overlap_ratio_min: float = 0.40,
+) -> list[dict]:
+    entries = []
+    for idx, it in enumerate(items):
+        box = it.get("box")
+        text = (it.get("text") or "").strip()
+        if not box or len(box) != 4 or not text:
+            continue
+
+        x1, y1, x2, y2 = [int(v) for v in box]
+        if x2 <= x1 or y2 <= y1:
+            continue
+
+        entries.append({
+            "idx": idx,
+            "text": text,
+            "score": it.get("score"),
+            "box": [x1, y1, x2, y2],
+            "w": x2 - x1,
+            "h": y2 - y1,
+        })
+
+    if not entries:
+        return []
+
+    entries.sort(key=lambda e: (e["box"][1], e["box"][0]))
+
+    blocks_raw = []
+    current = [entries[0]]
+
+    for entry in entries[1:]:
+        prev = current[-1]
+        block_box = _merge_box([e["box"] for e in current])
+
+        x1, y1, x2, y2 = entry["box"]
+        bx1, by1, bx2, by2 = block_box
+        prev_x1, prev_y1, prev_x2, prev_y2 = prev["box"]
+
+        line_gap = y1 - prev_y2
+        x_overlap = max(0, min(x2, bx2) - max(x1, bx1))
+        min_width = max(1, min(x2 - x1, bx2 - bx1))
+        overlap_ratio = x_overlap / min_width
+
+        similar_left_edge = abs(x1 - prev_x1) <= same_edge_tol
+        similar_right_edge = abs(x2 - prev_x2) <= same_edge_tol
+        vertical_close = 0 <= line_gap <= max_line_gap
+        substantial_overlap = overlap_ratio >= overlap_ratio_min
+
+        if vertical_close and substantial_overlap and (similar_left_edge or similar_right_edge):
+            current.append(entry)
+        else:
+            blocks_raw.append(current)
+            current = [entry]
+
+    if current:
+        blocks_raw.append(current)
+
+    blocks = [_make_block(block, i + 1) for i, block in enumerate(blocks_raw)]
+    blocks = merge_overlapping_blocks(blocks)
+    return blocks
+
+
+def build_overlay_image(image_path: Path, blocks: list[dict], out_path: Path) -> None:
+    img = cv2.imread(str(image_path))
+    if img is None:
+        raise ValueError(f"Could not read image: {image_path}")
+
+    white = np.full_like(img, 255)
+    img = cv2.addWeighted(img, 0.12, white, 0.88, 0)
+
+    for block in blocks:
+        box = block.get("box")
+        if not box or len(box) != 4:
+            continue
+
+        x1, y1, x2, y2 = [int(v) for v in box]
+        if x2 <= x1 or y2 <= y1:
+            continue
+
+        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 160, 0), 2)
+
+    cv2.imwrite(str(out_path), img)
+
 @app.get("/ocr_api/health")
 def health():
     return {"ok": True}
-
 
 @app.post("/ocr_api/ocr")
 async def run_ocr(file: UploadFile = File(...)):
@@ -220,7 +343,6 @@ async def run_ocr(file: UploadFile = File(...)):
         },
     }
 
-
 @app.post("/ocr_api/ocr_v5")
 async def run_ocr_v5(file: UploadFile = File(...)):
     filename_lower = (file.filename or "").lower()
@@ -253,22 +375,38 @@ async def run_ocr_v5(file: UploadFile = File(...)):
             box = [int(x) for x in boxes[i].tolist()]
         items.append({"text": text, "score": score, "box": box})
 
-    merged_text = merge_items_into_lines(items)
+    blocks = group_items_into_blocks(items)
+
+    merged_text = "\n\n".join(block["text"] for block in blocks).strip()
+    if not merged_text:
+        merged_text = merge_items_into_lines(items)
 
     overlay_name = f"overlay_{file_id}.jpg"
     overlay_path = OUTPUT_DIR / overlay_name
-    build_overlay_image(Path(norm_path), items, overlay_path)
+    build_overlay_image(Path(norm_path), blocks, overlay_path)
 
+    norm_name = Path(norm_path).name
+    image_url = f"/ocr_static/{norm_name}"
     overlay_url = f"/ocr_static/{overlay_name}"
+
+    norm_img = cv2.imread(str(norm_path))
+    if norm_img is not None:
+        h, w = norm_img.shape[:2]
+        image_size = [int(w), int(h)]
+    else:
+        image_size = [0, 0]
 
     return {
         "filename": file.filename,
         "text": "\n".join(lines),
         "merged_text": merged_text,
         "items": items,
+        "blocks": blocks,
+        "image_url": image_url,
+        "image_size": image_size,
         "overlay_url": overlay_url,
         "debug": {
-            "mode": "pp-ocrv5_demo_like",
+            "mode": "pp-ocrv5_block_linked",
             "raw_path": str(raw_path),
             "used_path": str(norm_path),
         },
