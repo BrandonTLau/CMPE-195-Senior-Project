@@ -116,6 +116,63 @@ function parseJsonPayload(text) {
   }
 }
 
+function parseFlashcardsFromText(text) {
+  const cleaned = stripCodeFences(String(text || ''))
+    .replace(/\r\n/g, '\n')
+    .trim();
+
+  try {
+    const parsed = parseJsonPayload(cleaned);
+    const cards = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.flashCards)
+        ? parsed.flashCards
+        : [];
+
+    if (cards.length) return cards;
+  } catch (_) {
+  }
+
+  const blocks = cleaned
+    .split(/\n\s*---+\s*\n/g)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  const cards = [];
+  for (const block of blocks) {
+    const qMatch = block.match(/(?:^|\n)Q(?:uestion)?\s*:\s*([\s\S]*?)(?=\nA(?:nswer)?\s*:|$)/i);
+    const aMatch = block.match(/(?:^|\n)A(?:nswer)?\s*:\s*([\s\S]*?)$/i);
+
+    if (qMatch && aMatch) {
+      cards.push({
+        question: qMatch[1].trim(),
+        answer: aMatch[1].trim(),
+      });
+    }
+  }
+
+  if (!cards.length) {
+    const lines = cleaned
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    for (let i = 0; i < lines.length - 1; i += 1) {
+      const qMatch = lines[i].match(/^Q(?:uestion)?\s*:\s*(.+)$/i);
+      const aMatch = lines[i + 1].match(/^A(?:nswer)?\s*:\s*(.+)$/i);
+
+      if (qMatch && aMatch) {
+        cards.push({
+          question: qMatch[1].trim(),
+          answer: aMatch[1].trim(),
+        });
+      }
+    }
+  }
+
+  return cards;
+}
+
 async function generateSummary(text) {
   const context = buildContextWindow(text, Number(process.env.OLLAMA_SOURCE_MAX_CHARS || 7000));
   const prompt = [
@@ -136,25 +193,23 @@ async function generateFlashcards(text) {
   const context = buildContextWindow(text, Number(process.env.OLLAMA_SOURCE_MAX_CHARS || 7000));
   const prompt = [
     'Create 6 to 8 high-quality study flashcards from the notes below.',
-    'Return valid JSON only.',
-    'Use this exact shape:',
-    '{"flashCards":[{"question":"...","answer":"..."}]}',
+    'Return plain text only.',
+    'Use exactly this format for every card:',
+    'Q: <question>',
+    'A: <answer>',
+    '---',
     'Rules:',
     '- Each question must be specific and answerable from the notes.',
     '- Each answer must be concise, correct, and self-contained.',
-    '- Do not include numbering, markdown, or commentary.',
+    '- Do not include numbering, markdown, commentary, or JSON.',
+    '- Do not leave any card incomplete.',
     '',
     'NOTES:',
     context,
   ].join('\n');
 
-  const raw = await callOllama(prompt, { format: 'json' });
-  const parsed = parseJsonPayload(raw);
-  const cards = Array.isArray(parsed)
-    ? parsed
-    : Array.isArray(parsed?.flashCards)
-      ? parsed.flashCards
-      : [];
+  const raw = await callOllama(prompt);
+  const cards = parseFlashcardsFromText(raw);
 
   const cleanedCards = cards
     .map((card) => ({
