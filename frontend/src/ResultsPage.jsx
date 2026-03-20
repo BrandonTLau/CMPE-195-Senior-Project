@@ -423,6 +423,196 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
   );
 }
 
+function combineBlockText(blocks) {
+  return (blocks || [])
+    .map((block) => (block.text || "").trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function LinkedBlocksWorkspace({
+  imageUrl,
+  imageSize,
+  blocks,
+  activeBlockId,
+  setActiveBlockId,
+  onChangeBlock,
+  onSelectBlock,
+  blockEditorRefs,
+}) {
+  const width = imageSize?.[0] || 1;
+  const height = imageSize?.[1] || 1;
+
+  if (!imageUrl || !blocks.length) {
+    return (
+      <div
+        style={{
+          background: T.surfaceHi,
+          border: `1px solid ${T.border}`,
+          borderRadius: 14,
+          padding: 24,
+          color: T.muted,
+          textAlign: "center",
+        }}
+      >
+        No OCR block data available yet. Upload an image and run OCR first.
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1.1fr 1fr",
+        gap: 20,
+        alignItems: "start",
+      }}
+    >
+      <div
+        style={{
+          background: T.surfaceHi,
+          border: `1px solid ${T.border}`,
+          borderRadius: 14,
+          padding: 14,
+        }}
+      >
+        <div style={{ position: "relative", width: "100%" }}>
+          <img
+            src={imageUrl}
+            alt="OCR source"
+            style={{
+              width: "100%",
+              height: "auto",
+              display: "block",
+              borderRadius: 10,
+            }}
+          />
+          <div style={{ position: "absolute", inset: 0 }}>
+            {blocks.map((block) => {
+              const [x1, y1, x2, y2] = block.box || [0, 0, 0, 0];
+              const isActive = activeBlockId === block.id;
+
+              return (
+                <div
+                  key={block.id}
+                  onMouseEnter={() => setActiveBlockId(block.id)}
+                  onMouseLeave={() => setActiveBlockId(null)}
+                  onClick={() => onSelectBlock(block.id)}
+                  title={block.text}
+                  style={{
+                    position: "absolute",
+                    left: `${(x1 / width) * 100}%`,
+                    top: `${(y1 / height) * 100}%`,
+                    width: `${((x2 - x1) / width) * 100}%`,
+                    height: `${((y2 - y1) / height) * 100}%`,
+                    border: isActive
+                      ? `2px solid ${T.amber}`
+                      : "2px solid rgba(52,211,153,0.95)",
+                    background: isActive
+                      ? "rgba(245,166,35,0.18)"
+                      : "rgba(52,211,153,0.07)",
+                    borderRadius: 6,
+                    boxSizing: "border-box",
+                    cursor: "pointer",
+                    transition: "all .12s ease",
+                  }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div
+        className="ns-scrollbar"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          maxHeight: 720,
+          overflowY: "auto",
+          paddingRight: 4,
+        }}
+      >
+        {blocks.map((block, idx) => {
+          const isActive = activeBlockId === block.id;
+
+          return (
+            <div
+              key={block.id}
+              ref={(el) => {
+                if (el) blockEditorRefs.current[block.id] = el;
+              }}
+              onMouseEnter={() => setActiveBlockId(block.id)}
+              onMouseLeave={() => setActiveBlockId(null)}
+              onClick={() => onSelectBlock(block.id)}
+              style={{
+                background: isActive ? T.amberDim : T.surfaceHi,
+                border: `1px solid ${
+                  isActive ? "rgba(245,166,35,.28)" : T.border
+                }`,
+                borderRadius: 12,
+                padding: 14,
+                transition: "all .12s ease",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 8,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    color: isActive ? T.amber : T.muted,
+                  }}
+                >
+                  Block {idx + 1}
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: T.muted,
+                  }}
+                >
+                  {(block.score ?? 0).toFixed(2)}
+                </span>
+              </div>
+
+              <textarea
+                value={block.text || ""}
+                onChange={(e) => onChangeBlock(block.id, e.target.value)}
+                style={{
+                  width: "100%",
+                  minHeight: 92,
+                  resize: "vertical",
+                  boxSizing: "border-box",
+                  background: "rgba(255,255,255,0.02)",
+                  border: `1px solid ${isActive ? "rgba(245,166,35,.28)" : T.border}`,
+                  borderRadius: 10,
+                  padding: "12px 14px",
+                  color: T.cream,
+                  fontFamily: T.font,
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                  outline: "none",
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const TABS = [
   { id:'scan_edit',  label:'Scan & Edit',  icon:'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
   { id:'summary',    label:'AI Summary',   icon:'M13 10V3L4 14h7v7l9-11h-7z' },
@@ -435,7 +625,7 @@ const ResultsPage = ({ onBack }) => {
   const [isSaved,          setIsSaved]          = useState(false);
   const [showAdd,          setShowAdd]          = useState(false);
   const [editorFullscreen, setEditorFullscreen] = useState(false);
-  const [scanEditView,     setScanEditView]     = useState('both');
+  const [scanEditView,     setScanEditView]     = useState('image');
   const [title,            setTitle]            = useState('');
   const [showExportMenu,   setShowExportMenu]   = useState(false);
   const [confidence,       setConfidence]       = useState(null);
@@ -457,6 +647,29 @@ const ResultsPage = ({ onBack }) => {
   const [summaryEdited,       setSummaryEdited]       = useState(false);
   const [overlayUrl,          setOverlayUrl]          = useState(sessionStorage.getItem('lastOcrOverlayUrl') || '');
 
+  const [ocrBlocks, setOcrBlocks] = useState(() => {
+  try {
+    return JSON.parse(sessionStorage.getItem("lastOcrBlocks") || "[]");
+  } catch {
+    return [];
+  }
+});
+
+const [ocrImageUrl, setOcrImageUrl] = useState(
+  sessionStorage.getItem("lastOcrImageUrl") || ""
+);
+
+const [ocrImageSize, setOcrImageSize] = useState(() => {
+  try {
+    return JSON.parse(sessionStorage.getItem("lastOcrImageSize") || "[0,0]");
+  } catch {
+    return [0, 0];
+  }
+});
+
+const [activeBlockId, setActiveBlockId] = useState(null);
+const blockEditorRefs = useRef({});
+
   useEffect(() => {
     if (!fileId) return;
     fetch(`/api/files/${fileId}`, { headers })
@@ -475,6 +688,27 @@ const ResultsPage = ({ onBack }) => {
         if (ssMerged) setRecognizedText(ssMerged);
         const ssConfidence = sessionStorage.getItem('lastOcrConfidence');
         if (ssConfidence) setConfidence(Math.round(parseFloat(ssConfidence)));
+
+        const ssBlocksRaw = sessionStorage.getItem("lastOcrBlocks");
+        if (ssBlocksRaw) {
+          try {
+            const parsedBlocks = JSON.parse(ssBlocksRaw);
+            if (Array.isArray(parsedBlocks)) setOcrBlocks(parsedBlocks);
+          } catch {}
+        }
+
+        const ssImageUrl = sessionStorage.getItem("lastOcrImageUrl");
+        if (ssImageUrl) setOcrImageUrl(ssImageUrl);
+
+        const ssImageSizeRaw = sessionStorage.getItem("lastOcrImageSize");
+        if (ssImageSizeRaw) {
+          try {
+            const parsedSize = JSON.parse(ssImageSizeRaw);
+            if (Array.isArray(parsedSize) && parsedSize.length === 2) {
+              setOcrImageSize(parsedSize);
+            }
+          } catch {}
+        }
       })
       .catch(err => console.error('Failed to load file data:', err));
   }, [fileId]);
@@ -504,6 +738,48 @@ const ResultsPage = ({ onBack }) => {
   };
 
   // Export handlers
+  const handleBlockChange = (blockId, newText) => {
+    setOcrBlocks((prev) => {
+      const next = prev.map((block) =>
+        block.id === blockId ? { ...block, text: newText } : block
+      );
+      const combined = combineBlockText(next);
+      setRecognizedText(combined);
+      sessionStorage.setItem("lastOcrBlocks", JSON.stringify(next));
+      sessionStorage.setItem("lastOcrMergedText", combined);
+      return next;
+    });
+    setTranscriptionEdited(true);
+  };
+
+  const handleSaveBlocks = () => {
+    const newText = combineBlockText(ocrBlocks);
+
+    saveEdit(
+      "edit/transcription",
+      { previousText: recognizedText, newText },
+      (c) => {
+        setRecognizedText(c.transcribedText || newText);
+        setTranscriptionEdited(true);
+      },
+      setTranscriptionEdited
+    );
+  };
+
+  const focusBlockEditor = (blockId) => {
+    setActiveBlockId(blockId);
+
+    const el = blockEditorRefs.current[blockId];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      const textarea = el.querySelector('textarea');
+      if (textarea) {
+        textarea.focus();
+      }
+    }
+  };
+
   const handleExportCopy = async () => {
     await navigator.clipboard.writeText(recognizedText);
     setShowExportMenu(false);
@@ -625,7 +901,7 @@ const ResultsPage = ({ onBack }) => {
           {/* Scan & Edit */}
           {activeTab === 'scan_edit' && (
             <div key="scan_edit" className="ns-tab-panel">
-              <div style={{ display:'flex', gap:6, marginBottom:16 }}>
+              <div style={{ display:'flex', gap:6, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
                 {[['both','Both'],['image','Scan'],['editor','Editor']].map(([val, label]) => (
                   <button key={val} onClick={() => setScanEditView(val)}
                     style={{ padding:'5px 14px', borderRadius:8, fontSize:12, fontWeight:600, fontFamily:T.font, cursor:'pointer', border:`1px solid ${scanEditView===val ? T.amber : T.border}`, background:scanEditView===val ? T.amberDim : 'transparent', color:scanEditView===val ? T.amber : T.muted, transition:'all .15s' }}>
@@ -633,6 +909,12 @@ const ResultsPage = ({ onBack }) => {
                   </button>
                 ))}
                 <div style={{ flex:1 }} />
+
+                <button className="ns-btn-amber" onClick={handleSaveBlocks}>
+                  <Icon d="M5 13l4 4L19 7" size={14} color="#0E1117" />
+                  Save OCR Text
+                </button>
+
                 {transcriptionEdited && (
                   <button className="ns-regen" onClick={() => requestRegenerate('all')}>
                     <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} />
@@ -642,22 +924,48 @@ const ResultsPage = ({ onBack }) => {
               </div>
 
               <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
-                {(scanEditView === 'both' || scanEditView === 'image') && (
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 10px', fontFamily:T.font }}>Original Scan</p>
-                    <div style={{ background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:14, overflow:'hidden', minHeight:400, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:12, padding: overlayUrl ? 0 : 24 }}>
-                      {overlayUrl ? (
-                        <img src={overlayUrl} alt="OCR overlay" style={{ width:'100%', height:'auto', display:'block' }} />
-                      ) : (
-                        <>
-                          <div style={{ width:80, height:80, borderRadius:20, background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                            <Icon d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" size={36} color={T.amber} />
-                          </div>
-                          <p style={{ fontSize:14, fontWeight:600, color:T.cream, margin:0 }}>{fileData?.originalName || 'lecture_notes_01.jpg'}</p>
-                          <p style={{ fontSize:12, color:T.muted, margin:0, textAlign:'center' }}>Scanned image will appear here once<br/>image serving is wired up.</p>
-                        </>
-                      )}
-                    </div>
+                {(scanEditView === 'both' || scanEditView === 'image') ? (
+                  <LinkedBlocksWorkspace
+                    imageUrl={ocrImageUrl || overlayUrl}
+                    imageSize={ocrImageSize}
+                    blocks={ocrBlocks}
+                    activeBlockId={activeBlockId}
+                    setActiveBlockId={setActiveBlockId}
+                    onChangeBlock={handleBlockChange}
+                    onSelectBlock={focusBlockEditor}
+                    blockEditorRefs={blockEditorRefs}
+                  />
+                ) : (
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: 1.2,
+                        textTransform: 'uppercase',
+                        color: T.muted,
+                        margin: '0 0 10px',
+                        fontFamily: T.font,
+                      }}
+                    >
+                      Recognized Text
+                    </p>
+                    <RichTextEditor
+                      initialText={recognizedText}
+                      isFullscreen={editorFullscreen}
+                      onToggleFullscreen={() => setEditorFullscreen((f) => !f)}
+                      onSave={(payload) =>
+                        saveEdit(
+                          'edit/transcription',
+                          payload,
+                          (c) => {
+                            setRecognizedText(c.transcribedText);
+                            setTranscriptionEdited(true);
+                          },
+                          setTranscriptionEdited
+                        )
+                      }
+                    />
                   </div>
                 )}
 
