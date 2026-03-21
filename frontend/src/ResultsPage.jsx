@@ -327,9 +327,11 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
   const handleKeyUp   = () => updateFormats();
   const handleMouseUp = () => updateFormats();
 
+  // FIX: setIsDirty(false) before calling onSave so the editor
+  // does not re-render from parent state and reset spacing
   const handleSave = () => {
-    onSave({ newText: editorRef.current?.innerText || '', html: editorHTML, previousText: initialText });
     setIsDirty(false);
+    onSave({ newText: editorRef.current?.innerText || '', html: editorHTML, previousText: initialText });
   };
 
   const toolbar = (fullscreen = false) => (
@@ -581,7 +583,9 @@ const ResultsPage = ({ onBack, noteId }) => {
       const res  = await fetch(`/api/files/${fileId}/${endpoint}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.msg || 'Failed to save changes.');
-      if (data.currentContent) { onSuccess(data.currentContent); if (setEdited) setEdited(true); }
+      // FIX: do NOT call setRecognizedText here — it would re-render the editor
+      // and reset spacing. Just call the success callback without updating text.
+      if (data.currentContent) { onSuccess(); if (setEdited) setEdited(true); }
     } catch (err) { console.error('Save edit error:', err); }
   };
 
@@ -785,7 +789,7 @@ const ResultsPage = ({ onBack, noteId }) => {
                       initialText={recognizedText}
                       isFullscreen={editorFullscreen}
                       onToggleFullscreen={() => setEditorFullscreen(f => !f)}
-                      onSave={(payload) => saveEdit('edit/transcription', payload, (c) => { setRecognizedText(c.transcribedText); setTranscriptionEdited(true); }, setTranscriptionEdited)}
+                      onSave={(payload) => saveEdit('edit/transcription', payload, () => { setTranscriptionEdited(true); }, setTranscriptionEdited)}
                     />
                   </div>
                 </div>
@@ -802,7 +806,7 @@ const ResultsPage = ({ onBack, noteId }) => {
                     initialText={recognizedText}
                     isFullscreen={editorFullscreen}
                     onToggleFullscreen={() => setEditorFullscreen(f => !f)}
-                    onSave={(payload) => saveEdit('edit/transcription', payload, (c) => { setRecognizedText(c.transcribedText); setTranscriptionEdited(true); }, setTranscriptionEdited)}
+                    onSave={(payload) => saveEdit('edit/transcription', payload, () => { setTranscriptionEdited(true); }, setTranscriptionEdited)}
                   />
                 </div>
               )}
