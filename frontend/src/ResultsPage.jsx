@@ -327,8 +327,6 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
   const handleKeyUp   = () => updateFormats();
   const handleMouseUp = () => updateFormats();
 
-  // FIX: setIsDirty(false) before calling onSave so the editor
-  // does not re-render from parent state and reset spacing
   const handleSave = () => {
     setIsDirty(false);
     onSave({ newText: editorRef.current?.innerText || '', html: editorHTML, previousText: initialText });
@@ -414,7 +412,6 @@ function ScanViewPage({ src, title, onBack }) {
 
   return (
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream, display:'flex', flexDirection:'column', animation:'zoomIn .2s ease both' }}>
-      {/* Top bar */}
       <div style={{ borderBottom:`1px solid ${T.border}`, padding:'0 24px', display:'flex', alignItems:'center', justifyContent:'space-between', height:58, background:T.bg, flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:16 }}>
           <button className="ns-btn-ghost" onClick={onBack} style={{ padding:'6px 12px', fontSize:13 }}>
@@ -423,7 +420,6 @@ function ScanViewPage({ src, title, onBack }) {
           <div style={{ height:20, width:1, background:T.border }} />
           <span style={{ fontFamily:T.serif, fontSize:16, color:T.cream }}>{title || 'Original Scan'}</span>
         </div>
-        {/* Zoom controls — capped at 100% */}
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <span style={{ fontSize:12, color:T.muted, fontFamily:T.font }}>{Math.round(zoom * 100)}%</span>
           <button className="ns-btn-ghost" onClick={() => setZoom(z => Math.max(0.25, parseFloat((z - 0.25).toFixed(2))))} style={{ padding:'5px 12px', fontSize:13 }}>−</button>
@@ -431,24 +427,9 @@ function ScanViewPage({ src, title, onBack }) {
           <button className="ns-btn-ghost" onClick={() => setZoom(z => Math.min(1, parseFloat((z + 0.25).toFixed(2))))} disabled={zoom >= 1} style={{ padding:'5px 12px', fontSize:13, opacity: zoom >= 1 ? 0.4 : 1 }}>+</button>
         </div>
       </div>
-
-      {/* Image area */}
       <div className="ns-scrollbar" style={{ flex:1, overflow:'auto', display:'flex', alignItems:'flex-start', justifyContent:'center', padding:40 }}>
         {src ? (
-          <img
-            src={src}
-            alt="Original scan"
-            style={{
-              width: `${zoom * 100}%`,
-              maxWidth: '100%',
-              height: 'auto',
-              display: 'block',
-              borderRadius: 12,
-              border: `1px solid ${T.border}`,
-              boxShadow: '0 8px 32px rgba(0,0,0,.4)',
-              transition: 'width .2s ease',
-            }}
-          />
+          <img src={src} alt="Original scan" style={{ width:`${zoom * 100}%`, maxWidth:'100%', height:'auto', display:'block', borderRadius:12, border:`1px solid ${T.border}`, boxShadow:'0 8px 32px rgba(0,0,0,.4)', transition:'width .2s ease' }} />
         ) : (
           <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:16, padding:60 }}>
             <div style={{ width:80, height:80, borderRadius:20, background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center' }}>
@@ -462,7 +443,7 @@ function ScanViewPage({ src, title, onBack }) {
   );
 }
 
-// ── Image pane (inline, equal flex) ───────────────────────────
+// ── Image pane ────────────────────────────────────────────────
 function ImagePane({ imageUrl, overlayUrl, onExpand }) {
   const src = imageUrl || overlayUrl;
   return (
@@ -498,7 +479,8 @@ const TABS = [
   { id:'flashcards', label:'Flashcards',   icon:'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
 ];
 
-const ResultsPage = ({ onBack, noteId }) => {
+// ── ResultsPage ───────────────────────────────────────────────
+const ResultsPage = ({ onBack, onSave, noteId }) => {
   const [activeTab,        setActiveTab]        = useState('scan_edit');
   const [isSaved,          setIsSaved]          = useState(false);
   const [showAdd,          setShowAdd]          = useState(false);
@@ -583,8 +565,6 @@ const ResultsPage = ({ onBack, noteId }) => {
       const res  = await fetch(`/api/files/${fileId}/${endpoint}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.msg || 'Failed to save changes.');
-      // FIX: do NOT call setRecognizedText here — it would re-render the editor
-      // and reset spacing. Just call the success callback without updating text.
       if (data.currentContent) { onSuccess(); if (setEdited) setEdited(true); }
     } catch (err) { console.error('Save edit error:', err); }
   };
@@ -668,7 +648,6 @@ const ResultsPage = ({ onBack, noteId }) => {
   const learnedCount = cards.filter(c => c.learned).length;
   const pct = cards.length ? Math.round((learnedCount / cards.length) * 100) : 0;
 
-  // ── Dedicated scan view page ─────────────────────────────────
   if (showScanView) {
     return (
       <ScanViewPage
@@ -715,7 +694,36 @@ const ResultsPage = ({ onBack, noteId }) => {
               </div>
             )}
           </div>
-          <button className="ns-btn-amber" onClick={() => setIsSaved(true)} disabled={isSaved} style={{ opacity:isSaved ? .7 : 1 }}>
+
+          {/* Save Notes button */}
+          <button
+            className="ns-btn-amber"
+            disabled={isSaved}
+            style={{ opacity: isSaved ? 0.7 : 1 }}
+            onClick={async () => {
+              if (!fileId) { if (onSave) onSave(); return; }
+
+              try {
+                // TODO: save title to backend
+                // PATCH /api/files/:fileId/meta  —  body: { title }
+
+                // TODO: save transcription to backend
+                // PUT /api/files/:fileId/edit/transcription  —  body: { newText: recognizedText }
+
+                // TODO: save AI summary to backend
+                // PUT /api/files/:fileId/edit/summary  —  body: { newText: aiSummary }
+
+                // TODO: save flashcards to backend
+                // PUT /api/files/:fileId/edit/flashcards  —  body: { cards: serializeFlashcards(cards) }
+
+              } catch (err) {
+                console.error('Failed to save notes:', err);
+              }
+
+              setIsSaved(true);
+              if (onSave) onSave(); // tells dashboard to refresh notes and navigate back
+            }}
+          >
             {isSaved
               ? <><Icon d="M5 13l4 4L19 7" size={14} color="#0E1117" />Saved</>
               : <><Icon d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" size={14} color="#0E1117" />Save Notes</>

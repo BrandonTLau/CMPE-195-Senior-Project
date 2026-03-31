@@ -33,6 +33,7 @@ const _style = document.createElement('style');
 _style.textContent = `
   @keyframes fadeUp  { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:translateY(0) } }
   @keyframes menuIn  { from { opacity:0; transform:scale(0.95) translateY(-4px) } to { opacity:1; transform:scale(1) translateY(0) } }
+  @keyframes spin    { to { transform:rotate(360deg) } }
 
   .ud-nav-item { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; cursor:pointer; font-family:${T.font}; font-size:13px; font-weight:500; color:${T.muted}; border:none; background:transparent; width:100%; transition:color .15s, background .15s; position:relative; }
   .ud-nav-item:hover  { color:${T.cream}; background:rgba(255,255,255,0.05); }
@@ -94,12 +95,131 @@ _style.textContent = `
 `;
 document.head.appendChild(_style);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// API layer 
+//             
+// ─────────────────────────────────────────────────────────────────────────────
+
+const getToken = () =>
+  localStorage.getItem('token') || sessionStorage.getItem('token');
+
+const authHeaders = () => ({
+  'Content-Type': 'application/json',
+  ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+});
+
+const handleRes = async (res) => {
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || res.statusText);
+  }
+  return res.json();
+};
+
+// Maps the backend UploadedFile shape into the note shape the UI expects.
+const toNote = (file) => ({
+  id:         file._id,
+  title:      file.title || 'Untitled',
+  date:       file.uploadDate
+                ? new Date(file.uploadDate).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+                : '',
+  folderId:   file.folderId  ?? null,
+  preview:    file.currentContent?.transcribedText || '',
+  aiSummary:  file.currentContent?.summary        || null,
+  tags:       file.tags      ?? [],
+  confidence: file.confidence ?? 85,
+  favorite:   file.isFavorite ?? false,
+  deleted:    file.isDeleted  ?? false,
+});
+
+// Normalizes folder objects from the backend to always use `id` instead of `_id`.
+const toFolder = (folder) => ({
+  id:   folder.id ?? folder._id,
+  name: folder.name,
+});
+
+const api = {
+
+  // ── Notes ──────────────────────────────────────────────────────────────────
+
+  // TODO: GET /api/files — return all files for the logged-in user
+  getNotes: async () => {
+  },
+
+  // TODO: PATCH /api/files/:id/meta — body: { isFavorite: boolean }
+  toggleFavorite: async (id, currentValue) => {
+  },
+
+  // TODO: PATCH /api/files/:id/meta — body: { tags: string[] }
+  updateTags: async (id, tags) => {
+  },
+
+  // TODO: PATCH /api/files/:id/meta — body: { folderId: string | null }
+  moveNote: async (id, folderId) => {
+  },
+
+  // TODO: DELETE /api/files/:id — permanently remove the file from DB and disk
+  permanentDelete: async (id) => {
+  },
+
+  // TODO: POST /api/files/:id/trash
+  // Set isDeleted: true on the file — do NOT remove it from the database
+  trashNote: async (id) => {
+  },
+
+  // TODO: POST /api/files/:id/restore
+  // Set isDeleted: false on the file
+  restoreNote: async (id) => {
+  },
+
+  // TODO: DELETE /api/files/trash
+  // Permanently delete all files where isDeleted: true for this user
+  emptyTrash: async () => {
+  },
+
+  // ── Folders ────────────────────────────────────────────────────────────────
+
+  // TODO: GET /api/folders
+  // Return all folders for the logged-in user as [{ _id, name }]
+  getFolders: async () => {
+  },
+
+  // TODO: POST /api/folders
+  // Body: { name } — return the created folder as { _id, name }
+  createFolder: async (name) => {
+  },
+
+  // TODO: DELETE /api/folders/:id
+  // Also set folderId: null on any files that belong to this folder
+  deleteFolder: async (id) => {
+  },
+
+  // TODO: PUT /api/folders/:id
+  // Body: { name } — return the updated folder as { _id, name }
+  renameFolder: async (id, name) => {
+  },
+
+  // ── Auth ───────────────────────────────────────────────────────────────────
+
+  // TODO: POST /api/auth/change-password
+  // Body: { currentPassword, newPassword }
+  changePassword: async (currentPassword, newPassword) => {
+  },
+
+  // TODO: DELETE /api/auth/delete-account
+  // Delete the user record and all their associated files
+  deleteAccount: async () => {
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const getUserInfo = () => {
   const ssName  = sessionStorage.getItem('userName')  || '';
   const ssEmail = sessionStorage.getItem('userEmail') || '';
   if (ssName || ssEmail) return { name: ssName, email: ssEmail };
   try {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    const token = getToken();
     if (token) {
       const payload = JSON.parse(atob(token.split('.')[1]));
       return { name: payload.user?.name || payload.name || '', email: payload.user?.email || payload.email || '' };
@@ -107,20 +227,6 @@ const getUserInfo = () => {
   } catch {}
   return { name: '', email: '' };
 };
-
-const INITIAL_NOTES = [
-  { id:1, title:"Introduction to Machine Learning", date:"Dec 6, 2025", folderId:null, preview:"Machine learning is a subset of artificial intelligence that focuses on building systems that learn from data...", aiSummary:null, tags:["AI","Computer Science"], confidence:87, favorite:false, deleted:false },
-  { id:2, title:"Calculus Notes - Chapter 5", date:"Dec 5, 2025", folderId:"f1", preview:"Integration techniques and applications including u-substitution and integration by parts...", aiSummary:null, tags:["Math","Calculus"], confidence:92, favorite:false, deleted:false },
-  { id:3, title:"History Lecture Notes", date:"Dec 3, 2025", folderId:null, preview:"World War II timeline and key events that shaped the modern world...", aiSummary:null, tags:["History"], confidence:85, favorite:false, deleted:false },
-  { id:4, title:"Chemistry Lab Report", date:"Dec 1, 2025", folderId:"f3", preview:"Experiment results and analysis of chemical reactions observed during the titration experiment...", aiSummary:null, tags:["Chemistry","Lab"], confidence:90, favorite:false, deleted:false },
-  { id:5, title:"Biology Study Guide", date:"Nov 29, 2025", folderId:"f2", preview:"Cell structure and function, including organelles and their roles in cellular metabolism...", aiSummary:null, tags:["Biology","Study Guide"], confidence:88, favorite:false, deleted:false },
-  { id:6, title:"Physics Problem Set", date:"Nov 27, 2025", folderId:"f2", preview:"Mechanics and kinematics problems with detailed solutions using Newton's laws of motion...", aiSummary:null, tags:["Physics"], confidence:91, favorite:false, deleted:false },
-];
-
-const INITIAL_FOLDERS = [
-  { id:"f1", name:"Math" }, { id:"f2", name:"Science" },
-  { id:"f3", name:"Chemistry" }, { id:"f4", name:"Humanities" },
-];
 
 const TAG_PALETTE = [
   { bg:'rgba(129,140,248,0.15)', text:'#818CF8' },
@@ -146,7 +252,15 @@ const ConfidencePill = ({ score }) => {
   return <span className="ud-tag" style={{ background:color.bg, color:color.text }}>{score}%</span>;
 };
 
-//tag editor modal
+// ─── Loading screen ───────────────────────────────────────────────────────────
+const LoadingScreen = () => (
+  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', gap:16 }}>
+    <div style={{ width:32, height:32, borderRadius:'50%', border:`3px solid ${T.border}`, borderTopColor:T.amber, animation:'spin 0.8s linear infinite' }} />
+    <p style={{ fontFamily:T.font, fontSize:13, color:T.muted }}>Loading your notes…</p>
+  </div>
+);
+
+// ─── Tag editor modal ─────────────────────────────────────────────────────────
 const TagEditorModal = ({ tags, onSave, onClose }) => {
   const [localTags, setLocalTags] = useState([...tags]);
   const [input, setInput]         = useState('');
@@ -195,7 +309,7 @@ const TagEditorModal = ({ tags, onSave, onClose }) => {
   );
 };
 
-//Trash confirmation modal
+// ─── Trash confirm modal ──────────────────────────────────────────────────────
 const TrashConfirmModal = ({ noteTitle, onConfirm, onCancel }) => (
   <div className="ud-modal-overlay" onClick={onCancel}>
     <div className="ud-modal" onClick={e => e.stopPropagation()} style={{ width:400 }}>
@@ -222,7 +336,7 @@ const TrashConfirmModal = ({ noteTitle, onConfirm, onCancel }) => (
   </div>
 );
 
-//profile modal
+// ─── Profile modal ────────────────────────────────────────────────────────────
 const ProfileModal = ({ onClose, onLogout, activeNotes, favoriteNotes, folders, trashedNotes }) => {
   const [view,          setView]          = useState('main');
   const [pwForm,        setPwForm]        = useState({ current:'', next:'', confirm:'' });
@@ -235,22 +349,34 @@ const ProfileModal = ({ onClose, onLogout, activeNotes, favoriteNotes, folders, 
   const displayName = userName || userEmail || 'NoteScan User';
   const initials = displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2) || 'NS';
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     setPwError('');
     if (!pwForm.current.trim()) { setPwError('Please enter your current password.'); return; }
     if (pwForm.next.length < 8) { setPwError('New password must be at least 8 characters.'); return; }
     if (pwForm.next !== pwForm.confirm) { setPwError('New passwords do not match.'); return; }
-    // TODO: POST /api/auth/change-password
-    setPwSuccess(true); setPwForm({ current:'', next:'', confirm:'' });
+    try {
+      await api.changePassword(pwForm.current, pwForm.next);
+      setPwSuccess(true);
+      setPwForm({ current:'', next:'', confirm:'' });
+    } catch (err) {
+      setPwError(err.message || 'Failed to update password.');
+    }
   };
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
     setDeleteError('');
     if (deleteConfirm !== 'DELETE') { setDeleteError('Please type DELETE to confirm.'); return; }
-    // TODO: DELETE /api/auth/delete-account
-    localStorage.removeItem('token'); sessionStorage.removeItem('token');
-    sessionStorage.removeItem('userEmail'); sessionStorage.removeItem('userName');
-    onClose(); onLogout();
+    try {
+      await api.deleteAccount();
+    } catch (err) {
+      console.warn('Delete account API error:', err.message);
+    }
+    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('userEmail');
+    sessionStorage.removeItem('userName');
+    onClose();
+    onLogout();
   };
 
   const goBack = () => { setView('main'); setPwError(''); setPwSuccess(false); setDeleteConfirm(''); setDeleteError(''); };
@@ -362,7 +488,7 @@ const ProfileModal = ({ onClose, onLogout, activeNotes, favoriteNotes, folders, 
   );
 };
 
-//new folder modal
+// ─── New folder modal ─────────────────────────────────────────────────────────
 const NewFolderModal = ({ onSave, onClose }) => {
   const [name, setName] = useState('');
   return (
@@ -380,11 +506,12 @@ const NewFolderModal = ({ onSave, onClose }) => {
   );
 };
 
-//folders strip
+// ─── Folders strip ────────────────────────────────────────────────────────────
 const FoldersStrip = ({ folders, notes, selectedFolderId, onSelect, onAdd, onDelete, onRename, onDropNote, search='' }) => {
   const [renamingId, setRenamingId] = useState(null);
   const [renameVal,  setRenameVal]  = useState('');
   const [dragOverId, setDragOverId] = useState(undefined);
+  const [collapsed,  setCollapsed]  = useState(false);
   const { draggingNoteId } = React.useContext(DragContext);
   const visible = search.trim() ? folders.filter(f => f.name.toLowerCase().includes(search.toLowerCase())) : folders;
   const count = (fid) => notes.filter(n => n.folderId === fid).length;
@@ -392,52 +519,65 @@ const FoldersStrip = ({ folders, notes, selectedFolderId, onSelect, onAdd, onDel
   const handleDrop = (e, fid) => { e.preventDefault(); const nid = parseInt(e.dataTransfer.getData('noteId'),10); if (nid) onDropNote(nid, fid); setDragOverId(undefined); };
 
   return (
-    <div style={{ marginBottom:20 }}>
-      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
+    <div style={{ marginBottom:16 }}>
+      <button onClick={() => setCollapsed(v => !v)} style={{ display:'flex', alignItems:'center', gap:8, marginBottom: collapsed ? 0 : 12, background:'none', border:'none', cursor:'pointer', padding:0, width:'100%' }}>
         <span style={{ fontSize:10, fontWeight:700, letterSpacing:1.5, textTransform:'uppercase', color:T.muted, fontFamily:T.font }}>Folders</span>
+        <Icon d={collapsed ? 'M9 5l7 7-7 7' : 'M19 9l-7 7-7-7'} size={16} color={T.amber} />
         <span style={{ fontSize:10, fontWeight:700, background:T.surfaceHi, color:T.muted, borderRadius:99, padding:'1px 7px', fontFamily:T.font }}>{folders.length}</span>
-        <div style={{ flex:1 }} />
-        <button className="ud-btn-ghost" onClick={onAdd} style={{ padding:'4px 10px', fontSize:11 }}><Icon d="M12 4v16m8-8H4" size={12} /> New Folder</button>
-      </div>
-      <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-        <button className={`ud-folder-chip${selectedFolderId===null?' active':''}${draggingNoteId && dragOverId===null?' dragover':''}`}
-          onClick={() => onSelect(null)} onDragOver={e => handleDragOver(e,null)} onDragLeave={() => setDragOverId(undefined)} onDrop={e => handleDrop(e,null)}>
-          <Icon d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" size={13} />
-          {draggingNoteId && dragOverId===null ? 'Remove folder' : 'All Notes'}
-          <span style={{ fontSize:10, fontWeight:700, color:'inherit', opacity:.7 }}>{notes.length}</span>
-        </button>
-        {visible.map(folder => {
-          const isActive   = selectedFolderId === folder.id;
-          const isDragOver = draggingNoteId && dragOverId === folder.id;
-          return renamingId === folder.id ? (
-            <input key={folder.id} className="ud-input" autoFocus value={renameVal} onChange={e => setRenameVal(e.target.value)}
-              style={{ width:120, padding:'5px 10px', fontSize:12 }}
-              onKeyDown={e => { if (e.key==='Enter' && renameVal.trim()) { onRename(folder.id, renameVal.trim()); setRenamingId(null); } if (e.key==='Escape') setRenamingId(null); }}
-              onBlur={() => setRenamingId(null)} />
-          ) : (
-            <div key={folder.id} style={{ position:'relative', display:'inline-flex' }}>
-              <button className={`ud-folder-chip${isActive?' active':''}${isDragOver?' dragover':''}`}
-                onClick={() => onSelect(folder.id)} onDragOver={e => handleDragOver(e,folder.id)} onDragLeave={() => setDragOverId(undefined)} onDrop={e => handleDrop(e,folder.id)}
-                onDoubleClick={() => { setRenamingId(folder.id); setRenameVal(folder.name); }}>
-                <Icon d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" size={13} />
-                {isDragOver ? `Move to ${folder.name}` : folder.name}
-                <span style={{ fontSize:10, fontWeight:700, color:'inherit', opacity:.7 }}>{count(folder.id)}</span>
-                <button style={{ background:'none', border:'none', cursor:'pointer', color:'inherit', opacity:.5, padding:0, display:'flex', lineHeight:1, marginLeft:2 }} onClick={e => { e.stopPropagation(); onDelete(folder.id); }}>
-                  <Icon d="M6 18L18 6M6 6l12 12" size={10} />
-                </button>
-              </button>
-            </div>
-          );
-        })}
-      </div>
-      {draggingNoteId && <p style={{ fontSize:11, color:T.muted, fontFamily:T.font, margin:'8px 0 0', fontStyle:'italic' }}>Drop onto a folder to move the note</p>}
-      <div style={{ height:1, background:T.border, margin:'16px 0' }} />
+      </button>
+
+      {!collapsed && (
+        <>
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+            <button className={`ud-folder-chip${selectedFolderId===null?' active':''}${draggingNoteId && dragOverId===null?' dragover':''}`}
+              onClick={() => onSelect(null)} onDragOver={e => handleDragOver(e,null)} onDragLeave={() => setDragOverId(undefined)} onDrop={e => handleDrop(e,null)}>
+              <Icon d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" size={13} />
+              {draggingNoteId && dragOverId===null ? 'Remove folder' : 'All Notes'}
+              <span style={{ fontSize:10, fontWeight:700, color:'inherit', opacity:.7 }}>{notes.length}</span>
+            </button>
+            {visible.map(folder => {
+              const isActive   = selectedFolderId === folder.id;
+              const isDragOver = draggingNoteId && dragOverId === folder.id;
+              return renamingId === folder.id ? (
+                <input key={folder.id} className="ud-input" autoFocus value={renameVal} onChange={e => setRenameVal(e.target.value)}
+                  style={{ width:120, padding:'5px 10px', fontSize:12 }}
+                  onKeyDown={e => { if (e.key==='Enter' && renameVal.trim()) { onRename(folder.id, renameVal.trim()); setRenamingId(null); } if (e.key==='Escape') setRenamingId(null); }}
+                  onBlur={() => setRenamingId(null)} />
+              ) : (
+                <div key={folder.id} style={{ position:'relative', display:'inline-flex' }}>
+                  <button className={`ud-folder-chip${isActive?' active':''}${isDragOver?' dragover':''}`}
+                    onClick={() => onSelect(folder.id)} onDragOver={e => handleDragOver(e,folder.id)} onDragLeave={() => setDragOverId(undefined)} onDrop={e => handleDrop(e,folder.id)}
+                    onDoubleClick={() => { setRenamingId(folder.id); setRenameVal(folder.name); }}>
+                    <Icon d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" size={13} />
+                    {isDragOver ? `Move to ${folder.name}` : folder.name}
+                    <span style={{ fontSize:10, fontWeight:700, color:'inherit', opacity:.7 }}>{count(folder.id)}</span>
+                    <button style={{ background:'none', border:'none', cursor:'pointer', color:'inherit', opacity:.5, padding:0, display:'flex', lineHeight:1, marginLeft:2 }} onClick={e => { e.stopPropagation(); onDelete(folder.id); }}>
+                      <Icon d="M6 18L18 6M6 6l12 12" size={10} />
+                    </button>
+                  </button>
+                </div>
+              );
+            })}
+            {/* New folder icon chip */}
+            <button onClick={onAdd} title="New folder"
+              style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:38, height:34, borderRadius:8, border:`1px dashed rgba(255,255,255,0.18)`, background:'transparent', cursor:'pointer', color:T.muted, transition:'border-color .15s, color .15s', flexShrink:0 }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(245,166,35,.4)'; e.currentTarget.style.color=T.amber; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(255,255,255,0.18)'; e.currentTarget.style.color=T.muted; }}
+            >
+              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ flexShrink:0 }}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 11v4m-2-2h4" />
+              </svg>
+            </button>
+          </div>
+          {draggingNoteId && <p style={{ fontSize:11, color:T.muted, fontFamily:T.font, margin:'8px 0 0', fontStyle:'italic' }}>Drop onto a folder to move the note</p>}
+        </>
+      )}
     </div>
   );
 };
 
-//Note Card 
-
+// ─── Note card ────────────────────────────────────────────────────────────────
 const NoteCard = ({ note, onOpen, onToggleFavorite, onDelete, onUpdateTags }) => {
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [menuPos,    setMenuPos]    = useState({ top:0, right:0 });
@@ -449,9 +589,7 @@ const NoteCard = ({ note, onOpen, onToggleFavorite, onDelete, onUpdateTags }) =>
 
   useEffect(() => {
     if (!menuOpen) return;
-    const handler = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
-    };
+    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpen]);
@@ -468,130 +606,47 @@ const NoteCard = ({ note, onOpen, onToggleFavorite, onDelete, onUpdateTags }) =>
       <div
         className="ud-card ud-card-clickable"
         draggable
-        onDragStart={e => {
-          e.dataTransfer.setData('noteId', note.id);
-          e.dataTransfer.effectAllowed='move';
-          setDraggingNoteId(note.id);
-        }}
+        onDragStart={e => { e.dataTransfer.setData('noteId', note.id); e.dataTransfer.effectAllowed='move'; setDraggingNoteId(note.id); }}
         onDragEnd={() => setDraggingNoteId(null)}
-        onClick={() => {
-          if (!menuOpen && !trashModal && !tagModal) onOpen(note);
-        }}
-        style={{
-          padding:18,
-          display:'flex',
-          flexDirection:'column',
-          gap:10,
-          cursor: isDragging ? 'grabbing' : 'pointer',
-          opacity: isDragging ? 0.5 : 1,
-          transform: isDragging ? 'rotate(1.5deg) scale(1.02)' : 'none',
-          transition:'opacity .15s, transform .15s',
-          animation:'fadeUp .3s ease both'
-        }}
+        onClick={() => { if (!menuOpen && !trashModal && !tagModal) onOpen(note); }}
+        style={{ padding:18, display:'flex', flexDirection:'column', gap:10, cursor: isDragging ? 'grabbing' : 'pointer', opacity: isDragging ? 0.5 : 1, transform: isDragging ? 'rotate(1.5deg) scale(1.02)' : 'none', transition:'opacity .15s, transform .15s', animation:'fadeUp .3s ease both' }}
       >
-
-        {/* Top row */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div style={{ minHeight:16 }}>
-            {note.favorite && (
-              <Icon
-                d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
-                size={13}
-                color={T.amber}
-                fill={T.amber}
-              />
-            )}
+            {note.favorite && <Icon d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" size={13} color={T.amber} fill={T.amber} />}
           </div>
-
-          {/* 3-dot menu button */}
-          <button
-            onClick={handleDotClick}
-            style={{
-              background:'none',
-              border:'none',
-              cursor:'pointer',
-              color:T.muted,
-              padding:'2px 6px',
-              borderRadius:6,
-              display:'flex',
-              flexDirection:'column',
-              gap:3
-            }}
-          >
-            {[0,1,2].map(i => (
-              <div key={i} style={{ width:3, height:3, borderRadius:'50%', background:'currentColor' }} />
-            ))}
+          <button onClick={handleDotClick} style={{ background:'none', border:'none', cursor:'pointer', color:T.muted, padding:'2px 6px', borderRadius:6, display:'flex', flexDirection:'column', gap:3 }}>
+            {[0,1,2].map(i => <div key={i} style={{ width:3, height:3, borderRadius:'50%', background:'currentColor' }} />)}
           </button>
         </div>
-
-        {/* Title + preview */}
         <div>
-          <p style={{ fontFamily:T.font, fontSize:14, fontWeight:600, color:T.cream, margin:'0 0 5px', lineHeight:1.3 }}>
-            {note.title}
-          </p>
-
-          <p style={{
-            fontFamily:T.font,
-            fontSize:12,
-            color:T.muted,
-            margin:0,
-            lineHeight:1.6,
-            display:'-webkit-box',
-            WebkitLineClamp:2,
-            WebkitBoxOrient:'vertical',
-            overflow:'hidden'
-          }}>
-            {note.aiSummary || note.preview}
-          </p>
+          <p style={{ fontFamily:T.font, fontSize:14, fontWeight:600, color:T.cream, margin:'0 0 5px', lineHeight:1.3 }}>{note.title}</p>
+          <p style={{ fontFamily:T.font, fontSize:12, color:T.muted, margin:0, lineHeight:1.6, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{note.aiSummary || note.preview}</p>
         </div>
-
-        {/* Tags */}
         {note.tags.length > 0 && (
-          <div style={{
-            display:'flex',
-            gap:5,
-            flexWrap:'wrap',
-            marginTop:6
-          }}>
-            {note.tags.map(tag => {
-              const c = tagColor(tag);
-              return (
-                <span key={tag} className="ud-tag" style={{ background:c.bg, color:c.text }}>
-                  {tag}
-                </span>
-              );
-            })}
+          <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:6 }}>
+            {note.tags.map(tag => { const c = tagColor(tag); return <span key={tag} className="ud-tag" style={{ background:c.bg, color:c.text }}>{tag}</span>; })}
           </div>
         )}
-
-        {/* Footer (no divider) */}
         <div style={{ marginTop:'auto', paddingTop:10 }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
             <ConfidencePill score={note.confidence} />
-            <span style={{ fontFamily:T.font, fontSize:11, color:T.muted }}>
-              {note.date}
-            </span>
+            <span style={{ fontFamily:T.font, fontSize:11, color:T.muted }}>{note.date}</span>
           </div>
         </div>
       </div>
 
-      
       {menuOpen && createPortal(
         <div ref={menuRef} className="ud-dot-menu" style={{ top:menuPos.top, right:menuPos.right, border:'none' }}>
-          
           <button className="ud-dot-item" onClick={e => { e.stopPropagation(); onToggleFavorite(note.id); setMenuOpen(false); }}>
             <Icon d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
               size={14} color={note.favorite ? T.amber : 'currentColor'} fill={note.favorite ? T.amber : 'none'} />
             {note.favorite ? 'Remove from favorites' : 'Add to favorites'}
           </button>
-
           <button className="ud-dot-item" onClick={e => { e.stopPropagation(); setMenuOpen(false); setTagModal(true); }}>
             <Icon d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a2 2 0 012-2z" size={14} />
             Edit tags
           </button>
-
-          
-
           <button className="ud-dot-item danger" onClick={e => { e.stopPropagation(); setMenuOpen(false); setTrashModal(true); }}>
             <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" size={14} color={T.red} />
             Move to Trash
@@ -599,48 +654,29 @@ const NoteCard = ({ note, onOpen, onToggleFavorite, onDelete, onUpdateTags }) =>
         </div>,
         document.body
       )}
-
-      {trashModal && createPortal(
-        <TrashConfirmModal
-          noteTitle={note.title}
-          onConfirm={() => { setTrashModal(false); onDelete(note.id); }}
-          onCancel={() => setTrashModal(false)}
-        />,
-        document.body
-      )}
-
-      {tagModal && createPortal(
-        <TagEditorModal
-          tags={note.tags}
-          onSave={(tags) => onUpdateTags(note.id, tags)}
-          onClose={() => setTagModal(false)}
-        />,
-        document.body
-      )}
+      {trashModal && createPortal(<TrashConfirmModal noteTitle={note.title} onConfirm={() => { setTrashModal(false); onDelete(note.id); }} onCancel={() => setTrashModal(false)} />, document.body)}
+      {tagModal && createPortal(<TagEditorModal tags={note.tags} onSave={(tags) => onUpdateTags(note.id, tags)} onClose={() => setTagModal(false)} />, document.body)}
     </>
   );
 };
 
-
-
-//Notes home
+// ─── Notes home ───────────────────────────────────────────────────────────────
 const NotesHome = ({ notes, onNewScan, onNoteSelect, onToggleFavorite, onDelete, onAddFolder, onDeleteFolder, onRenameFolder, onMoveNote, onUpdateTags, folders }) => {
   const [selectedFolderId, setSelectedFolderId] = useState(null);
-  const [sortBy,  setSortBy]  = useState('date');
-  const [search,  setSearch]  = useState('');
+  const [sortBy,           setSortBy]           = useState('date');
+  const [search,           setSearch]           = useState('');
+  const [notesCollapsed,   setNotesCollapsed]   = useState(false);
+
   const visible  = selectedFolderId === null ? notes : notes.filter(n => n.folderId === selectedFolderId);
   const filtered = visible.filter(n => { const q = search.toLowerCase(); const fn = folders.find(f => f.id === n.folderId)?.name || ''; return n.title.toLowerCase().includes(q) || n.preview.toLowerCase().includes(q) || n.tags.some(t => t.toLowerCase().includes(q)) || fn.toLowerCase().includes(q); });
   const sorted   = [...filtered].sort((a,b) => sortBy==='alpha' ? a.title.localeCompare(b.title) : sortBy==='confidence' ? b.confidence - a.confidence : 0);
 
   return (
     <div style={{ animation:'fadeUp .35s ease both' }}>
-      <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', marginBottom:28 }}>
-        <div>
-          <p style={{ fontFamily:T.font, fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 6px' }}>Your Library</p>
-          <h1 style={{ fontFamily:T.serif, fontSize:32, fontWeight:400, color:T.cream, margin:0, lineHeight:1.1 }}>My Notes</h1>
-          <p style={{ fontFamily:T.font, fontSize:13, color:T.muted, margin:'6px 0 0' }}>{sorted.length} note{sorted.length !== 1 ? 's' : ''}</p>
-        </div>
-        <button className="ud-btn-amber" onClick={onNewScan}><Icon d="M12 4v16m8-8H4" size={14} color="#0E1117" /> New Scan</button>
+      <div style={{ marginBottom:28 }}>
+        <p style={{ fontFamily:T.font, fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 6px' }}>Your Library</p>
+        <h1 style={{ fontFamily:T.serif, fontSize:32, fontWeight:400, color:T.cream, margin:0, lineHeight:1.1 }}>My Notes</h1>
+        <p style={{ fontFamily:T.font, fontSize:13, color:T.muted, margin:'6px 0 0' }}>{sorted.length} note{sorted.length !== 1 ? 's' : ''}</p>
       </div>
       <div style={{ display:'flex', alignItems:'center', gap:10, background:T.surface, border:`1px solid ${T.border}`, borderRadius:10, padding:'9px 14px', marginBottom:20 }}>
         <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" size={15} color={T.muted} />
@@ -648,34 +684,50 @@ const NotesHome = ({ notes, onNewScan, onNoteSelect, onToggleFavorite, onDelete,
         {search && <button style={{ background:'none', border:'none', cursor:'pointer', color:T.muted, display:'flex', padding:0 }} onClick={() => setSearch('')}><Icon d="M6 18L18 6M6 6l12 12" size={13} /></button>}
       </div>
       <FoldersStrip folders={folders} notes={notes} selectedFolderId={selectedFolderId} onSelect={setSelectedFolderId} onAdd={onAddFolder} onDelete={onDeleteFolder} onRename={onRenameFolder} onDropNote={onMoveNote} search={search} />
-      <div style={{ display:'flex', alignItems:'center', marginBottom:16 }}>
-        <div style={{ display:'flex', gap:4 }}>
-          {[{k:'date',label:'Recent'},{k:'alpha',label:'A–Z'},{k:'confidence',label:'Confidence'}].map(o => (
-            <button key={o.k} className={`ud-sort-btn${sortBy===o.k?' active':''}`} onClick={() => setSortBy(o.k)}>{o.label}</button>
-          ))}
-        </div>
+      <div style={{ display:'flex', alignItems:'center', marginBottom: notesCollapsed ? 0 : 14 }}>
+        <button onClick={() => setNotesCollapsed(v => !v)} style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:0, flex:1 }}>
+          <span style={{ fontSize:10, fontWeight:700, letterSpacing:1.5, textTransform:'uppercase', color:T.muted, fontFamily:T.font }}>Notes</span>
+          <Icon d={notesCollapsed ? 'M9 5l7 7-7 7' : 'M19 9l-7 7-7-7'} size={16} color={T.amber} />
+          <span style={{ fontSize:10, fontWeight:700, background:T.surfaceHi, color:T.muted, borderRadius:99, padding:'1px 7px', fontFamily:T.font }}>{sorted.length}</span>
+        </button>
+        {!notesCollapsed && (
+          <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+            <Icon d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" size={13} color={T.muted} />
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+              style={{ background:T.surfaceHi, border:`1px solid ${T.border}`, color:T.cream, borderRadius:7, padding:'4px 10px', fontSize:12, fontFamily:T.font, fontWeight:500, cursor:'pointer', outline:'none', appearance:'none', paddingRight:24, backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B7694' stroke-width='2'%3E%3Cpath d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`, backgroundRepeat:'no-repeat', backgroundPosition:'right 8px center' }}>
+              <option value="date">Recent</option>
+              <option value="alpha">A – Z</option>
+              <option value="confidence">Confidence</option>
+            </select>
+          </div>
+        )}
       </div>
-      {sorted.length === 0 ? (
-        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'60px 0', gap:12 }}>
-          <div style={{ width:60, height:60, borderRadius:16, background:T.surface, border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center' }}><Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={24} color={T.muted} /></div>
-          <p style={{ fontFamily:T.font, fontSize:14, color:T.muted, margin:0 }}>{search ? `No notes found for "${search}"` : 'No notes here yet.'}</p>
-          {!search && <button className="ud-btn-amber" onClick={onNewScan}><Icon d="M12 4v16m8-8H4" size={14} color="#0E1117" /> New Scan</button>}
-        </div>
-      ) : (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:12 }}>
-          {sorted.map(n => <NoteCard key={n.id} note={n} onOpen={onNoteSelect} onToggleFavorite={onToggleFavorite} onDelete={onDelete} onUpdateTags={onUpdateTags} />)}
-        </div>
+      {!notesCollapsed && (
+        sorted.length === 0 ? (
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'60px 0', gap:12 }}>
+            <div style={{ width:60, height:60, borderRadius:16, background:T.surface, border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={24} color={T.muted} />
+            </div>
+            <p style={{ fontFamily:T.font, fontSize:14, color:T.muted, margin:0 }}>
+              {search ? `No notes found for "${search}"` : 'No notes here yet.'}
+            </p>
+          </div>
+        ) : (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:12 }}>
+            {sorted.map(n => <NoteCard key={n.id} note={n} onOpen={onNoteSelect} onToggleFavorite={onToggleFavorite} onDelete={onDelete} onUpdateTags={onUpdateTags} />)}
+          </div>
+        )
       )}
     </div>
   );
 };
 
-//Trash page 
+// ─── Trash page ───────────────────────────────────────────────────────────────
 const TrashPage = ({ notes, onRestore, onPermanentDelete, onEmptyTrash }) => (
   <div style={{ animation:'fadeUp .35s ease both' }}>
     <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', marginBottom:28 }}>
       <div>
-        <p style={{ fontFamily:T.font, fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.muted, margin:'0 0 6px' }}>Deleted</p>
+        <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 6px', fontFamily:T.font }}>DELETED</p>
         <h1 style={{ fontFamily:T.serif, fontSize:32, fontWeight:400, color:T.cream, margin:0 }}>Trash</h1>
         <p style={{ fontFamily:T.font, fontSize:13, color:T.muted, margin:'6px 0 0' }}>{notes.length} deleted note{notes.length !== 1 ? 's' : ''}</p>
       </div>
@@ -705,22 +757,43 @@ const TrashPage = ({ notes, onRestore, onPermanentDelete, onEmptyTrash }) => (
   </div>
 );
 
-//main component
+// ─── Main component ───────────────────────────────────────────────────────────
 const UserDashboard = ({
   onLogout, onProcess, onNewScan, onNoteSelect,
   showUploadPage=false, showResultsPage=false,
   initialTab=null, onInitialTabConsumed,
 }) => {
   const [activeTab,      setActiveTab]      = useState(initialTab || 'notes');
-  const [notes,          setNotes]          = useState(INITIAL_NOTES);
-  const [folders,        setFolders]        = useState(INITIAL_FOLDERS);
+  const [notes,          setNotes]          = useState([]);
+  const [folders,        setFolders]        = useState([]);
+  const [loading,        setLoading]        = useState(true);
+  const [fetchError,     setFetchError]     = useState(false);
   const [showNewFolder,  setShowNewFolder]  = useState(false);
   const [showProfile,    setShowProfile]    = useState(false);
   const [draggingNoteId, setDraggingNoteId] = useState(null);
   const [toast,          setToast]          = useState({ visible:false, message:'' });
-  const nextFolderId = useRef(200);
-  const toastTimer   = useRef(null);
+  const toastTimer = useRef(null);
 
+  const loadData = async () => {
+    setLoading(true);
+    setFetchError(false);
+    try {
+      const [notesData, foldersData] = await Promise.all([
+        api.getNotes().catch(() => []),
+        api.getFolders().catch(() => []),
+      ]);
+      setNotes(notesData ?? []);
+      setFolders(foldersData ?? []);
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err);
+      setNotes([]);
+      setFolders([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadData(); }, []);
   useEffect(() => { if (initialTab) { setActiveTab(initialTab); if (onInitialTabConsumed) onInitialTabConsumed(); } }, [initialTab]);
   useEffect(() => { if (showResultsPage) { setActiveTab('results'); return; } if (showUploadPage) { setActiveTab('upload'); return; } }, [showUploadPage, showResultsPage]);
 
@@ -730,21 +803,78 @@ const UserDashboard = ({
     toastTimer.current = setTimeout(() => setToast(t => ({...t, visible:false})), 2500);
   };
 
-  const handleNewScan         = () => { setActiveTab('upload'); if (onNewScan) onNewScan(); };
-  const handleToggleFavorite  = id => setNotes(p => p.map(n => n.id===id ? {...n, favorite:!n.favorite} : n));
-  const handleDeleteNote      = id => { setNotes(p => p.map(n => n.id===id ? {...n, deleted:true, favorite:false} : n)); showToast('Note moved to trash'); };
-  const handleRestoreNote     = id => setNotes(p => p.map(n => n.id===id ? {...n, deleted:false} : n));
-  const handlePermanentDelete = id => setNotes(p => p.filter(n => n.id!==id));
-  const handleEmptyTrash      = () => setNotes(p => p.filter(n => !n.deleted));
-  const handleUpdateTags      = (id, tags) => setNotes(p => p.map(n => n.id===id ? {...n, tags} : n));
-  const handleMoveNote = (noteId, targetFolderId) => {
-    setNotes(p => p.map(n => n.id===noteId ? {...n, folderId:targetFolderId} : n));
-    const folderName = targetFolderId ? folders.find(f => f.id===targetFolderId)?.name : null;
-    showToast(folderName ? `Moved to ${folderName}` : 'Removed from folder');
+  const handleNewScan = () => { setActiveTab('upload'); if (onNewScan) onNewScan(); };
+
+  const handleToggleFavorite = async (id) => {
+    const current = notes.find(n => n.id === id)?.favorite ?? false;
+    setNotes(p => p.map(n => n.id === id ? { ...n, favorite: !n.favorite } : n));
+    try { await api.toggleFavorite(id, current); }
+    catch (err) { setNotes(p => p.map(n => n.id === id ? { ...n, favorite: !n.favorite } : n)); showToast('Failed to update favorite'); }
   };
-  const handleAddFolder    = name => { setFolders(p => [...p, { id:`f${nextFolderId.current++}`, name }]); setShowNewFolder(false); };
-  const handleDeleteFolder = fid  => { setNotes(p => p.map(n => n.folderId===fid ? {...n, folderId:null} : n)); setFolders(p => p.filter(f => f.id!==fid)); };
-  const handleRenameFolder = (id, name) => setFolders(p => p.map(f => f.id===id ? {...f, name} : f));
+
+  const handleDeleteNote = async (id) => {
+    setNotes(p => p.map(n => n.id === id ? { ...n, deleted: true, favorite: false } : n));
+    showToast('Note moved to trash');
+    try { await api.trashNote(id); }
+    catch (err) { setNotes(p => p.map(n => n.id === id ? { ...n, deleted: false } : n)); showToast('Failed to move note to trash'); }
+  };
+
+  const handleRestoreNote = async (id) => {
+    setNotes(p => p.map(n => n.id === id ? { ...n, deleted: false } : n));
+    try { await api.restoreNote(id); }
+    catch (err) { setNotes(p => p.map(n => n.id === id ? { ...n, deleted: true } : n)); showToast('Failed to restore note'); }
+  };
+
+  const handlePermanentDelete = async (id) => {
+    const backup = notes.find(n => n.id === id);
+    setNotes(p => p.filter(n => n.id !== id));
+    try { await api.permanentDelete(id); }
+    catch (err) { if (backup) setNotes(p => [...p, backup]); showToast('Failed to delete note'); }
+  };
+
+  const handleEmptyTrash = async () => {
+    const trashed = notes.filter(n => n.deleted);
+    setNotes(p => p.filter(n => !n.deleted));
+    try { await api.emptyTrash(); }
+    catch (err) { setNotes(p => [...p, ...trashed]); showToast('Failed to empty trash'); }
+  };
+
+  const handleUpdateTags = async (id, tags) => {
+    const prev = notes.find(n => n.id === id)?.tags;
+    setNotes(p => p.map(n => n.id === id ? { ...n, tags } : n));
+    try { await api.updateTags(id, tags); }
+    catch (err) { if (prev) setNotes(p => p.map(n => n.id === id ? { ...n, tags: prev } : n)); showToast('Failed to update tags'); }
+  };
+
+  const handleMoveNote = async (noteId, targetFolderId) => {
+    const prev = notes.find(n => n.id === noteId)?.folderId;
+    setNotes(p => p.map(n => n.id === noteId ? { ...n, folderId: targetFolderId } : n));
+    const folderName = targetFolderId ? folders.find(f => f.id === targetFolderId)?.name : null;
+    showToast(folderName ? `Moved to ${folderName}` : 'Removed from folder');
+    try { await api.moveNote(noteId, targetFolderId); }
+    catch (err) { setNotes(p => p.map(n => n.id === noteId ? { ...n, folderId: prev } : n)); showToast('Failed to move note'); }
+  };
+
+  const handleAddFolder = async (name) => {
+    setShowNewFolder(false);
+    try { const folder = await api.createFolder(name); setFolders(p => [...p, folder]); }
+    catch (err) { showToast('Failed to create folder'); }
+  };
+
+  const handleDeleteFolder = async (fid) => {
+    const backup = folders.find(f => f.id === fid);
+    setFolders(p => p.filter(f => f.id !== fid));
+    setNotes(p => p.map(n => n.folderId === fid ? { ...n, folderId: null } : n));
+    try { await api.deleteFolder(fid); }
+    catch (err) { if (backup) setFolders(p => [...p, backup]); showToast('Failed to delete folder'); }
+  };
+
+  const handleRenameFolder = async (id, name) => {
+    const prev = folders.find(f => f.id === id)?.name;
+    setFolders(p => p.map(f => f.id === id ? { ...f, name } : f));
+    try { await api.renameFolder(id, name); }
+    catch (err) { if (prev) setFolders(p => p.map(f => f.id === id ? { ...f, name: prev } : f)); showToast('Failed to rename folder'); }
+  };
 
   const activeNotes   = notes.filter(n => !n.deleted);
   const trashedNotes  = notes.filter(n => n.deleted);
@@ -760,18 +890,19 @@ const UserDashboard = ({
     { key:'trash',     label:'Trash',     icon:'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16', onClick:() => setActiveTab('trash') },
   ];
 
+  if (loading) return <LoadingScreen />;
+
   return (
     <DragContext.Provider value={{ draggingNoteId, setDraggingNoteId }}>
       <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, display:'flex' }}>
-
         <aside style={{ width:220, background:T.surface, borderRight:`1px solid ${T.border}`, display:'flex', flexDirection:'column', flexShrink:0, position:'sticky', top:0, height:'100vh' }}>
           <div style={{ padding:'20px 16px 16px', borderBottom:`1px solid ${T.border}` }}>
-            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <button onClick={() => setActiveTab('notes')} style={{ display:'flex', alignItems:'center', gap:10, background:'none', border:'none', cursor:'pointer', padding:0 }}>
               <div style={{ width:32, height:32, borderRadius:9, background:T.amber, display:'flex', alignItems:'center', justifyContent:'center' }}>
                 <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={17} color="#0E1117" />
               </div>
               <span style={{ fontFamily:T.serif, fontSize:18, color:T.cream }}>NoteScan</span>
-            </div>
+            </button>
           </div>
           <nav style={{ padding:'12px 10px', flex:1, display:'flex', flexDirection:'column', gap:2 }}>
             <p style={{ fontFamily:T.font, fontSize:10, fontWeight:700, letterSpacing:1.5, textTransform:'uppercase', color:T.muted, margin:'4px 4px 8px', opacity:.6 }}>Navigation</p>
@@ -790,7 +921,6 @@ const UserDashboard = ({
                 </button>
               </>
             )}
-            
           </nav>
           <div style={{ padding:'12px 10px', borderTop:`1px solid ${T.border}` }}>
             <button className="ud-nav-item" onClick={() => setShowProfile(true)} style={{ gap:10 }}>
@@ -807,27 +937,30 @@ const UserDashboard = ({
 
         <main className="ud-scrollbar" style={{ flex:1, overflowY:'auto', height:'100vh', boxSizing:'border-box' }}>
           <div style={{ display:activeTab==='results'?'block':'none' }}>
-            <ResultsPage onBack={() => setActiveTab('notes')} />
+            {/* onSave is called by ResultsPage after the user saves — it refreshes
+                notes from the backend then navigates back to My Notes */}
+            <ResultsPage
+              onBack={() => setActiveTab('notes')}
+              onSave={() => {
+                api.getNotes()
+                  .then(data => { setNotes(data); setActiveTab('notes'); })
+                  .catch(() => setActiveTab('notes'));
+              }}
+            />
           </div>
           {activeTab !== 'results' && (
             <div style={{ padding:'32px 40px', maxWidth:1100, margin:'0 auto' }}>
-              {activeTab === 'notes' && (
-                <NotesHome notes={activeNotes} folders={folders} onNewScan={handleNewScan}
-                  onNoteSelect={onNoteSelect} onToggleFavorite={handleToggleFavorite}
-                  onDelete={handleDeleteNote} onAddFolder={() => setShowNewFolder(true)}
-                  onDeleteFolder={handleDeleteFolder} onRenameFolder={handleRenameFolder}
-                  onMoveNote={handleMoveNote} onUpdateTags={handleUpdateTags} />
-              )}
-              {activeTab === 'upload' && <UploadPage onProcess={() => { setActiveTab('results'); if (onProcess) onProcess(); }} />}
+              {activeTab === 'notes'     && <NotesHome notes={activeNotes} folders={folders} onNewScan={handleNewScan} onNoteSelect={onNoteSelect} onToggleFavorite={handleToggleFavorite} onDelete={handleDeleteNote} onAddFolder={() => setShowNewFolder(true)} onDeleteFolder={handleDeleteFolder} onRenameFolder={handleRenameFolder} onMoveNote={handleMoveNote} onUpdateTags={handleUpdateTags} />}
+              {activeTab === 'upload'    && <UploadPage onProcess={() => { setActiveTab('results'); if (onProcess) onProcess(); }} />}
               {activeTab === 'favorites' && <FavoritesPage notes={activeNotes} onNoteSelect={onNoteSelect} onRemoveFavorite={handleToggleFavorite} onNewScan={handleNewScan} />}
-              {activeTab === 'trash' && <TrashPage notes={trashedNotes} onRestore={handleRestoreNote} onPermanentDelete={handlePermanentDelete} onEmptyTrash={handleEmptyTrash} />}
+              {activeTab === 'trash'     && <TrashPage notes={trashedNotes} onRestore={handleRestoreNote} onPermanentDelete={handlePermanentDelete} onEmptyTrash={handleEmptyTrash} />}
             </div>
           )}
         </main>
       </div>
 
       {showNewFolder && <NewFolderModal onSave={handleAddFolder} onClose={() => setShowNewFolder(false)} />}
-      {showProfile && <ProfileModal onClose={() => setShowProfile(false)} onLogout={onLogout} activeNotes={activeNotes} favoriteNotes={favoriteNotes} folders={folders} trashedNotes={trashedNotes} />}
+      {showProfile   && <ProfileModal onClose={() => setShowProfile(false)} onLogout={onLogout} activeNotes={activeNotes} favoriteNotes={favoriteNotes} folders={folders} trashedNotes={trashedNotes} />}
 
       <div className={`ud-toast${toast.visible?' visible':''}`}>
         <Icon d="M5 13l4 4L19 7" size={13} color={T.green} />
