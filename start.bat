@@ -1,9 +1,21 @@
 @echo off
-TITLE CMPE195_Group5_Project - Auto Launcher
+TITLE Project Hedgehog - Auto Launcher
 color 0A
 
 echo ===================================================
-echo      CMPE195_Group5_Project - Pre-Flight System Check
+echo      Step 1: Environment Setup
+echo ===================================================
+:: Prompt user for their specific virtual environment folder name
+set /p ENV_FOLDER="Enter your Python environment folder name (Press ENTER for default 'venv'): "
+
+:: Set default value if user just presses Enter
+if "%ENV_FOLDER%"=="" set ENV_FOLDER=venv
+
+echo [Info] Target Environment Folder: %ENV_FOLDER%
+echo.
+
+echo ===================================================
+echo      Step 2: Pre-Flight System Check
 echo ===================================================
 
 :: 1. Check Node.js
@@ -43,7 +55,6 @@ if %errorlevel% neq 0 (
 )
 
 :: 5. Check MongoDB
-:: Checks if local mongod exists. If not, prompts the user to verify their Docker container.
 mongod --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo [Info] Local mongod not found. Please ensure your MongoDB Docker container is running!
@@ -53,12 +64,17 @@ if %errorlevel% neq 0 (
 
 echo.
 echo ===================================================
-echo      Starting Microservices...
+echo      Step 3: Starting Microservices...
 echo ===================================================
 
 :: 1. Launch Python OCR Engine
 echo [1/3] Launching Python OCR Engine (ocr_backend)...
-start "OCR Engine (Python)" cmd /k "cd ocr_backend && python -m uvicorn app:app --port 8000 --reload"
+:: Smart Activation: Works whether the environment folder is in the root directory or inside ocr_backend
+if exist "%ENV_FOLDER%\Scripts\activate.bat" (
+    start "OCR Engine (Python)" cmd /k "call %ENV_FOLDER%\Scripts\activate.bat && cd ocr_backend && python -m uvicorn app:app --port 8000 --reload"
+) else (
+    start "OCR Engine (Python)" cmd /k "cd ocr_backend && call %ENV_FOLDER%\Scripts\activate.bat && python -m uvicorn app:app --port 8000 --reload"
+)
 
 :: 2. Launch Node.js Backend
 echo [2/3] Launching Node.js Backend (backend)...
