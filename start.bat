@@ -1,5 +1,5 @@
 @echo off
-TITLE Project Hedgehog - Auto Launcher
+TITLE CMPE195_Group5 Project - Auto Launcher
 color 0A
 
 echo ===================================================
