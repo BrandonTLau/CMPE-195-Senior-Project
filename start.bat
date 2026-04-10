@@ -5,13 +5,9 @@ color 0A
 echo ===================================================
 echo      Step 1: Environment Setup
 echo ===================================================
-:: Prompt user for their specific virtual environment folder name
-set /p ENV_FOLDER="Enter your Python environment folder name (Press ENTER for default 'venv'): "
-
-:: Set default value if user just presses Enter
+set /p ENV_FOLDER="Enter your Python env folder name or absolute path (Press ENTER for 'venv'): "
 if "%ENV_FOLDER%"=="" set ENV_FOLDER=venv
-
-echo [Info] Target Environment Folder: %ENV_FOLDER%
+echo [Info] Target Environment: %ENV_FOLDER%
 echo.
 
 echo ===================================================
@@ -28,20 +24,18 @@ if %errorlevel% neq 0 (
     echo [OK] Node.js is ready.
 )
 
-:: 2. Check Python
+:: 2. Check Python (Relaxed for Conda)
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [Error] Python is not installed or not in PATH!
-    pause
-    exit
+    echo [Info] Global Python not found. Will rely on the specific environment path.
 ) else (
-    echo [OK] Python is ready.
+    echo [OK] Global Python is ready.
 )
 
 :: 3. Check Ollama
 ollama --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [Warning] Ollama is not in PATH! Please ensure the app is running in the system tray.
+    echo [Warning] Ollama is not in PATH! Please ensure it is running in the system tray.
 ) else (
     echo [OK] Ollama is ready.
 )
@@ -69,8 +63,11 @@ echo ===================================================
 
 :: 1. Launch Python OCR Engine
 echo [1/3] Launching Python OCR Engine (ocr_backend)...
-:: Smart Activation: Works whether the environment folder is in the root directory or inside ocr_backend
-if exist "%ENV_FOLDER%\Scripts\activate.bat" (
+
+:: Smart Conda Activation: Check if it is an absolute path and use its python.exe directly
+if exist "%ENV_FOLDER%\python.exe" (
+    start "OCR Engine (Python)" cmd /k "cd ocr_backend && "%ENV_FOLDER%\python.exe" -m uvicorn app:app --port 8000 --reload"
+) else if exist "%ENV_FOLDER%\Scripts\activate.bat" (
     start "OCR Engine (Python)" cmd /k "call %ENV_FOLDER%\Scripts\activate.bat && cd ocr_backend && python -m uvicorn app:app --port 8000 --reload"
 ) else (
     start "OCR Engine (Python)" cmd /k "cd ocr_backend && call %ENV_FOLDER%\Scripts\activate.bat && python -m uvicorn app:app --port 8000 --reload"
