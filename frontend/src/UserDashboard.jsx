@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import UploadPage from "./UploadPage";
 import ResultsPage from "./ResultsPage";
 import FavoritesPage from "./FavoritesPage";
+import SettingsPage from "./SettingsPage";
 
 const T = {
   bg:        '#0E1117',
@@ -75,7 +76,7 @@ _style.textContent = `
   .ud-sort-btn:hover  { color:${T.cream}; }
   .ud-sort-btn.active { border-color:${T.border}; color:${T.cream}; background:${T.surfaceHi}; }
 
-  .ud-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; z-index:1000; }
+  .ud-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.75); display:flex; align-items:center; justify-content:center; z-index:1000; }
   .ud-modal { background:${T.surface}; border:1px solid ${T.border}; border-radius:20px; padding:28px; width:380px; max-width:90vw; box-shadow:0 32px 64px rgba(0,0,0,.6); animation:fadeUp .2s ease both; }
 
   .ud-toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px); background:${T.surface}; border:1px solid ${T.border}; color:${T.cream}; padding:10px 18px; border-radius:99px; font-family:${T.font}; font-size:13px; font-weight:500; box-shadow:0 8px 32px rgba(0,0,0,.4); z-index:2000; pointer-events:none; display:flex; align-items:center; gap:8px; transition:transform .35s cubic-bezier(.34,1.56,.64,1), opacity .3s; opacity:0; }
@@ -87,17 +88,11 @@ _style.textContent = `
   .ud-dot-item.danger { color:${T.red}; }
   .ud-dot-item.danger:hover { background:${T.redDim}; color:${T.red}; }
   .ud-dot-sep { height:1px; background:${T.border}; margin:4px 0; }
-
-  .ud-profile-action { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:10px; cursor:pointer; font-family:${T.font}; font-size:13px; font-weight:500; color:${T.muted}; border:1px solid ${T.border}; background:transparent; width:100%; transition:border-color .15s, color .15s, background .15s; text-align:left; }
-  .ud-profile-action:hover { border-color:${T.borderHi}; color:${T.cream}; background:${T.surfaceHi}; }
-  .ud-profile-action.danger { border-color:rgba(248,113,113,.2); color:${T.red}; }
-  .ud-profile-action.danger:hover { border-color:rgba(248,113,113,.5); background:${T.redDim}; }
 `;
 document.head.appendChild(_style);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// API layer 
-//             
+// API layer
 // ─────────────────────────────────────────────────────────────────────────────
 
 const getToken = () =>
@@ -116,7 +111,6 @@ const handleRes = async (res) => {
   return res.json();
 };
 
-// Maps the backend UploadedFile shape into the note shape the UI expects.
 const toNote = (file) => ({
   id:         file._id,
   title:      file.title || 'Untitled',
@@ -132,7 +126,6 @@ const toNote = (file) => ({
   deleted:    file.isDeleted  ?? false,
 });
 
-// Normalizes folder objects from the backend to always use `id` instead of `_id`.
 const toFolder = (folder) => ({
   id:   folder.id ?? folder._id,
   name: folder.name,
@@ -142,74 +135,37 @@ const api = {
 
   // ── Notes ──────────────────────────────────────────────────────────────────
 
-  // TODO: GET /api/files — return all files for the logged-in user
-  getNotes: async () => {
-  },
+  getNotes: async () => [],
 
-  // TODO: PATCH /api/files/:id/meta — body: { isFavorite: boolean }
-  toggleFavorite: async (id, currentValue) => {
-  },
+  toggleFavorite: async () => {},
 
-  // TODO: PATCH /api/files/:id/meta — body: { tags: string[] }
-  updateTags: async (id, tags) => {
-  },
+  updateTags: async () => {},
 
-  // TODO: PATCH /api/files/:id/meta — body: { folderId: string | null }
-  moveNote: async (id, folderId) => {
-  },
+  moveNote: async () => {},
 
-  // TODO: DELETE /api/files/:id — permanently remove the file from DB and disk
-  permanentDelete: async (id) => {
-  },
+  permanentDelete: async () => {},
 
-  // TODO: POST /api/files/:id/trash
-  // Set isDeleted: true on the file — do NOT remove it from the database
-  trashNote: async (id) => {
-  },
+  trashNote: async () => {},
 
-  // TODO: POST /api/files/:id/restore
-  // Set isDeleted: false on the file
-  restoreNote: async (id) => {
-  },
+  restoreNote: async () => {},
 
-  // TODO: DELETE /api/files/trash
-  // Permanently delete all files where isDeleted: true for this user
-  emptyTrash: async () => {
-  },
+  emptyTrash: async () => {},
 
   // ── Folders ────────────────────────────────────────────────────────────────
 
-  // TODO: GET /api/folders
-  // Return all folders for the logged-in user as [{ _id, name }]
-  getFolders: async () => {
-  },
+  getFolders: async () => [],
 
-  // TODO: POST /api/folders
-  // Body: { name } — return the created folder as { _id, name }
-  createFolder: async (name) => {
-  },
+  createFolder: async (name) => ({ _id: Date.now().toString(), name }),
 
-  // TODO: DELETE /api/folders/:id
-  // Also set folderId: null on any files that belong to this folder
-  deleteFolder: async (id) => {
-  },
+  deleteFolder: async () => {},
 
-  // TODO: PUT /api/folders/:id
-  // Body: { name } — return the updated folder as { _id, name }
-  renameFolder: async (id, name) => {
-  },
+  renameFolder: async (id, name) => ({ _id: id, name }),
 
   // ── Auth ───────────────────────────────────────────────────────────────────
 
-  // TODO: POST /api/auth/change-password
-  // Body: { currentPassword, newPassword }
-  changePassword: async (currentPassword, newPassword) => {
-  },
+  changePassword: async () => {},
 
-  // TODO: DELETE /api/auth/delete-account
-  // Delete the user record and all their associated files
-  deleteAccount: async () => {
-  },
+  deleteAccount: async () => {},
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -252,7 +208,7 @@ const ConfidencePill = ({ score }) => {
   return <span className="ud-tag" style={{ background:color.bg, color:color.text }}>{score}%</span>;
 };
 
-// ─── Loading screen ───────────────────────────────────────────────────────────
+//loading screen
 const LoadingScreen = () => (
   <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', gap:16 }}>
     <div style={{ width:32, height:32, borderRadius:'50%', border:`3px solid ${T.border}`, borderTopColor:T.amber, animation:'spin 0.8s linear infinite' }} />
@@ -260,7 +216,7 @@ const LoadingScreen = () => (
   </div>
 );
 
-// ─── Tag editor modal ─────────────────────────────────────────────────────────
+//tag editor modal
 const TagEditorModal = ({ tags, onSave, onClose }) => {
   const [localTags, setLocalTags] = useState([...tags]);
   const [input, setInput]         = useState('');
@@ -309,7 +265,7 @@ const TagEditorModal = ({ tags, onSave, onClose }) => {
   );
 };
 
-// ─── Trash confirm modal ──────────────────────────────────────────────────────
+//trash confirm
 const TrashConfirmModal = ({ noteTitle, onConfirm, onCancel }) => (
   <div className="ud-modal-overlay" onClick={onCancel}>
     <div className="ud-modal" onClick={e => e.stopPropagation()} style={{ width:400 }}>
@@ -336,162 +292,10 @@ const TrashConfirmModal = ({ noteTitle, onConfirm, onCancel }) => (
   </div>
 );
 
-// ─── Profile modal ────────────────────────────────────────────────────────────
-const ProfileModal = ({ onClose, onLogout, activeNotes, favoriteNotes, folders, trashedNotes }) => {
-  const [view,          setView]          = useState('main');
-  const [pwForm,        setPwForm]        = useState({ current:'', next:'', confirm:'' });
-  const [pwError,       setPwError]       = useState('');
-  const [pwSuccess,     setPwSuccess]     = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState('');
-  const [deleteError,   setDeleteError]   = useState('');
-
-  const { name:userName, email:userEmail } = getUserInfo();
-  const displayName = userName || userEmail || 'NoteScan User';
-  const initials = displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2) || 'NS';
-
-  const handleChangePassword = async () => {
-    setPwError('');
-    if (!pwForm.current.trim()) { setPwError('Please enter your current password.'); return; }
-    if (pwForm.next.length < 8) { setPwError('New password must be at least 8 characters.'); return; }
-    if (pwForm.next !== pwForm.confirm) { setPwError('New passwords do not match.'); return; }
-    try {
-      await api.changePassword(pwForm.current, pwForm.next);
-      setPwSuccess(true);
-      setPwForm({ current:'', next:'', confirm:'' });
-    } catch (err) {
-      setPwError(err.message || 'Failed to update password.');
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    setDeleteError('');
-    if (deleteConfirm !== 'DELETE') { setDeleteError('Please type DELETE to confirm.'); return; }
-    try {
-      await api.deleteAccount();
-    } catch (err) {
-      console.warn('Delete account API error:', err.message);
-    }
-    localStorage.removeItem('token');
-    sessionStorage.removeItem('token');
-    sessionStorage.removeItem('userEmail');
-    sessionStorage.removeItem('userName');
-    onClose();
-    onLogout();
-  };
-
-  const goBack = () => { setView('main'); setPwError(''); setPwSuccess(false); setDeleteConfirm(''); setDeleteError(''); };
-
-  return (
-    <div className="ud-modal-overlay" onClick={onClose}>
-      <div className="ud-modal" onClick={e => e.stopPropagation()} style={{ width:440 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:22 }}>
-          {view !== 'main' && <button onClick={goBack} style={{ background:'none', border:'none', cursor:'pointer', color:T.muted, display:'flex', padding:4, borderRadius:6 }}><Icon d="M15 19l-7-7 7-7" size={15} /></button>}
-          <p style={{ fontFamily:T.serif, fontSize:20, color:view==='delete'?T.red:T.cream, margin:0, flex:1 }}>
-            {view==='main'?'My Profile':view==='stats'?'Account Stats':view==='password'?'Change Password':'Delete Account'}
-          </p>
-          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:T.muted, display:'flex' }}><Icon d="M6 18L18 6M6 6l12 12" size={16} /></button>
-        </div>
-
-        {view === 'main' && (<>
-          <div style={{ display:'flex', alignItems:'center', gap:16, padding:'16px', background:T.surfaceHi, borderRadius:12, marginBottom:20 }}>
-            <div style={{ width:52, height:52, borderRadius:'50%', background:T.amberDim, border:`1px solid rgba(245,166,35,.3)`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-              <span style={{ fontFamily:T.serif, fontSize:18, color:T.amber }}>{initials}</span>
-            </div>
-            <div style={{ minWidth:0 }}>
-              <p style={{ fontFamily:T.serif, fontSize:16, color:T.cream, margin:'0 0 3px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{displayName}</p>
-              {userEmail && <p style={{ fontFamily:T.font, fontSize:12, color:T.muted, margin:'0 0 3px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{userEmail}</p>}
-              <p style={{ fontFamily:T.font, fontSize:11, color:T.muted, margin:0, opacity:.7 }}>Member since 2025</p>
-            </div>
-          </div>
-          <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:12 }}>
-            {[
-              { label:'Account Stats',   sub:`${activeNotes.length} notes · ${favoriteNotes.length} favorites`, view:'stats',    icon:'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', color:T.purple, bg:T.purpleDim },
-              { label:'Change Password', sub:'Update your account password',                                    view:'password', icon:'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z', color:T.amber, bg:T.amberDim },
-            ].map(item => (
-              <button key={item.view} className="ud-profile-action" onClick={() => setView(item.view)}>
-                <div style={{ width:32, height:32, borderRadius:8, background:item.bg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}><Icon d={item.icon} size={15} color={item.color} /></div>
-                <div><p style={{ margin:0, fontSize:13, fontWeight:600, color:T.cream, fontFamily:T.font }}>{item.label}</p><p style={{ margin:0, fontSize:11, color:T.muted, fontFamily:T.font }}>{item.sub}</p></div>
-                <Icon d="M9 5l7 7-7 7" size={14} color={T.muted} style={{ marginLeft:'auto' }} />
-              </button>
-            ))}
-            <button className="ud-profile-action" onClick={() => { onClose(); onLogout(); }}>
-              <div style={{ width:32, height:32, borderRadius:8, background:T.greenDim, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}><Icon d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" size={15} color={T.green} /></div>
-              <div><p style={{ margin:0, fontSize:13, fontWeight:600, color:T.cream, fontFamily:T.font }}>Log Out</p><p style={{ margin:0, fontSize:11, color:T.muted, fontFamily:T.font }}>Sign out of your account</p></div>
-            </button>
-            <button className="ud-profile-action danger" onClick={() => setView('delete')}>
-              <div style={{ width:32, height:32, borderRadius:8, background:T.redDim, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}><Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" size={15} color={T.red} /></div>
-              <div><p style={{ margin:0, fontSize:13, fontWeight:600, fontFamily:T.font }}>Delete Account</p><p style={{ margin:0, fontSize:11, opacity:.7, fontFamily:T.font }}>Permanently remove your account</p></div>
-              <Icon d="M9 5l7 7-7 7" size={14} color={T.red} style={{ marginLeft:'auto' }} />
-            </button>
-          </div>
-        </>)}
-
-        {view === 'stats' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-            {[
-              { label:'Total Notes', value:activeNotes.length,   icon:'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', color:T.amber,  bg:T.amberDim },
-              { label:'Favorites',   value:favoriteNotes.length, icon:'M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z', color:T.amber,  bg:T.amberDim },
-              { label:'Folders',     value:folders.length,       icon:'M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z', color:T.purple, bg:T.purpleDim },
-              { label:'In Trash',    value:trashedNotes.length,  icon:'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16', color:T.red,    bg:T.redDim },
-            ].map(s => (
-              <div key={s.label} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', background:T.surfaceHi, borderRadius:10 }}>
-                <div style={{ width:34, height:34, borderRadius:8, background:s.bg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}><Icon d={s.icon} size={15} color={s.color} /></div>
-                <span style={{ fontFamily:T.font, fontSize:13, color:T.muted, flex:1 }}>{s.label}</span>
-                <span style={{ fontFamily:T.font, fontSize:16, fontWeight:700, color:T.cream }}>{s.value}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {view === 'password' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-            {pwSuccess ? (
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:16, padding:'24px 0' }}>
-                <div style={{ width:52, height:52, borderRadius:'50%', background:T.greenDim, border:`1px solid rgba(52,211,153,.3)`, display:'flex', alignItems:'center', justifyContent:'center' }}><Icon d="M5 13l4 4L19 7" size={22} color={T.green} /></div>
-                <p style={{ fontFamily:T.font, fontSize:14, color:T.green, margin:0, fontWeight:600 }}>Password updated successfully!</p>
-                <button className="ud-btn-ghost" onClick={goBack}>Back to Profile</button>
-              </div>
-            ) : (<>
-              {[{label:'Current Password',key:'current',placeholder:'Enter current password'},{label:'New Password',key:'next',placeholder:'At least 8 characters'},{label:'Confirm New Password',key:'confirm',placeholder:'Re-enter new password'}].map(({label,key,placeholder}) => (
-                <div key={key}>
-                  <label style={{ display:'block', fontSize:11, fontWeight:700, letterSpacing:1, textTransform:'uppercase', color:T.muted, marginBottom:7, fontFamily:T.font }}>{label}</label>
-                  <input type="password" className="ud-input" placeholder={placeholder} value={pwForm[key]} onChange={e => setPwForm(p => ({...p,[key]:e.target.value}))} />
-                </div>
-              ))}
-              {pwError && <p style={{ fontFamily:T.font, fontSize:12, color:T.red, margin:0, padding:'8px 12px', background:T.redDim, borderRadius:8, border:`1px solid rgba(248,113,113,.25)` }}>{pwError}</p>}
-              <button className="ud-btn-amber" onClick={handleChangePassword} style={{ width:'100%', justifyContent:'center', marginTop:4 }}><Icon d="M5 13l4 4L19 7" size={14} color="#0E1117" /> Update Password</button>
-            </>)}
-          </div>
-        )}
-
-        {view === 'delete' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-            <div style={{ background:T.redDim, border:`1px solid rgba(248,113,113,.3)`, borderRadius:12, padding:'14px 16px', display:'flex', gap:12, alignItems:'flex-start' }}>
-              <Icon d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" size={18} color={T.red} />
-              <div><p style={{ fontFamily:T.font, fontSize:13, fontWeight:600, color:T.red, margin:'0 0 4px' }}>This action is permanent</p><p style={{ fontFamily:T.font, fontSize:12, color:T.muted, margin:0, lineHeight:1.6 }}>Deleting your account will permanently remove all your notes, folders, and data. This cannot be undone.</p></div>
-            </div>
-            <div>
-              <label style={{ display:'block', fontSize:11, fontWeight:700, letterSpacing:1, textTransform:'uppercase', color:T.muted, marginBottom:7, fontFamily:T.font }}>Type <span style={{ color:T.red, fontFamily:'monospace' }}>DELETE</span> to confirm</label>
-              <input className="ud-input danger" placeholder="DELETE" value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)} style={{ borderColor: deleteConfirm.length > 0 && deleteConfirm !== 'DELETE' ? 'rgba(248,113,113,.5)' : undefined }} />
-            </div>
-            {deleteError && <p style={{ fontFamily:T.font, fontSize:12, color:T.red, margin:0, padding:'8px 12px', background:T.redDim, borderRadius:8, border:`1px solid rgba(248,113,113,.25)` }}>{deleteError}</p>}
-            <div style={{ display:'flex', gap:10 }}>
-              <button className="ud-btn-ghost" onClick={goBack} style={{ flex:1, justifyContent:'center' }}>Cancel</button>
-              <button className="ud-btn-red" onClick={handleDeleteAccount} disabled={deleteConfirm !== 'DELETE'} style={{ flex:1, justifyContent:'center', opacity:deleteConfirm !== 'DELETE' ? 0.4 : 1 }}>
-                <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" size={14} color="#0E1117" /> Delete Account
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ─── New folder modal ─────────────────────────────────────────────────────────
+//new folder modal
 const NewFolderModal = ({ onSave, onClose }) => {
   const [name, setName] = useState('');
-  return (
+  return createPortal(
     <div className="ud-modal-overlay">
       <div className="ud-modal">
         <p style={{ fontFamily:T.serif, fontSize:20, color:T.cream, margin:'0 0 20px' }}>New Folder</p>
@@ -499,14 +303,17 @@ const NewFolderModal = ({ onSave, onClose }) => {
         <input className="ud-input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Math, Biology…" autoFocus onKeyDown={e => e.key === 'Enter' && name.trim() && onSave(name.trim())} />
         <div style={{ display:'flex', gap:10, marginTop:20, justifyContent:'flex-end' }}>
           <button className="ud-btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="ud-btn-amber" style={{ opacity:name.trim()?1:0.4 }} onClick={() => name.trim() && onSave(name.trim())}><Icon d="M12 4v16m8-8H4" size={13} color="#0E1117" /> Create</button>
+          <button className="ud-btn-amber" style={{ opacity:name.trim()?1:0.4 }} onClick={() => name.trim() && onSave(name.trim())}>
+            <Icon d="M12 4v16m8-8H4" size={13} color="#0E1117" /> Create
+          </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
-// ─── Folders strip ────────────────────────────────────────────────────────────
+//folders strip
 const FoldersStrip = ({ folders, notes, selectedFolderId, onSelect, onAdd, onDelete, onRename, onDropNote, search='' }) => {
   const [renamingId, setRenamingId] = useState(null);
   const [renameVal,  setRenameVal]  = useState('');
@@ -558,7 +365,6 @@ const FoldersStrip = ({ folders, notes, selectedFolderId, onSelect, onAdd, onDel
                 </div>
               );
             })}
-            {/* New folder icon chip */}
             <button onClick={onAdd} title="New folder"
               style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:38, height:34, borderRadius:8, border:`1px dashed rgba(255,255,255,0.18)`, background:'transparent', cursor:'pointer', color:T.muted, transition:'border-color .15s, color .15s', flexShrink:0 }}
               onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(245,166,35,.4)'; e.currentTarget.style.color=T.amber; }}
@@ -577,7 +383,7 @@ const FoldersStrip = ({ folders, notes, selectedFolderId, onSelect, onAdd, onDel
   );
 };
 
-// ─── Note card ────────────────────────────────────────────────────────────────
+//note card
 const NoteCard = ({ note, onOpen, onToggleFavorite, onDelete, onUpdateTags }) => {
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [menuPos,    setMenuPos]    = useState({ top:0, right:0 });
@@ -767,16 +573,13 @@ const UserDashboard = ({
   const [notes,          setNotes]          = useState([]);
   const [folders,        setFolders]        = useState([]);
   const [loading,        setLoading]        = useState(true);
-  const [fetchError,     setFetchError]     = useState(false);
   const [showNewFolder,  setShowNewFolder]  = useState(false);
-  const [showProfile,    setShowProfile]    = useState(false);
   const [draggingNoteId, setDraggingNoteId] = useState(null);
   const [toast,          setToast]          = useState({ visible:false, message:'' });
   const toastTimer = useRef(null);
 
   const loadData = async () => {
     setLoading(true);
-    setFetchError(false);
     try {
       const [notesData, foldersData] = await Promise.all([
         api.getNotes().catch(() => []),
@@ -857,8 +660,15 @@ const UserDashboard = ({
 
   const handleAddFolder = async (name) => {
     setShowNewFolder(false);
-    try { const folder = await api.createFolder(name); setFolders(p => [...p, folder]); }
-    catch (err) { showToast('Failed to create folder'); }
+    const tempFolder = { id: Date.now().toString(), name };
+    setFolders(p => [...p, tempFolder]);
+    try {
+      const folder = await api.createFolder(name);
+      if (folder) setFolders(p => p.map(f => f.id === tempFolder.id ? toFolder(folder) : f));
+    } catch (err) {
+      setFolders(p => p.filter(f => f.id !== tempFolder.id));
+      showToast('Failed to create folder');
+    }
   };
 
   const handleDeleteFolder = async (fid) => {
@@ -922,14 +732,20 @@ const UserDashboard = ({
               </>
             )}
           </nav>
+
+          {/* ── Profile / Settings button ── */}
           <div style={{ padding:'12px 10px', borderTop:`1px solid ${T.border}` }}>
-            <button className="ud-nav-item" onClick={() => setShowProfile(true)} style={{ gap:10 }}>
+            <button
+              className={`ud-nav-item${activeTab==='settings'?' active':''}`}
+              onClick={() => setActiveTab('settings')}
+              style={{ gap:10 }}
+            >
               <div style={{ width:30, height:30, borderRadius:'50%', background:T.amberDim, border:`1px solid rgba(245,166,35,.3)`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                 <Icon d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" size={14} color={T.amber} />
               </div>
               <div style={{ minWidth:0, flex:1 }}>
                 <p style={{ margin:0, fontSize:12, fontWeight:600, color:T.cream, fontFamily:T.font, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{sidebarName}</p>
-                <p style={{ margin:0, fontSize:10, color:T.muted, fontFamily:T.font }}>View profile</p>
+                <p style={{ margin:0, fontSize:10, color:T.muted, fontFamily:T.font }}>Settings</p>
               </div>
             </button>
           </div>
@@ -937,8 +753,6 @@ const UserDashboard = ({
 
         <main className="ud-scrollbar" style={{ flex:1, overflowY:'auto', height:'100vh', boxSizing:'border-box' }}>
           <div style={{ display:activeTab==='results'?'block':'none' }}>
-            {/* onSave is called by ResultsPage after the user saves — it refreshes
-                notes from the backend then navigates back to My Notes */}
             <ResultsPage
               onBack={() => setActiveTab('notes')}
               onSave={() => {
@@ -954,13 +768,13 @@ const UserDashboard = ({
               {activeTab === 'upload'    && <UploadPage onProcess={() => { setActiveTab('results'); if (onProcess) onProcess(); }} />}
               {activeTab === 'favorites' && <FavoritesPage notes={activeNotes} onNoteSelect={onNoteSelect} onRemoveFavorite={handleToggleFavorite} onNewScan={handleNewScan} />}
               {activeTab === 'trash'     && <TrashPage notes={trashedNotes} onRestore={handleRestoreNote} onPermanentDelete={handlePermanentDelete} onEmptyTrash={handleEmptyTrash} />}
+              {activeTab === 'settings'  && <SettingsPage notes={notes} folders={folders} onLogout={onLogout} api={api} />}
             </div>
           )}
         </main>
       </div>
 
       {showNewFolder && <NewFolderModal onSave={handleAddFolder} onClose={() => setShowNewFolder(false)} />}
-      {showProfile   && <ProfileModal onClose={() => setShowProfile(false)} onLogout={onLogout} activeNotes={activeNotes} favoriteNotes={favoriteNotes} folders={folders} trashedNotes={trashedNotes} />}
 
       <div className={`ud-toast${toast.visible?' visible':''}`}>
         <Icon d="M5 13l4 4L19 7" size={13} color={T.green} />
