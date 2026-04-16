@@ -33,6 +33,15 @@ services:
     networks:
       - notescan_net
 
+ocr_backend:
+  build: ./ocr_backend
+  container_name: notescan_ocr
+  restart: unless-stopped
+  ports:
+    - "8000:8000"
+  networks:
+    - notescan_net
+
 volumes:
   mongodb_data:
   uploads_data:
