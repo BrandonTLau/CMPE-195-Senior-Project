@@ -1,4 +1,6 @@
 fastapi
 uvicorn[standard]
 python-multipart
-chandra-ocr[hf]>=0.2.0
+opencv-python
+paddleocr
+chandra-ocr[hf]
