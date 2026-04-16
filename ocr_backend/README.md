@@ -1,44 +1,47 @@
-# OCR Backend (PaddleOCR / PP-OCRv5)
+# OCR Backend (Chandra Markdown OCR)
 
-This is a local Python service that runs OCR on note images and returns:
-- `text` (raw OCR)
-- `merged_text` (more readable layout)
-- `items` (per-line text, score, bounding box)
-- `overlay_url` (image with boxes/text drawn, served by the backend)
+This local Python service runs Chandra OCR and returns:
+- `merged_text` as markdown
+- `text` as simplified plain text
+- `metadata` from Chandra when available
+- empty `blocks` / `overlay_url` when linked image overlays are not produced
+
+The frontend now defaults to a markdown-first editing flow.
 
 ## Requirements
-- Python 3.12 (64-bit)
-- Internet on first run (models download once, then cached)
+- Python 3.12 or another supported Python 3.10+ build
+- Enough RAM / GPU capacity for Chandra's Hugging Face backend
+- Internet on first run so model weights can download
 
 ## Setup (PowerShell)
 
-### 1) Go to the repo root
 ```powershell
 cd C:\path\to\your\repo
-```
-### 2) Create a venv
-```powershell
 py -3.12 -m venv .venv
-```
-### 3) Activate venv
-```powershell
 .\.venv\Scripts\Activate.ps1
-```
-### 4) Install dependencies
-```powershell
 python -m pip install -U pip setuptools wheel
-python -m pip install paddlepaddle==3.2.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
-python -m pip install -r backend\requirements.txt
+python -m pip install -r .\ocr_backend\requirements.txt
 ```
-### 5) Start the server
+
+Optional environment variables:
+
 ```powershell
-python -m uvicorn backend.app:app --port 8000
+$env:CHANDRA_METHOD = "hf"
+$env:CHANDRA_INCLUDE_IMAGES = "0"
 ```
-### 6) Check health
-http://localhost:8000/api/health
+
+Start the server:
+
+```powershell
+python -m uvicorn ocr_backend.app:app --host 127.0.0.1 --port 8000
+```
+
+Health check:
+- http://localhost:8000/ocr_api/health
 
 ## Test OCR
 
 ```powershell
-curl.exe -F "file=@test.jpg" http://localhost:8000/api/ocr_v5
+curl.exe -F "file=@test.jpg" http://localhost:8000/ocr_api/ocr_v5
+curl.exe -F "file=@test.pdf" http://localhost:8000/ocr_api/ocr_v5
 ```
