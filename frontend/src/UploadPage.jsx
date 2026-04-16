@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { runOcr } from "./api/ocrClient";
 
-//design tokens
 const T = {
   bg:        '#0E1117',
   surface:   '#161B27',
@@ -52,14 +51,6 @@ styleEl.textContent = `
   }
   .up-btn-amber:hover  { opacity: .88; transform: translateY(-1px); }
   .up-btn-amber:disabled { opacity: .4; cursor: not-allowed; transform: none; }
-  .up-btn-ghost {
-    background: transparent; border: 1px solid ${T.border}; color: ${T.muted};
-    border-radius: 10px; padding: 8px 16px;
-    font-family: ${T.font}; font-size: 13px; font-weight: 500;
-    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-    transition: border-color .2s, color .2s, background .2s;
-  }
-  .up-btn-ghost:hover { border-color: ${T.borderHi}; color: ${T.cream}; background: ${T.surfaceHi}; }
   .up-remove {
     width: 26px; height: 26px; border-radius: 50%;
     background: ${T.redDim}; border: 1px solid rgba(248,113,113,.2);
@@ -95,7 +86,7 @@ const Icon = ({ d, size = 18, color = 'currentColor' }) => (
   </svg>
 );
 
-// Step indicator used in the loading overlay
+
 const StepRow = ({ label, status }) => {
   const isDone   = status === 'done';
   const isActive = status === 'active';
@@ -130,12 +121,80 @@ const StepRow = ({ label, status }) => {
   );
 };
 
-// ── component ──────────────────────────────────────────────────
+//ocr model selector
+const OCR_MODELS = [
+  { value: 'paddleocr', label: 'PaddleOCR' },
+  { value: 'chandra',   label: 'Chandra'   },
+];
+
+const OcrModelSelector = ({ value, onChange }) => (
+  <div style={{ marginTop: 24 }}>
+    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: T.muted, marginBottom: 10, fontFamily: T.font }}>
+      OCR Engine
+    </label>
+    <div style={{ display: 'flex', gap: 10 }}>
+      {OCR_MODELS.map(model => {
+        const isActive = value === model.value;
+        return (
+          <div
+            key={model.value}
+            role="button"
+            onClick={() => onChange(model.value)}
+            style={{
+              flex: 1,
+              padding: '13px 16px',
+              borderRadius: 12,
+              border: isActive ? '1px solid rgba(245,166,35,0.4)' : `1px solid ${T.border}`,
+              background: isActive ? 'rgba(245,166,35,0.08)' : T.surfaceHi,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              transition: 'all .15s',
+              userSelect: 'none',
+            }}
+          >
+            <span style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: isActive ? T.amber : T.cream,
+              fontFamily: T.font,
+              transition: 'color .15s',
+            }}>
+              {model.label}
+            </span>
+            <div style={{
+              width: 18,
+              height: 18,
+              borderRadius: '50%',
+              border: isActive ? `1.5px solid ${T.amber}` : '1.5px solid rgba(255,255,255,0.15)',
+              background: isActive ? 'rgba(245,166,35,0.15)' : 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              transition: 'all .15s',
+            }}>
+              {isActive && (
+                <svg width="8" height="8" fill="none" stroke={T.amber} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
+
+
 const UploadPage = ({ onBack, onProcess }) => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [dragActive,    setDragActive]    = useState(false);
   const [uploading,     setUploading]     = useState(false);
   const [error,         setError]         = useState('');
+  const [ocrModel,      setOcrModel]      = useState('paddleocr');
 
   const [steps, setSteps] = useState({
     upload:    'pending',
@@ -148,7 +207,6 @@ const UploadPage = ({ onBack, onProcess }) => {
   const setStep = (key, status) =>
     setSteps(prev => ({ ...prev, [key]: status }));
 
-  // Only keep the first file — single file upload
   const parseFiles = (files) =>
     Array.from(files).slice(0, 1).map((file) => ({
       file,
@@ -175,7 +233,7 @@ const UploadPage = ({ onBack, onProcess }) => {
 
   const removeFile = () => setUploadedFiles([]);
 
-  // ── backend ──────────────────────────────────────────────────
+  //backend
   const uploadOne = async (fileObj) => {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     const form  = new FormData();
@@ -232,7 +290,7 @@ const UploadPage = ({ onBack, onProcess }) => {
         // Step 3 — OCR
         setStep('ocr', 'active');
         try {
-          const ocrData = await runOcr(first.file);
+          const ocrData = await runOcr(first.file, ocrModel);
           console.log('OCR response:', ocrData);
 
           sessionStorage.setItem('lastOcrOverlayUrl',  ocrData?.overlay_url  || '');
@@ -302,7 +360,6 @@ const UploadPage = ({ onBack, onProcess }) => {
           display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
           gap:32, animation:'fadeIn .2s ease both',
         }}>
-          {/* Spinner */}
           <div style={{ position:'relative', width:80, height:80, animation:'float 3s ease-in-out infinite' }}>
             <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:`3px solid ${T.border}` }} />
             <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:`3px solid transparent`, borderTopColor:T.amber, animation:'spin 1s linear infinite' }} />
@@ -312,7 +369,6 @@ const UploadPage = ({ onBack, onProcess }) => {
             </div>
           </div>
 
-          {/* Title */}
           <div style={{ textAlign:'center' }}>
             <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 10px' }}>Please Wait</p>
             <h2 style={{ fontFamily:T.serif, fontSize:32, fontWeight:400, color:T.cream, margin:'0 0 8px', lineHeight:1.1 }}>Processing Your Notes</h2>
@@ -324,7 +380,6 @@ const UploadPage = ({ onBack, onProcess }) => {
             </p>
           </div>
 
-          {/* Live step indicators */}
           <div style={{ display:'flex', flexDirection:'column', gap:8, width:'100%', maxWidth:360 }}>
             <StepRow label="Uploading file"      status={steps.upload}     />
             <StepRow label="Preprocessing image" status={steps.preprocess} />
@@ -392,6 +447,9 @@ const UploadPage = ({ onBack, onProcess }) => {
               </div>
             </div>
           )}
+
+          {/* OCR model selector */}
+          <OcrModelSelector value={ocrModel} onChange={setOcrModel} />
 
           {/* Process button */}
           <button
