@@ -33,14 +33,22 @@ services:
     networks:
       - notescan_net
 
-ocr_backend:
-  build: ./ocr_backend
-  container_name: notescan_ocr
-  restart: unless-stopped
-  ports:
-    - "8000:8000"
-  networks:
-    - notescan_net
+  ocr_backend:
+    build: ./ocr_backend
+    container_name: notescan_ocr
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ocr_uploads:/app/uploads
+      - ocr_output:/app/output
+    environment:
+      # Chandra settings
+      CHANDRA_METHOD: hf
+      CHANDRA_INCLUDE_IMAGES: "0"
+      CHANDRA_TIMEOUT_SECONDS: "600"
+    networks:
+      - notescan_net
 
 volumes:
   mongodb_data:
