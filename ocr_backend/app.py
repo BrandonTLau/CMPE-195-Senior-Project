@@ -474,7 +474,9 @@ def run_chandra_api(input_path: Path) -> dict:
                 "markdown":      result.get("markdown", ""),
                 "metadata":      result.get("metadata", {}),
                 "page_count":    result.get("page_count"),
-                "quality_score": result.get("parse_quality_score"),
+                # parse_quality_score is 0-5, convert to 0-1 to match paddle confidence format
+                "quality_score": round(result["parse_quality_score"] / 5, 4)
+                if result.get("parse_quality_score") is not None else None,
             }
 
         if status == "failed":
