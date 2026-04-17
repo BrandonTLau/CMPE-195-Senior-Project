@@ -26,8 +26,19 @@ UPLOADS_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 app.mount("/ocr_static", StaticFiles(directory=str(OUTPUT_DIR)), name="ocr_static")
 
+import os
+from fastapi import HTTPException
+
 OCR_CFG_PATH = BASE_DIR / "PaddleOCR.yaml"
-ocr = PaddleOCR(paddlex_config=str(OCR_CFG_PATH))
+_ocr_instance = None
+
+def get_ocr():
+    global _ocr_instance
+    if os.getenv("OCR_SKIP_MODEL_LOAD") == "1":
+        raise RuntimeError("OCR model loading disabled for tests.")
+    if _ocr_instance is None:
+        _ocr_instance = PaddleOCR(paddlex_config=str(OCR_CFG_PATH))
+    return _ocr_instance
 
 
 def preprocess_for_handwriting(input_path: Path) -> Path:
