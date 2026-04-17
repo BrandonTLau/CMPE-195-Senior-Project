@@ -1,5 +1,5 @@
 # =============================================================================
-# OCR Backend — Unified Engine (PaddleOCR + Chandra)
+# OCR Backend — Unified Engine (PaddleOCR + Chandra via Datalab Hosted API)
 #
 # Usage:
 #   POST /ocr_api/ocr      ?engine=paddle   (default)
@@ -7,22 +7,24 @@
 #   POST /ocr_api/ocr_v5   ?engine=paddle   (default)
 #   POST /ocr_api/ocr_v5   ?engine=chandra
 #
-# Environment variables (all optional):
-#   CHANDRA_METHOD             hf (default) | other Chandra methods
-#   CHANDRA_INCLUDE_IMAGES     0 (default) | 1
-#   CHANDRA_MAX_OUTPUT_TOKENS  (unset by default)
-#   CHANDRA_TIMEOUT_SECONDS    600 (default)
+# Required environment variables:
+#   CHANDRA_API_KEY            Your Datalab API key (from datalab.to/app/keys)
+#
+# Optional environment variables:
+#   CHANDRA_MODE               fast (default) | balanced | accurate
+#   CHANDRA_POLL_INTERVAL      2 (seconds, default)
+#   CHANDRA_TIMEOUT_SECONDS    120 (default)
 # =============================================================================
 
-import json
 import os
 import re
-import subprocess
+import time
 import uuid
 from pathlib import Path
 
 import cv2
 import numpy as np
+import requests
 from fastapi import FastAPI, File, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -57,35 +59,124 @@ OCR_CFG_PATH = BASE_DIR / "PaddleOCR.yaml"
 ocr = PaddleOCR(paddlex_config=str(OCR_CFG_PATH))
 
 # -----------------------------------------------------------------------------
-# Chandra configuration (from environment variables)
+# Chandra / Datalab configuration
 # -----------------------------------------------------------------------------
 
-CHANDRA_METHOD = os.getenv("CHANDRA_METHOD", "hf").strip().lower() or "hf"
-CHANDRA_INCLUDE_IMAGES = os.getenv("CHANDRA_INCLUDE_IMAGES", "0").strip().lower() in {
-    "1", "true", "yes", "on",
-}
-CHANDRA_MAX_OUTPUT_TOKENS = os.getenv("CHANDRA_MAX_OUTPUT_TOKENS", "")
+DATALAB_API_KEY  = os.getenv("CHANDRA_API_KEY", "").strip()
+DATALAB_ENDPOINT = "https://www.datalab.to/api/v1/convert"
+CHANDRA_MODE     = os.getenv("CHANDRA_MODE", "fast").strip().lower()
+CHANDRA_POLL_INTERVAL  = float(os.getenv("CHANDRA_POLL_INTERVAL", "2"))
+CHANDRA_TIMEOUT_SECONDS = float(os.getenv("CHANDRA_TIMEOUT_SECONDS", "120"))
 
 
 # =============================================================================
 # PaddleOCR helpers
 # =============================================================================
 
+def remove_shadow(gray: np.ndarray) -> np.ndarray:
+    """
+    Remove uneven lighting and shadows using morphological background estimation.
+    Estimates background illumination with a large dilate kernel, then divides
+    the image by it to normalise brightness across the whole image.
+    """
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (25, 25))
+    background = cv2.dilate(gray, kernel)
+    background = cv2.GaussianBlur(background, (21, 21), 0)
+
+    norm = cv2.divide(gray.astype(np.float32), background.astype(np.float32))
+    norm = np.clip(norm * 255, 0, 255).astype(np.uint8)
+    return norm
+
+
+def auto_perspective_correction(img: np.ndarray) -> np.ndarray:
+    """
+    Detect the largest rectangular contour (assumed to be the paper) and apply
+    a perspective warp to straighten it. Returns original image if no clear
+    rectangle is found.
+    """
+    orig_h, orig_w = img.shape[:2]
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blurred, 50, 150)
+    edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
+
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)
+
+    paper_contour = None
+    for cnt in contours[:5]:
+        peri = cv2.arcLength(cnt, True)
+        approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
+        if len(approx) == 4 and cv2.contourArea(approx) > orig_h * orig_w * 0.20:
+            paper_contour = approx
+            break
+
+    if paper_contour is None:
+        return img
+
+    pts = paper_contour.reshape(4, 2).astype(np.float32)
+    rect = np.zeros((4, 2), dtype=np.float32)
+    s = pts.sum(axis=1)
+    rect[0] = pts[np.argmin(s)]
+    rect[2] = pts[np.argmax(s)]
+    diff = np.diff(pts, axis=1)
+    rect[1] = pts[np.argmin(diff)]
+    rect[3] = pts[np.argmax(diff)]
+
+    width_top    = np.linalg.norm(rect[1] - rect[0])
+    width_bottom = np.linalg.norm(rect[2] - rect[3])
+    height_left  = np.linalg.norm(rect[3] - rect[0])
+    height_right = np.linalg.norm(rect[2] - rect[1])
+    out_w = int(max(width_top, width_bottom))
+    out_h = int(max(height_left, height_right))
+
+    if out_w < 50 or out_h < 50:
+        return img
+
+    dst = np.array([
+        [0, 0],
+        [out_w - 1, 0],
+        [out_w - 1, out_h - 1],
+        [0, out_h - 1],
+    ], dtype=np.float32)
+
+    M = cv2.getPerspectiveTransform(rect, dst)
+    return cv2.warpPerspective(img, M, (out_w, out_h))
+
+
 def preprocess_for_handwriting(input_path: Path) -> Path:
-    """Grayscale + upscale + adaptive threshold — improves handwriting OCR."""
+    """
+    Full preprocessing pipeline for handwritten notes:
+      1. Auto perspective correction  — straightens angled/tilted photos
+      2. Shadow removal               — normalises uneven lighting
+      3. Upscale 2x                   — improves fine detail for OCR
+      4. Bilateral denoise            — removes noise without blurring strokes
+      5. Adaptive threshold           — converts to clean black-and-white
+      6. Morphological cleanup        — closes tiny gaps in strokes
+    """
     img = cv2.imread(str(input_path))
     if img is None:
         raise ValueError(f"Could not read image: {input_path}")
 
-    g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    g = cv2.resize(g, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-    g = cv2.GaussianBlur(g, (3, 3), 0)
-    th = cv2.adaptiveThreshold(
-        g, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 7
+    img  = auto_perspective_correction(img)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = remove_shadow(gray)
+    gray = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    gray = cv2.bilateralFilter(gray, d=9, sigmaColor=75, sigmaSpace=75)
+
+    binary = cv2.adaptiveThreshold(
+        gray, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        51, 11
     )
 
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+
     out_path = OUTPUT_DIR / f"{input_path.stem}_clean.png"
-    cv2.imwrite(str(out_path), th)
+    cv2.imwrite(str(out_path), binary)
     return out_path
 
 
@@ -109,16 +200,14 @@ def merge_items_into_lines(items: list[dict], y_tol: int = 14, gap_for_tab: int 
     """Reconstruct reading order from bounding boxes into plain text lines."""
     tokens = []
     for it in items:
-        box = it.get("box")
+        box  = it.get("box")
         text = (it.get("text") or "").strip()
         if not box or len(box) != 4 or not text:
             continue
         x1, y1, x2, y2 = box
-        yc = (y1 + y2) / 2.0
-        tokens.append((yc, x1, x2, text))
+        tokens.append(((y1 + y2) / 2.0, x1, x2, text))
 
     tokens.sort(key=lambda t: (t[0], t[1]))
-
     lines: list[list] = []
     current: list = []
     current_y = None
@@ -137,14 +226,13 @@ def merge_items_into_lines(items: list[dict], y_tol: int = 14, gap_for_tab: int 
 
     out_lines = []
     for line in lines:
-        parts = []
+        parts  = []
         prev_x2 = None
         for x1, x2, text in line:
             if prev_x2 is None:
                 parts.append(text)
             else:
-                gap = x1 - prev_x2
-                parts.append(("\t" if gap >= gap_for_tab else " ") + text)
+                parts.append(("\t" if x1 - prev_x2 >= gap_for_tab else " ") + text)
             prev_x2 = x2
         out_lines.append("".join(parts))
 
@@ -153,24 +241,21 @@ def merge_items_into_lines(items: list[dict], y_tol: int = 14, gap_for_tab: int 
 
 def _merge_box(boxes: list[list[int]]) -> list[int]:
     return [
-        min(b[0] for b in boxes),
-        min(b[1] for b in boxes),
-        max(b[2] for b in boxes),
-        max(b[3] for b in boxes),
+        min(b[0] for b in boxes), min(b[1] for b in boxes),
+        max(b[2] for b in boxes), max(b[3] for b in boxes),
     ]
 
 
 def _make_block(entries: list[dict], block_idx: int) -> dict:
     entries = sorted(entries, key=lambda e: (e["box"][1], e["box"][0]))
-    box = _merge_box([e["box"] for e in entries])
-    text = "\n".join(e["text"] for e in entries if e["text"].strip()).strip()
+    box    = _merge_box([e["box"] for e in entries])
+    text   = "\n".join(e["text"] for e in entries if e["text"].strip()).strip()
     scores = [e["score"] for e in entries if e["score"] is not None]
-    avg_score = sum(scores) / len(scores) if scores else None
     return {
         "id": f"block-{block_idx}",
         "box": box,
         "text": text,
-        "score": avg_score,
+        "score": sum(scores) / len(scores) if scores else None,
         "item_indices": [e["idx"] for e in entries],
     }
 
@@ -179,7 +264,7 @@ def merge_overlapping_blocks(blocks: list[dict], x_pad: int = 4, y_pad: int = 3)
     if not blocks:
         return []
 
-    def overlaps(a: list[int], b: list[int]) -> bool:
+    def overlaps(a, b):
         ax1, ay1, ax2, ay2 = a
         bx1, by1, bx2, by2 = b
         return not (ax2 + x_pad < bx1 or bx2 + x_pad < ax1 or ay2 + y_pad < by1 or by2 + y_pad < ay1)
@@ -189,8 +274,8 @@ def merge_overlapping_blocks(blocks: list[dict], x_pad: int = 4, y_pad: int = 3)
 
     while changed:
         changed = False
-        merged = []
-        used = [False] * len(current)
+        merged  = []
+        used    = [False] * len(current)
 
         for i in range(len(current)):
             if used[i]:
@@ -213,21 +298,19 @@ def merge_overlapping_blocks(blocks: list[dict], x_pad: int = 4, y_pad: int = 3)
             if len(group) == 1:
                 merged.append(group[0])
             else:
-                merged.append(
-                    _make_block(
-                        [
-                            {"idx": item_idx, "text": text, "score": score, "box": box}
-                            for block in group
-                            for item_idx, text, score, box in zip(
-                                block["item_indices"],
-                                block["text"].split("\n"),
-                                [block["score"]] * len(block["item_indices"]),
-                                [block["box"]] * len(block["item_indices"]),
-                            )
-                        ],
-                        len(merged) + 1,
-                    )
-                )
+                merged.append(_make_block(
+                    [
+                        {"idx": item_idx, "text": text, "score": score, "box": box}
+                        for block in group
+                        for item_idx, text, score, box in zip(
+                            block["item_indices"],
+                            block["text"].split("\n"),
+                            [block["score"]] * len(block["item_indices"]),
+                            [block["box"]]   * len(block["item_indices"]),
+                        )
+                    ],
+                    len(merged) + 1,
+                ))
                 changed = True
 
         current = merged
@@ -246,7 +329,7 @@ def group_items_into_blocks(
 ) -> list[dict]:
     entries = []
     for idx, it in enumerate(items):
-        box = it.get("box")
+        box  = it.get("box")
         text = (it.get("text") or "").strip()
         if not box or len(box) != 4 or not text:
             continue
@@ -260,26 +343,22 @@ def group_items_into_blocks(
 
     entries.sort(key=lambda e: (e["box"][1], e["box"][0]))
     blocks_raw = []
-    current = [entries[0]]
+    current    = [entries[0]]
 
     for entry in entries[1:]:
-        prev = current[-1]
+        prev      = current[-1]
         block_box = _merge_box([e["box"] for e in current])
-        x1, y1, x2, y2 = entry["box"]
+        x1, y1, x2, y2    = entry["box"]
         bx1, by1, bx2, by2 = block_box
         prev_x1, _, prev_x2, prev_y2 = prev["box"]
 
-        line_gap = y1 - prev_y2
-        x_overlap = max(0, min(x2, bx2) - max(x1, bx1))
-        min_width = max(1, min(x2 - x1, bx2 - bx1))
-        overlap_ratio = x_overlap / min_width
+        line_gap       = y1 - prev_y2
+        x_overlap      = max(0, min(x2, bx2) - max(x1, bx1))
+        overlap_ratio  = x_overlap / max(1, min(x2 - x1, bx2 - bx1))
 
-        similar_left_edge = abs(x1 - prev_x1) <= same_edge_tol
-        similar_right_edge = abs(x2 - prev_x2) <= same_edge_tol
-        vertical_close = 0 <= line_gap <= max_line_gap
-        substantial_overlap = overlap_ratio >= overlap_ratio_min
-
-        if vertical_close and substantial_overlap and (similar_left_edge or similar_right_edge):
+        if (0 <= line_gap <= max_line_gap
+                and overlap_ratio >= overlap_ratio_min
+                and (abs(x1 - prev_x1) <= same_edge_tol or abs(x2 - prev_x2) <= same_edge_tol)):
             current.append(entry)
         else:
             blocks_raw.append(current)
@@ -288,9 +367,8 @@ def group_items_into_blocks(
     if current:
         blocks_raw.append(current)
 
-    blocks = [_make_block(block, i + 1) for i, block in enumerate(blocks_raw)]
-    blocks = merge_overlapping_blocks(blocks)
-    return blocks
+    blocks = [_make_block(b, i + 1) for i, b in enumerate(blocks_raw)]
+    return merge_overlapping_blocks(blocks)
 
 
 def build_overlay_image(image_path: Path, blocks: list[dict], out_path: Path) -> None:
@@ -300,22 +378,21 @@ def build_overlay_image(image_path: Path, blocks: list[dict], out_path: Path) ->
         raise ValueError(f"Could not read image: {image_path}")
 
     white = np.full_like(img, 255)
-    img = cv2.addWeighted(img, 0.12, white, 0.88, 0)
+    img   = cv2.addWeighted(img, 0.12, white, 0.88, 0)
 
     for block in blocks:
         box = block.get("box")
         if not box or len(box) != 4:
             continue
         x1, y1, x2, y2 = [int(v) for v in box]
-        if x2 <= x1 or y2 <= y1:
-            continue
-        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 160, 0), 2)
+        if x2 > x1 and y2 > y1:
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 160, 0), 2)
 
     cv2.imwrite(str(out_path), img)
 
 
 # =============================================================================
-# Chandra helpers
+# Chandra / Datalab hosted API helper
 # =============================================================================
 
 def markdown_to_text(markdown: str) -> str:
@@ -333,59 +410,70 @@ def markdown_to_text(markdown: str) -> str:
     return text.strip()
 
 
-def run_chandra(input_path: Path) -> tuple[str, dict, Path | None, Path | None]:
-    """Call the Chandra CLI and return (markdown, metadata, markdown_path, html_path)."""
-    request_output_dir = OUTPUT_DIR / f"chandra_{uuid.uuid4().hex}"
-    request_output_dir.mkdir(parents=True, exist_ok=True)
-
-    cmd = ["chandra", str(input_path), str(request_output_dir), "--method", CHANDRA_METHOD]
-
-    if not CHANDRA_INCLUDE_IMAGES:
-        cmd.append("--no-images")
-
-    if CHANDRA_MAX_OUTPUT_TOKENS:
-        cmd.extend(["--max-output-tokens", CHANDRA_MAX_OUTPUT_TOKENS])
-
-    try:
-        completed = subprocess.run(
-            cmd,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=int(os.getenv("CHANDRA_TIMEOUT_SECONDS", "600")),
-        )
-    except FileNotFoundError as exc:
+def run_chandra_api(input_path: Path) -> dict:
+    """
+    Call the Datalab hosted Chandra API.
+    Returns a dict with keys: markdown, metadata, page_count, quality_score
+    Raises RuntimeError on failure.
+    """
+    if not DATALAB_API_KEY:
         raise RuntimeError(
-            'Chandra CLI was not found. Install it with: pip install "chandra-ocr[hf]"'
-        ) from exc
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError("Chandra OCR timed out.") from exc
+            "CHANDRA_API_KEY is not set. "
+            "Add it to your .env file. Get your key at https://www.datalab.to/app/keys"
+        )
 
-    if completed.returncode != 0:
-        stderr = (completed.stderr or "").strip()
-        stdout = (completed.stdout or "").strip()
-        details = stderr or stdout or f"exit code {completed.returncode}"
-        raise RuntimeError(f"Chandra OCR failed: {details}")
+    headers = {"X-API-Key": DATALAB_API_KEY}
 
-    markdown_files = sorted(request_output_dir.rglob("*.md"))
-    metadata_files = sorted(request_output_dir.rglob("*_metadata.json"))
-    html_files = sorted(request_output_dir.rglob("*.html"))
+    # Step 1: Submit the file for processing
+    with open(input_path, "rb") as f:
+        mime = "application/pdf" if input_path.suffix.lower() == ".pdf" else "image/jpeg"
+        response = requests.post(
+            DATALAB_ENDPOINT,
+            headers=headers,
+            files={"file": (input_path.name, f, mime)},
+            data={
+                "output_format": "markdown",
+                "mode": CHANDRA_MODE,
+                "disable_image_extraction": "true",
+            },
+            timeout=30,
+        )
 
-    if not markdown_files:
-        raise RuntimeError("Chandra OCR completed but did not produce a markdown file.")
+    if not response.ok:
+        raise RuntimeError(f"Datalab API submission failed ({response.status_code}): {response.text}")
 
-    markdown_path = markdown_files[0]
-    markdown = markdown_path.read_text(encoding="utf-8", errors="replace")
+    data = response.json()
+    if not data.get("success"):
+        raise RuntimeError(f"Datalab API rejected the request: {data}")
 
-    metadata: dict = {}
-    if metadata_files:
-        try:
-            metadata = json.loads(metadata_files[0].read_text(encoding="utf-8", errors="replace"))
-        except Exception:
-            metadata = {}
+    check_url = data.get("request_check_url")
+    if not check_url:
+        raise RuntimeError("Datalab API did not return a check URL.")
 
-    html_path = html_files[0] if html_files else None
-    return markdown, metadata, markdown_path, html_path
+    # Step 2: Poll until processing is complete
+    deadline = time.time() + CHANDRA_TIMEOUT_SECONDS
+    while time.time() < deadline:
+        poll = requests.get(check_url, headers=headers, timeout=30)
+        result = poll.json()
+        status = result.get("status", "")
+
+        if status == "complete":
+            return {
+                "markdown":      result.get("markdown", ""),
+                "metadata":      result.get("metadata", {}),
+                "page_count":    result.get("page_count"),
+                "quality_score": result.get("parse_quality_score"),
+            }
+
+        if status == "failed":
+            raise RuntimeError(f"Datalab processing failed: {result.get('error', 'unknown error')}")
+
+        time.sleep(CHANDRA_POLL_INTERVAL)
+
+    raise RuntimeError(
+        f"Datalab API timed out after {CHANDRA_TIMEOUT_SECONDS}s. "
+        "Try increasing CHANDRA_TIMEOUT_SECONDS or switching to mode=fast."
+    )
 
 
 # =============================================================================
@@ -394,14 +482,15 @@ def run_chandra(input_path: Path) -> tuple[str, dict, Path | None, Path | None]:
 
 @app.get("/ocr_api/health")
 def health():
-    """Health check — reports both engines."""
+    """Health check — reports both engines and API key status."""
     return {
         "ok": True,
         "engines": {
             "paddle": "ready",
             "chandra": {
-                "method": CHANDRA_METHOD,
-                "include_images": CHANDRA_INCLUDE_IMAGES,
+                "provider": "datalab.to hosted API",
+                "mode": CHANDRA_MODE,
+                "api_key_set": bool(DATALAB_API_KEY),
             },
         },
     }
@@ -411,23 +500,24 @@ def health():
 @app.post("/ocr_api/ocr_v5")
 async def run_ocr(
     file: UploadFile = File(...),
-    engine: str = Query(default="paddle", description="OCR engine to use: 'paddle' or 'chandra'"),
+    engine: str = Query(
+        default="paddle",
+        description="OCR engine: 'paddle' (local) or 'chandra' (Datalab cloud API)",
+    ),
 ):
     """
     Run OCR on an uploaded image or PDF.
 
-    - engine=paddle  (default) — uses PaddleOCR / PP-OCRv5
-    - engine=chandra           — uses Chandra OCR CLI
+    - engine=paddle   — PaddleOCR, runs locally, images only
+    - engine=chandra  — Datalab hosted Chandra API, supports images + PDF
     """
     engine = engine.strip().lower()
     if engine not in ("paddle", "chandra"):
         return {"error": f"Unknown engine '{engine}'. Choose 'paddle' or 'chandra'."}
 
-    # ------------------------------------------------------------------
-    # Save the uploaded file
-    # ------------------------------------------------------------------
-    ext = Path(file.filename or "document").suffix.lower() or ".jpg"
-    file_id = uuid.uuid4().hex
+    # Save uploaded file
+    ext      = Path(file.filename or "document").suffix.lower() or ".jpg"
+    file_id  = uuid.uuid4().hex
     raw_path = UPLOADS_DIR / f"{file_id}{ext}"
     raw_path.write_bytes(await file.read())
 
@@ -436,24 +526,32 @@ async def run_ocr(
     # ------------------------------------------------------------------
     if engine == "paddle":
         if raw_path.suffix.lower() == ".pdf":
-            return {"error": "PDF uploads are not supported by PaddleOCR. Please upload an image, or switch to engine=chandra."}
+            return {
+                "error": (
+                    "PDF uploads are not supported by PaddleOCR. "
+                    "Upload an image, or use engine=chandra."
+                )
+            }
 
-        norm_path = normalize_image_max_side(raw_path, max_side=1600)
+        clean_path = preprocess_for_handwriting(raw_path)
 
-        page = ocr.predict(
-            str(norm_path),
+        page   = ocr.predict(
+            str(clean_path),
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False,
         )[0]
 
-        lines = page.get("rec_texts", [])
+        lines  = page.get("rec_texts", [])
         scores = page.get("rec_scores", [])
-        boxes = page.get("rec_boxes", None)
+        boxes  = page.get("rec_boxes", None)
 
+        # Filter out low-confidence results (score < 0.6)
         items = []
         for i, text in enumerate(lines):
             score = float(scores[i]) if i < len(scores) else None
+            if score is not None and score < 0.6:
+                continue
             box = None
             if boxes is not None and i < len(boxes):
                 box = [int(x) for x in boxes[i].tolist()]
@@ -461,81 +559,78 @@ async def run_ocr(
 
         blocks = group_items_into_blocks(items)
 
-        merged_text = "\n\n".join(block["text"] for block in blocks).strip()
+        merged_text = "\n\n".join(b["text"] for b in blocks).strip()
         if not merged_text:
             merged_text = merge_items_into_lines(items)
 
         overlay_name = f"overlay_{file_id}.jpg"
         overlay_path = OUTPUT_DIR / overlay_name
-        build_overlay_image(norm_path, blocks, overlay_path)
+        build_overlay_image(clean_path, blocks, overlay_path)
 
-        norm_img = cv2.imread(str(norm_path))
-        image_size = [int(norm_img.shape[1]), int(norm_img.shape[0])] if norm_img is not None else [0, 0]
+        clean_img  = cv2.imread(str(clean_path))
+        image_size = ([int(clean_img.shape[1]), int(clean_img.shape[0])]
+                      if clean_img is not None else [0, 0])
 
-        norm_name = Path(norm_path).name
+        all_scores = [it["score"] for it in items if it["score"] is not None]
+        avg_confidence = round(sum(all_scores) / len(all_scores), 4) if all_scores else None
 
         return {
-            "filename": file.filename,
-            "engine": "paddle",
-            "text": "\n".join(lines),
+            "filename":    file.filename,
+            "engine":      "paddle",
+            "text":        "\n".join(it["text"] for it in items),
             "merged_text": merged_text,
-            "markdown": "",
-            "items": items,
-            "blocks": blocks,
-            "image_url": f"/ocr_static/{norm_name}",
-            "image_size": image_size,
+            "markdown":    "",
+            "items":       items,
+            "blocks":      blocks,
+            "image_url":   f"/ocr_static/{Path(clean_path).name}",
+            "image_size":  image_size,
             "overlay_url": f"/ocr_static/{overlay_name}",
-            "html_url": "",
+            "html_url":    "",
             "markdown_url": "",
-            "metadata": {},
+            "metadata":    {},
+            "confidence":  avg_confidence,
             "debug": {
-                "mode": "paddle_pp-ocrv5",
-                "raw_path": str(raw_path),
-                "used_path": str(norm_path),
+                "mode":                 "paddle_pp-ocrv5_improved_preprocess",
+                "raw_path":             str(raw_path),
+                "used_path":            str(clean_path),
+                "items_before_filter":  len(lines),
+                "items_after_filter":   len(items),
             },
         }
 
     # ------------------------------------------------------------------
-    # Chandra path
+    # Chandra / Datalab hosted API path
     # ------------------------------------------------------------------
     else:
-        markdown, metadata, markdown_path, html_path = run_chandra(raw_path)
+        try:
+            result = run_chandra_api(raw_path)
+        except RuntimeError as exc:
+            return {"error": str(exc)}
+
+        markdown   = result["markdown"]
         plain_text = markdown_to_text(markdown)
-
-        markdown_url = (
-            f"/ocr_static/{markdown_path.relative_to(OUTPUT_DIR).as_posix()}"
-            if markdown_path and markdown_path.exists()
-            else ""
-        )
-        html_url = (
-            f"/ocr_static/{html_path.relative_to(OUTPUT_DIR).as_posix()}"
-            if html_path and html_path.exists()
-            else ""
-        )
-
-        page_count = metadata.get("pages") if isinstance(metadata, dict) else None
-        if isinstance(page_count, list):
-            page_count = len(page_count)
+        metadata   = result.get("metadata") or {}
+        page_count = result.get("page_count")
 
         return {
-            "filename": file.filename,
-            "engine": "chandra",
-            "text": plain_text,
+            "filename":    file.filename,
+            "engine":      "chandra",
+            "text":        plain_text,
             "merged_text": markdown,
-            "markdown": markdown,
-            "items": [],
-            "blocks": [],
-            "image_url": "",
-            "image_size": [0, 0],
+            "markdown":    markdown,
+            "items":       [],
+            "blocks":      [],
+            "image_url":   "",
+            "image_size":  [0, 0],
             "overlay_url": "",
-            "html_url": html_url,
-            "markdown_url": markdown_url,
-            "metadata": metadata,
+            "html_url":    "",
+            "markdown_url": "",
+            "metadata":    metadata,
+            "confidence":  result.get("quality_score"),
             "debug": {
-                "mode": "chandra_markdown_cli",
-                "raw_path": str(raw_path),
-                "markdown_path": str(markdown_path) if markdown_path else "",
-                "method": CHANDRA_METHOD,
-                "page_count": page_count,
+                "mode":          "chandra_datalab_hosted_api",
+                "raw_path":      str(raw_path),
+                "chandra_mode":  CHANDRA_MODE,
+                "page_count":    page_count,
             },
         }
