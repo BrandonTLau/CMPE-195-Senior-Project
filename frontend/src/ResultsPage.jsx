@@ -283,9 +283,13 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
   useEffect(() => {
     if (!editorRef.current) return;
     const html = (initialText || '')
-      .split('\n')
-      .map(line => `<p>${line || '<br>'}</p>`)
-      .join('');
+  .replace(/\n{2,}/g, '\n\n')
+  .split('\n\n')
+  .map(para => {
+    const lines = para.split('\n').filter(Boolean);
+    return `<p>${lines.join(' ') || '<br>'}</p>`;
+  })
+  .join('');
     setEditorHTML(html);
     setCharCount(initialText?.length || 0);
     editorRef.current.innerHTML = html;
