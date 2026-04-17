@@ -18,6 +18,7 @@
 
 import os
 import re
+import shutil
 import time
 import uuid
 from pathlib import Path
@@ -62,10 +63,10 @@ ocr = PaddleOCR(paddlex_config=str(OCR_CFG_PATH))
 # Chandra / Datalab configuration
 # -----------------------------------------------------------------------------
 
-DATALAB_API_KEY  = os.getenv("CHANDRA_API_KEY", "").strip()
-DATALAB_ENDPOINT = "https://www.datalab.to/api/v1/convert"
-CHANDRA_MODE     = os.getenv("CHANDRA_MODE", "fast").strip().lower()
-CHANDRA_POLL_INTERVAL  = float(os.getenv("CHANDRA_POLL_INTERVAL", "2"))
+DATALAB_API_KEY         = os.getenv("CHANDRA_API_KEY", "").strip()
+DATALAB_ENDPOINT        = "https://www.datalab.to/api/v1/convert"
+CHANDRA_MODE            = os.getenv("CHANDRA_MODE", "fast").strip().lower()
+CHANDRA_POLL_INTERVAL   = float(os.getenv("CHANDRA_POLL_INTERVAL", "2"))
 CHANDRA_TIMEOUT_SECONDS = float(os.getenv("CHANDRA_TIMEOUT_SECONDS", "120"))
 
 
@@ -73,92 +74,105 @@ CHANDRA_TIMEOUT_SECONDS = float(os.getenv("CHANDRA_TIMEOUT_SECONDS", "120"))
 # PaddleOCR helpers
 # =============================================================================
 
+def is_clean_image(img: np.ndarray) -> bool:
+    """
+    Detect if an image is already clean (white/light background, dark text).
+    If more than 60% of pixels are bright (>200), skip aggressive preprocessing.
+    """
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    bright_ratio = np.sum(gray > 200) / gray.size
+    return bright_ratio >= 0.6
+
+
 def remove_shadow(gray: np.ndarray) -> np.ndarray:
     """
     Remove uneven lighting and shadows using morphological background estimation.
-    Estimates background illumination with a large dilate kernel, then divides
-    the image by it to normalise brightness across the whole image.
     """
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (25, 25))
+    kernel     = cv2.getStructuringElement(cv2.MORPH_RECT, (25, 25))
     background = cv2.dilate(gray, kernel)
     background = cv2.GaussianBlur(background, (21, 21), 0)
-
-    norm = cv2.divide(gray.astype(np.float32), background.astype(np.float32))
-    norm = np.clip(norm * 255, 0, 255).astype(np.uint8)
-    return norm
+    norm       = cv2.divide(gray.astype(np.float32), background.astype(np.float32))
+    return np.clip(norm * 255, 0, 255).astype(np.uint8)
 
 
 def auto_perspective_correction(img: np.ndarray) -> np.ndarray:
     """
     Detect the largest rectangular contour (assumed to be the paper) and apply
-    a perspective warp to straighten it. Returns original image if no clear
-    rectangle is found.
+    a perspective warp to straighten it.
+    Only applies if a clear quadrilateral covering 20-90% of image area is found.
+    Returns original image unchanged if no suitable rectangle is detected.
     """
     orig_h, orig_w = img.shape[:2]
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
+    gray    = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blurred, 50, 150)
-    edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
+    edges   = cv2.Canny(blurred, 50, 150)
+    edges   = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
 
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours = sorted(contours, key=cv2.contourArea, reverse=True)
+    contours     = sorted(contours, key=cv2.contourArea, reverse=True)
 
     paper_contour = None
     for cnt in contours[:5]:
-        peri = cv2.arcLength(cnt, True)
+        peri   = cv2.arcLength(cnt, True)
         approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
-        if len(approx) == 4 and cv2.contourArea(approx) > orig_h * orig_w * 0.20:
+        area   = cv2.contourArea(approx)
+        # Must be a quadrilateral covering 20-90% of the image
+        if len(approx) == 4 and orig_h * orig_w * 0.20 < area < orig_h * orig_w * 0.90:
             paper_contour = approx
             break
 
     if paper_contour is None:
         return img
 
-    pts = paper_contour.reshape(4, 2).astype(np.float32)
-    rect = np.zeros((4, 2), dtype=np.float32)
-    s = pts.sum(axis=1)
+    pts   = paper_contour.reshape(4, 2).astype(np.float32)
+    rect  = np.zeros((4, 2), dtype=np.float32)
+    s     = pts.sum(axis=1)
+    diff  = np.diff(pts, axis=1)
     rect[0] = pts[np.argmin(s)]
     rect[2] = pts[np.argmax(s)]
-    diff = np.diff(pts, axis=1)
     rect[1] = pts[np.argmin(diff)]
     rect[3] = pts[np.argmax(diff)]
 
-    width_top    = np.linalg.norm(rect[1] - rect[0])
-    width_bottom = np.linalg.norm(rect[2] - rect[3])
-    height_left  = np.linalg.norm(rect[3] - rect[0])
-    height_right = np.linalg.norm(rect[2] - rect[1])
-    out_w = int(max(width_top, width_bottom))
-    out_h = int(max(height_left, height_right))
+    out_w = int(max(np.linalg.norm(rect[1] - rect[0]), np.linalg.norm(rect[2] - rect[3])))
+    out_h = int(max(np.linalg.norm(rect[3] - rect[0]), np.linalg.norm(rect[2] - rect[1])))
 
     if out_w < 50 or out_h < 50:
         return img
 
-    dst = np.array([
-        [0, 0],
-        [out_w - 1, 0],
-        [out_w - 1, out_h - 1],
-        [0, out_h - 1],
-    ], dtype=np.float32)
-
-    M = cv2.getPerspectiveTransform(rect, dst)
+    dst = np.array([[0, 0], [out_w-1, 0], [out_w-1, out_h-1], [0, out_h-1]], dtype=np.float32)
+    M   = cv2.getPerspectiveTransform(rect, dst)
     return cv2.warpPerspective(img, M, (out_w, out_h))
 
 
 def preprocess_for_handwriting(input_path: Path) -> Path:
     """
-    Full preprocessing pipeline for handwritten notes:
-      1. Auto perspective correction  — straightens angled/tilted photos
-      2. Shadow removal               — normalises uneven lighting
-      3. Upscale 2x                   — improves fine detail for OCR
-      4. Bilateral denoise            — removes noise without blurring strokes
-      5. Adaptive threshold           — converts to clean black-and-white
-      6. Morphological cleanup        — closes tiny gaps in strokes
+    Smart preprocessing pipeline:
+
+    CLEAN image (white background, >60% bright pixels):
+      → Only upscale 2x for better OCR accuracy, no other changes
+
+    DIRTY image (dark/shadowy/angled photo):
+      1. Auto perspective correction
+      2. Shadow removal
+      3. Upscale 2x
+      4. Bilateral denoise
+      5. Adaptive threshold
+      6. Morphological cleanup
     """
     img = cv2.imread(str(input_path))
     if img is None:
         raise ValueError(f"Could not read image: {input_path}")
 
+    out_path = OUTPUT_DIR / f"{input_path.stem}_clean.png"
+
+    if is_clean_image(img):
+        # Already clean — only upscale, skip all aggressive processing
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        cv2.imwrite(str(out_path), gray)
+        return out_path
+
+    # Needs full preprocessing
     img  = auto_perspective_correction(img)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gray = remove_shadow(gray)
@@ -171,29 +185,29 @@ def preprocess_for_handwriting(input_path: Path) -> Path:
         cv2.THRESH_BINARY,
         51, 11
     )
-
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
     binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
 
-    out_path = OUTPUT_DIR / f"{input_path.stem}_clean.png"
     cv2.imwrite(str(out_path), binary)
     return out_path
 
 
-def normalize_image_max_side(input_path: Path, max_side: int = 1600) -> Path:
-    """Resize image so the longest side does not exceed max_side pixels."""
-    img = cv2.imread(str(input_path))
-    if img is None:
-        raise ValueError(f"Could not read image: {input_path}")
+def compute_confidence(items: list[dict], total_lines: int) -> float | None:
+    """
+    Compute a realistic confidence score that prevents survivor bias:
+    - avg_score: average score of kept items
+    - kept_ratio: how many lines survived the filter vs total detected
+    - real_confidence = avg_score x kept_ratio
 
-    h, w = img.shape[:2]
-    if max(h, w) > max_side:
-        scale = max_side / max(h, w)
-        img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-
-    out_path = OUTPUT_DIR / f"{input_path.stem}_norm.jpg"
-    cv2.imwrite(str(out_path), img)
-    return out_path
+    Example: 15 items kept from 20 detected, avg score 0.85
+    → 0.85 x 0.75 = 0.64 (not 0.85)
+    """
+    if not items or total_lines == 0:
+        return None
+    all_scores  = [it["score"] for it in items if it["score"] is not None]
+    avg_score   = sum(all_scores) / len(all_scores) if all_scores else 0
+    kept_ratio  = len(items) / total_lines
+    return round(avg_score * kept_ratio, 4)
 
 
 def merge_items_into_lines(items: list[dict], y_tol: int = 14, gap_for_tab: int = 40) -> str:
@@ -209,8 +223,8 @@ def merge_items_into_lines(items: list[dict], y_tol: int = 14, gap_for_tab: int 
 
     tokens.sort(key=lambda t: (t[0], t[1]))
     lines: list[list] = []
-    current: list = []
-    current_y = None
+    current: list     = []
+    current_y         = None
 
     for yc, x1, x2, text in tokens:
         if current_y is None or abs(yc - current_y) <= y_tol:
@@ -218,7 +232,7 @@ def merge_items_into_lines(items: list[dict], y_tol: int = 14, gap_for_tab: int 
             current_y = yc if current_y is None else (current_y * 0.7 + yc * 0.3)
         else:
             lines.append(sorted(current, key=lambda t: t[0]))
-            current = [(x1, x2, text)]
+            current   = [(x1, x2, text)]
             current_y = yc
 
     if current:
@@ -226,7 +240,7 @@ def merge_items_into_lines(items: list[dict], y_tol: int = 14, gap_for_tab: int 
 
     out_lines = []
     for line in lines:
-        parts  = []
+        parts   = []
         prev_x2 = None
         for x1, x2, text in line:
             if prev_x2 is None:
@@ -248,14 +262,14 @@ def _merge_box(boxes: list[list[int]]) -> list[int]:
 
 def _make_block(entries: list[dict], block_idx: int) -> dict:
     entries = sorted(entries, key=lambda e: (e["box"][1], e["box"][0]))
-    box    = _merge_box([e["box"] for e in entries])
-    text   = "\n".join(e["text"] for e in entries if e["text"].strip()).strip()
-    scores = [e["score"] for e in entries if e["score"] is not None]
+    box     = _merge_box([e["box"] for e in entries])
+    text    = "\n".join(e["text"] for e in entries if e["text"].strip()).strip()
+    scores  = [e["score"] for e in entries if e["score"] is not None]
     return {
-        "id": f"block-{block_idx}",
-        "box": box,
-        "text": text,
-        "score": sum(scores) / len(scores) if scores else None,
+        "id":           f"block-{block_idx}",
+        "box":          box,
+        "text":         text,
+        "score":        sum(scores) / len(scores) if scores else None,
         "item_indices": [e["idx"] for e in entries],
     }
 
@@ -280,19 +294,19 @@ def merge_overlapping_blocks(blocks: list[dict], x_pad: int = 4, y_pad: int = 3)
         for i in range(len(current)):
             if used[i]:
                 continue
-            group = [current[i]]
-            used[i] = True
+            group         = [current[i]]
+            used[i]       = True
             group_changed = True
 
             while group_changed:
                 group_changed = False
-                group_box = _merge_box([g["box"] for g in group])
+                group_box     = _merge_box([g["box"] for g in group])
                 for j in range(len(current)):
                     if used[j]:
                         continue
                     if overlaps(group_box, current[j]["box"]):
                         group.append(current[j])
-                        used[j] = True
+                        used[j]       = True
                         group_changed = True
 
             if len(group) == 1:
@@ -348,13 +362,13 @@ def group_items_into_blocks(
     for entry in entries[1:]:
         prev      = current[-1]
         block_box = _merge_box([e["box"] for e in current])
-        x1, y1, x2, y2    = entry["box"]
+        x1, y1, x2, y2     = entry["box"]
         bx1, by1, bx2, by2 = block_box
         prev_x1, _, prev_x2, prev_y2 = prev["box"]
 
-        line_gap       = y1 - prev_y2
-        x_overlap      = max(0, min(x2, bx2) - max(x1, bx1))
-        overlap_ratio  = x_overlap / max(1, min(x2 - x1, bx2 - bx1))
+        line_gap      = y1 - prev_y2
+        x_overlap     = max(0, min(x2, bx2) - max(x1, bx1))
+        overlap_ratio = x_overlap / max(1, min(x2 - x1, bx2 - bx1))
 
         if (0 <= line_gap <= max_line_gap
                 and overlap_ratio >= overlap_ratio_min
@@ -372,7 +386,7 @@ def group_items_into_blocks(
 
 
 def build_overlay_image(image_path: Path, blocks: list[dict], out_path: Path) -> None:
-    """Draw bounding boxes on a faded version of the original image."""
+    """Draw bounding boxes on a faded version of the processed image."""
     img = cv2.imread(str(image_path))
     if img is None:
         raise ValueError(f"Could not read image: {image_path}")
@@ -424,16 +438,15 @@ def run_chandra_api(input_path: Path) -> dict:
 
     headers = {"X-API-Key": DATALAB_API_KEY}
 
-    # Step 1: Submit the file for processing
     with open(input_path, "rb") as f:
-        mime = "application/pdf" if input_path.suffix.lower() == ".pdf" else "image/jpeg"
+        mime     = "application/pdf" if input_path.suffix.lower() == ".pdf" else "image/jpeg"
         response = requests.post(
             DATALAB_ENDPOINT,
             headers=headers,
             files={"file": (input_path.name, f, mime)},
             data={
-                "output_format": "markdown",
-                "mode": CHANDRA_MODE,
+                "output_format":            "markdown",
+                "mode":                     CHANDRA_MODE,
                 "disable_image_extraction": "true",
             },
             timeout=30,
@@ -450,10 +463,9 @@ def run_chandra_api(input_path: Path) -> dict:
     if not check_url:
         raise RuntimeError("Datalab API did not return a check URL.")
 
-    # Step 2: Poll until processing is complete
     deadline = time.time() + CHANDRA_TIMEOUT_SECONDS
     while time.time() < deadline:
-        poll = requests.get(check_url, headers=headers, timeout=30)
+        poll   = requests.get(check_url, headers=headers, timeout=30)
         result = poll.json()
         status = result.get("status", "")
 
@@ -472,7 +484,7 @@ def run_chandra_api(input_path: Path) -> dict:
 
     raise RuntimeError(
         f"Datalab API timed out after {CHANDRA_TIMEOUT_SECONDS}s. "
-        "Try increasing CHANDRA_TIMEOUT_SECONDS or switching to mode=fast."
+        "Try increasing CHANDRA_TIMEOUT_SECONDS or switching to CHANDRA_MODE=fast."
     )
 
 
@@ -488,8 +500,8 @@ def health():
         "engines": {
             "paddle": "ready",
             "chandra": {
-                "provider": "datalab.to hosted API",
-                "mode": CHANDRA_MODE,
+                "provider":    "datalab.to hosted API",
+                "mode":        CHANDRA_MODE,
                 "api_key_set": bool(DATALAB_API_KEY),
             },
         },
@@ -505,12 +517,6 @@ async def run_ocr(
         description="OCR engine: 'paddle' (local) or 'chandra' (Datalab cloud API)",
     ),
 ):
-    """
-    Run OCR on an uploaded image or PDF.
-
-    - engine=paddle   — PaddleOCR, runs locally, images only
-    - engine=chandra  — Datalab hosted Chandra API, supports images + PDF
-    """
     engine = engine.strip().lower()
     if engine not in ("paddle", "chandra"):
         return {"error": f"Unknown engine '{engine}'. Choose 'paddle' or 'chandra'."}
@@ -520,6 +526,12 @@ async def run_ocr(
     file_id  = uuid.uuid4().hex
     raw_path = UPLOADS_DIR / f"{file_id}{ext}"
     raw_path.write_bytes(await file.read())
+
+    # Copy original to output dir so frontend can display it
+    original_name = f"original_{file_id}{ext}"
+    original_path = OUTPUT_DIR / original_name
+    shutil.copy2(raw_path, original_path)
+    original_url  = f"/ocr_static/{original_name}"
 
     # ------------------------------------------------------------------
     # PaddleOCR path
@@ -533,6 +545,11 @@ async def run_ocr(
                 )
             }
 
+        # Read original to check if clean before preprocessing
+        orig_img  = cv2.imread(str(raw_path))
+        was_clean = is_clean_image(orig_img) if orig_img is not None else False
+
+        # Smart preprocessing — skips aggressive steps for clean images
         clean_path = preprocess_for_handwriting(raw_path)
 
         page   = ocr.predict(
@@ -545,6 +562,7 @@ async def run_ocr(
         lines  = page.get("rec_texts", [])
         scores = page.get("rec_scores", [])
         boxes  = page.get("rec_boxes", None)
+        total_lines = len(lines)
 
         # Filter out low-confidence results (score < 0.6)
         items = []
@@ -568,33 +586,39 @@ async def run_ocr(
         build_overlay_image(clean_path, blocks, overlay_path)
 
         clean_img  = cv2.imread(str(clean_path))
-        image_size = ([int(clean_img.shape[1]), int(clean_img.shape[0])]
-                      if clean_img is not None else [0, 0])
+        image_size = (
+            [int(clean_img.shape[1]), int(clean_img.shape[0])]
+            if clean_img is not None else [0, 0]
+        )
 
-        all_scores = [it["score"] for it in items if it["score"] is not None]
-        avg_confidence = round(sum(all_scores) / len(all_scores), 4) if all_scores else None
+        # Realistic confidence: avg score x kept ratio (prevents survivor bias)
+        confidence = compute_confidence(items, total_lines)
 
         return {
-            "filename":    file.filename,
-            "engine":      "paddle",
-            "text":        "\n".join(it["text"] for it in items),
-            "merged_text": merged_text,
-            "markdown":    "",
-            "items":       items,
-            "blocks":      blocks,
-            "image_url":   f"/ocr_static/{Path(clean_path).name}",
-            "image_size":  image_size,
-            "overlay_url": f"/ocr_static/{overlay_name}",
-            "html_url":    "",
-            "markdown_url": "",
-            "metadata":    {},
-            "confidence":  avg_confidence,
+            "filename":          file.filename,
+            "engine":            "paddle",
+            "text":              "\n".join(it["text"] for it in items),
+            "merged_text":       merged_text,
+            "markdown":          "",
+            "items":             items,
+            "blocks":            blocks,
+            "original_url":      original_url,        # original uploaded image
+            "image_url":         f"/ocr_static/{Path(clean_path).name}",  # processed image
+            "image_size":        image_size,
+            "overlay_url":       f"/ocr_static/{overlay_name}",
+            "html_url":          "",
+            "markdown_url":      "",
+            "metadata":          {},
+            "confidence":        confidence,
             "debug": {
-                "mode":                 "paddle_pp-ocrv5_improved_preprocess",
-                "raw_path":             str(raw_path),
-                "used_path":            str(clean_path),
-                "items_before_filter":  len(lines),
-                "items_after_filter":   len(items),
+                "mode":                "paddle_pp-ocrv5",
+                "was_clean_image":     was_clean,
+                "preprocessing":       "upscale_only" if was_clean else "full_pipeline",
+                "raw_path":            str(raw_path),
+                "used_path":           str(clean_path),
+                "items_total":         total_lines,
+                "items_after_filter":  len(items),
+                "kept_ratio":          round(len(items) / total_lines, 4) if total_lines else 0,
             },
         }
 
@@ -613,24 +637,25 @@ async def run_ocr(
         page_count = result.get("page_count")
 
         return {
-            "filename":    file.filename,
-            "engine":      "chandra",
-            "text":        plain_text,
-            "merged_text": markdown,
-            "markdown":    markdown,
-            "items":       [],
-            "blocks":      [],
-            "image_url":   "",
-            "image_size":  [0, 0],
-            "overlay_url": "",
-            "html_url":    "",
+            "filename":     file.filename,
+            "engine":       "chandra",
+            "text":         plain_text,
+            "merged_text":  markdown,
+            "markdown":     markdown,
+            "items":        [],
+            "blocks":       [],
+            "original_url": original_url,
+            "image_url":    "",
+            "image_size":   [0, 0],
+            "overlay_url":  "",
+            "html_url":     "",
             "markdown_url": "",
-            "metadata":    metadata,
-            "confidence":  result.get("quality_score"),
+            "metadata":     metadata,
+            "confidence":   result.get("quality_score"),
             "debug": {
-                "mode":          "chandra_datalab_hosted_api",
-                "raw_path":      str(raw_path),
-                "chandra_mode":  CHANDRA_MODE,
-                "page_count":    page_count,
+                "mode":        "chandra_datalab_hosted_api",
+                "raw_path":    str(raw_path),
+                "chandra_mode": CHANDRA_MODE,
+                "page_count":  page_count,
             },
         }
