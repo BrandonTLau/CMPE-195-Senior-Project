@@ -171,6 +171,7 @@ const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
       if (data?.token) {
         if (rememberMe) localStorage.setItem('token', data.token);
         else            sessionStorage.setItem('token', data.token);
+         sessionStorage.setItem('userEmail', email);
       }
 
       onLoginSuccess();

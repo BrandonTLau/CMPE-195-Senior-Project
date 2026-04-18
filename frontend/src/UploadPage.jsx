@@ -97,7 +97,6 @@ const Icon = ({ d, size = 18, color = 'currentColor' }) => (
 
 // Step indicator used in the loading overlay
 const StepRow = ({ label, status }) => {
-  // status: 'pending' | 'active' | 'done'
   const isDone   = status === 'done';
   const isActive = status === 'active';
   return (
@@ -116,7 +115,7 @@ const StepRow = ({ label, status }) => {
         border:`1.5px solid ${isDone ? 'rgba(52,211,153,.5)' : isActive ? 'rgba(245,166,35,.5)' : T.border}`,
       }}>
         {isDone   && <Icon d="M5 13l4 4L19 7" size={10} color="#34D399" />}
-        {isActive && <div style={{ width:7, height:7, borderRadius:'50%', background:T.amber, animation:'none' }} />}
+        {isActive && <div style={{ width:7, height:7, borderRadius:'50%', background:T.amber }} />}
       </div>
       <span style={{
         fontSize:12, fontWeight:600,
@@ -125,12 +124,8 @@ const StepRow = ({ label, status }) => {
       }}>
         {label}
       </span>
-      {isActive && (
-        <span style={{ marginLeft:'auto', fontSize:11, color:T.muted, fontStyle:'italic' }}>running…</span>
-      )}
-      {isDone && (
-        <span style={{ marginLeft:'auto', fontSize:11, color:'rgba(52,211,153,.7)' }}>done</span>
-      )}
+      {isActive && <span style={{ marginLeft:'auto', fontSize:11, color:T.muted, fontStyle:'italic' }}>running…</span>}
+      {isDone   && <span style={{ marginLeft:'auto', fontSize:11, color:'rgba(52,211,153,.7)' }}>done</span>}
     </div>
   );
 };
@@ -142,7 +137,6 @@ const UploadPage = ({ onBack, onProcess }) => {
   const [uploading,     setUploading]     = useState(false);
   const [error,         setError]         = useState('');
 
-  // Each step: 'pending' | 'active' | 'done'
   const [steps, setSteps] = useState({
     upload:    'pending',
     preprocess:'pending',
@@ -154,8 +148,9 @@ const UploadPage = ({ onBack, onProcess }) => {
   const setStep = (key, status) =>
     setSteps(prev => ({ ...prev, [key]: status }));
 
+  // Only keep the first file — single file upload
   const parseFiles = (files) =>
-    Array.from(files).map((file) => ({
+    Array.from(files).slice(0, 1).map((file) => ({
       file,
       name: file.name,
       size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
@@ -163,7 +158,7 @@ const UploadPage = ({ onBack, onProcess }) => {
     }));
 
   const handleFileUpload = (e) =>
-    setUploadedFiles((prev) => [...prev, ...parseFiles(e.target.files)]);
+    setUploadedFiles(parseFiles(e.target.files));
 
   const handleDrag = (e) => {
     e.preventDefault(); e.stopPropagation();
@@ -175,11 +170,10 @@ const UploadPage = ({ onBack, onProcess }) => {
     e.preventDefault(); e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files?.length > 0)
-      setUploadedFiles((prev) => [...prev, ...parseFiles(e.dataTransfer.files)]);
+      setUploadedFiles(parseFiles(e.dataTransfer.files));
   };
 
-  const removeFile = (index) =>
-    setUploadedFiles(uploadedFiles.filter((_, i) => i !== index));
+  const removeFile = () => setUploadedFiles([]);
 
   // ── backend ──────────────────────────────────────────────────
   const uploadOne = async (fileObj) => {
@@ -187,11 +181,8 @@ const UploadPage = ({ onBack, onProcess }) => {
     const form  = new FormData();
     form.append('file', fileObj.file);
     const headers = token
-  ? {
-      'x-auth-token': token,
-      Authorization: `Bearer ${token}`,
-    }
-  : {};
+      ? { 'x-auth-token': token, Authorization: `Bearer ${token}` }
+      : {};
 
     const res = await fetch('/api/files/upload', {
       method: 'POST',
@@ -200,9 +191,7 @@ const UploadPage = ({ onBack, onProcess }) => {
     });
 
     let data = null;
-    try {
-      data = await res.json();
-    } catch (e) {}
+    try { data = await res.json(); } catch (e) {}
 
     if (!res.ok) {
       const msg = data?.msg || data?.message || data?.error || `Server error ${res.status}`;
@@ -219,9 +208,8 @@ const UploadPage = ({ onBack, onProcess }) => {
 
   const handleProcessNotes = async () => {
     setError('');
-    if (uploadedFiles.length === 0) { setError('Please add at least one file.'); return; }
+    if (uploadedFiles.length === 0) { setError('Please add a file.'); return; }
 
-    // Reset all steps and show overlay
     setSteps({ upload:'pending', preprocess:'pending', ocr:'pending', results:'pending' });
     setShowOverlay(true);
     setUploading(true);
@@ -236,29 +224,28 @@ const UploadPage = ({ onBack, onProcess }) => {
       const first = uploadedFiles[0];
       if (first?.file?.type?.startsWith('image/')) {
 
-        // Step 2 — Preprocess 
+        // Step 2 — Preprocess
         setStep('preprocess', 'active');
         await new Promise(r => setTimeout(r, 400));
         setStep('preprocess', 'done');
 
-        // Step 3 — OCR 
+        // Step 3 — OCR
         setStep('ocr', 'active');
         try {
           const ocrData = await runOcr(first.file);
           console.log('OCR response:', ocrData);
 
-          sessionStorage.setItem('lastOcrOverlayUrl', ocrData?.overlay_url || '');
-          sessionStorage.setItem('lastOcrMergedText', ocrData?.merged_text || ocrData?.text || '');
-          sessionStorage.setItem('lastOcrBlocks', JSON.stringify(ocrData?.blocks || []));
-          sessionStorage.setItem('lastOcrImageUrl', ocrData?.image_url || '');
-          sessionStorage.setItem('lastOcrImageSize', JSON.stringify(ocrData?.image_size || [0, 0]));
+          sessionStorage.setItem('lastOcrOverlayUrl',  ocrData?.overlay_url  || '');
+          sessionStorage.setItem('lastOcrMergedText',  ocrData?.merged_text  || ocrData?.text || '');
+          sessionStorage.setItem('lastOcrBlocks',      JSON.stringify(ocrData?.blocks      || []));
+          sessionStorage.setItem('lastOcrImageUrl',    ocrData?.image_url    || '');
+          sessionStorage.setItem('lastOcrImageSize',   JSON.stringify(ocrData?.image_size  || [0, 0]));
 
           const avgConfidence = ocrData?.items?.length
             ? Math.round(
                 (ocrData.items.reduce((sum, item) => sum + (item.score || 0), 0) / ocrData.items.length) * 100
               )
             : null;
-
           sessionStorage.setItem('lastOcrConfidence', avgConfidence ?? '');
         } catch (ocrErr) {
           console.warn('OCR service unavailable, skipping:', ocrErr.message);
@@ -291,7 +278,6 @@ const UploadPage = ({ onBack, onProcess }) => {
         sessionStorage.removeItem('lastOcrConfidence');
       }
 
-      // Brief pause so user sees all steps done
       await new Promise(r => setTimeout(r, 400));
       setShowOverlay(false);
       if (onProcess) onProcess();
@@ -309,7 +295,7 @@ const UploadPage = ({ onBack, onProcess }) => {
   return (
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream }}>
 
-      {/* Real loading overlay */}
+      {/* Loading overlay */}
       {showOverlay && (
         <div style={{
           position:'fixed', inset:0, background:T.bg, zIndex:999,
@@ -331,9 +317,9 @@ const UploadPage = ({ onBack, onProcess }) => {
             <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 10px' }}>Please Wait</p>
             <h2 style={{ fontFamily:T.serif, fontSize:32, fontWeight:400, color:T.cream, margin:'0 0 8px', lineHeight:1.1 }}>Processing Your Notes</h2>
             <p style={{ color:T.muted, fontSize:13, margin:0 }}>
-              {steps.ocr === 'active' ? 'Running OCR engine — this is the longest step…' :
-               steps.upload === 'active' ? 'Uploading your file…' :
-               steps.results === 'active' ? 'Finalizing results…' :
+              {steps.ocr     === 'active' ? 'Running OCR engine — this is the longest step…' :
+               steps.upload  === 'active' ? 'Uploading your file…'  :
+               steps.results === 'active' ? 'Finalizing results…'   :
                'Almost there…'}
             </p>
           </div>
@@ -352,7 +338,7 @@ const UploadPage = ({ onBack, onProcess }) => {
       <div style={{ padding:'48px 40px 0', animation:'fadeUp .4s ease both' }}>
         <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 10px' }}>Get Started</p>
         <h1 style={{ fontFamily:T.serif, fontSize:38, fontWeight:400, margin:'0 0 8px', lineHeight:1.1, letterSpacing:'-.4px' }}>Upload Your Notes</h1>
-        <p style={{ color:T.muted, fontSize:14, margin:'0 0 40px' }}>Supports JPEG, PNG, and PDF formats</p>
+        <p style={{ color:T.muted, fontSize:14, margin:'0 0 40px' }}>Supports PDF, JPG, JPEG, PNG, and HEIC</p>
       </div>
 
       {/* Main card */}
@@ -371,7 +357,7 @@ const UploadPage = ({ onBack, onProcess }) => {
             <div style={{ width:64, height:64, borderRadius:16, background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 18px' }}>
               <Icon d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6H16a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" size={28} color={T.amber} />
             </div>
-            <p style={{ fontSize:15, fontWeight:600, color:T.cream, margin:'0 0 6px' }}>Drag and drop your files here</p>
+            <p style={{ fontSize:15, fontWeight:600, color:T.cream, margin:'0 0 6px' }}>Drag and drop your file here</p>
             <p style={{ fontSize:13, color:T.muted, margin:'0 0 20px' }}>or</p>
             <button className="up-btn-amber" onClick={e => { e.stopPropagation(); document.getElementById('file-upload').click(); }}>
               <Icon d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" size={14} color="#0E1117" />
@@ -380,34 +366,29 @@ const UploadPage = ({ onBack, onProcess }) => {
             <input
               id="file-upload"
               type="file"
-              multiple
               accept="image/*,.pdf"
               onChange={handleFileUpload}
               style={{ display:'none' }}
             />
           </div>
 
-          {/* File list */}
+          {/* Selected file */}
           {uploadedFiles.length > 0 && (
             <div style={{ marginTop:28 }}>
               <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 12px', fontFamily:T.font }}>
-                Queued Files ({uploadedFiles.length})
+                Selected File
               </p>
-              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                {uploadedFiles.map((file, index) => (
-                  <div key={index} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:10, padding:'12px 16px' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                      <div style={{ width:36, height:36, borderRadius:9, background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                        <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={16} color={T.amber} />
-                      </div>
-                      <div>
-                        <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.cream }}>{file.name}</p>
-                        <p style={{ margin:0, fontSize:11, color:T.muted }}>{file.size} · {file.type}</p>
-                      </div>
-                    </div>
-                    <button className="up-remove" onClick={() => removeFile(index)}>×</button>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:10, padding:'12px 16px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                  <div style={{ width:36, height:36, borderRadius:9, background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={16} color={T.amber} />
                   </div>
-                ))}
+                  <div>
+                    <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.cream }}>{uploadedFiles[0].name}</p>
+                    <p style={{ margin:0, fontSize:11, color:T.muted }}>{uploadedFiles[0].size} · {uploadedFiles[0].type}</p>
+                  </div>
+                </div>
+                <button className="up-remove" onClick={removeFile}>×</button>
               </div>
             </div>
           )}

@@ -69,14 +69,6 @@ const FavoritesPage = ({ notes, onNoteSelect, onRemoveFavorite, onNewScan }) => 
             {favoriteNotes.length} favorited note{favoriteNotes.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <button onClick={onNewScan}
-          style={{ background:T.amber, border:'none', color:'#0E1117', borderRadius:9, padding:'8px 18px',
-            fontFamily:T.font, fontSize:13, fontWeight:600, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:6,
-            transition:'opacity .2s, transform .15s' }}
-          onMouseEnter={e => { e.currentTarget.style.opacity='.88'; e.currentTarget.style.transform='translateY(-1px)'; }}
-          onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='none'; }}>
-          <Icon d="M12 4v16m8-8H4" size={14} color="#0E1117" /> New Scan
-        </button>
       </div>
 
       {/* Search */}

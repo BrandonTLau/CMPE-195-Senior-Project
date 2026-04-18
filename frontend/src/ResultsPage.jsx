@@ -33,6 +33,7 @@ styleEl.textContent = `
   @keyframes fadeUp  { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
   @keyframes tabIn   { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:translateY(0) } }
   @keyframes slideIn { from { opacity:0; transform:scale(0.97)      } to { opacity:1; transform:scale(1)      } }
+  @keyframes zoomIn  { from { opacity:0; transform:scale(0.95)      } to { opacity:1; transform:scale(1)      } }
 
   .ns-btn-ghost {
     background:transparent; border:1px solid ${T.border}; color:${T.muted};
@@ -259,7 +260,7 @@ function PreviewCard({ card }) {
   return (
     <div style={{ perspective:700, height:140, flex:'0 0 220px' }}>
       <div onClick={() => setFlipped(f => !f)} style={{ position:'relative', width:'100%', height:'100%', transformStyle:'preserve-3d', transition:'transform .5s cubic-bezier(.4,0,.2,1)', transform:flipped ? 'rotateY(180deg)' : 'none', cursor:'pointer' }}>
-        <div style={{ ...face, background:card.learned ? 'rgba(52,211,153,.08)' : T.surfaceHi, borderColor:card.learned ? 'rgba(52,211,153,.3)' : T.border }}>
+        <div style={{ ...face, background:T.surfaceHi }}>
           <span className="ns-tag" style={{ background:T.amberDim, color:T.amber, marginBottom:10, alignSelf:'flex-start' }}>Q</span>
           <p style={{ fontSize:13, fontWeight:500, color:T.cream, margin:0, lineHeight:1.5, fontFamily:T.font, display:'-webkit-box', WebkitLineClamp:4, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{card.question}</p>
         </div>
@@ -278,15 +279,17 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
   const [charCount,     setCharCount]     = useState(0);
   const [isDirty,       setIsDirty]       = useState(false);
   const [activeFormats, setActiveFormats] = useState({});
-  const [showExport,    setShowExport]    = useState(false);
-  const exportMenuRef = useRef(null);
 
   useEffect(() => {
     if (!editorRef.current) return;
     const html = (initialText || '')
-      .split('\n')
-      .map(line => `<p>${line || '<br>'}</p>`)
-      .join('');
+  .replace(/\n{2,}/g, '\n\n')
+  .split('\n\n')
+  .map(para => {
+    const lines = para.split('\n').filter(Boolean);
+    return `<p>${lines.join(' ') || '<br>'}</p>`;
+  })
+  .join('');
     setEditorHTML(html);
     setCharCount(initialText?.length || 0);
     editorRef.current.innerHTML = html;
@@ -298,7 +301,6 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
     return () => window.removeEventListener('keydown', handler);
   }, [isFullscreen, onToggleFullscreen]);
 
-  // Re-populate editor from current state when toggling fullscreen
   useEffect(() => {
     if (editorRef.current && editorHTML) {
       editorRef.current.innerHTML = editorHTML;
@@ -330,31 +332,8 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
   const handleMouseUp = () => updateFormats();
 
   const handleSave = () => {
-    onSave({ newText: editorRef.current?.innerText || '', html: editorHTML, previousText: initialText });
     setIsDirty(false);
-  };
-
-  const getPlainText = () => editorRef.current?.innerText || '';
-  const getHTML      = () => editorRef.current?.innerHTML || '';
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(getPlainText());
-    setShowExport(false);
-  };
-
-  const handleTXT = () => {
-    const blob = new Blob([getPlainText()], { type: 'text/plain' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = 'recognized-text.txt'; a.click();
-    URL.revokeObjectURL(url);
-    setShowExport(false);
-  };
-
-  const handlePDF = () => {
-    printDiv.innerHTML = getHTML();
-    window.print();
-    setTimeout(() => { printDiv.innerHTML = ''; setShowExport(false); }, 500);
+    onSave({ newText: editorRef.current?.innerText || '', html: editorHTML, previousText: initialText });
   };
 
   const toolbar = (fullscreen = false) => (
@@ -364,9 +343,9 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
       ))}
       <button className="ns-tool" title="Paragraph" onMouseDown={e => { e.preventDefault(); exec('formatBlock', 'p'); }}>¶</button>
       <div className="ns-tool-sep" />
-      <button className={`ns-tool${activeFormats.bold   ? ' pressed' : ''}`} title="Bold (⌘B)"   onMouseDown={e => { e.preventDefault(); exec('bold'); }}><strong>B</strong></button>
-      <button className={`ns-tool${activeFormats.italic ? ' pressed' : ''}`} title="Italic (⌘I)" onMouseDown={e => { e.preventDefault(); exec('italic'); }}><em>I</em></button>
-      <button className="ns-tool" title="Underline (⌘U)" onMouseDown={e => { e.preventDefault(); exec('underline'); }}>U̲</button>
+      <button className={`ns-tool${activeFormats.bold   ? ' pressed' : ''}`} title="Bold"   onMouseDown={e => { e.preventDefault(); exec('bold'); }}><strong>B</strong></button>
+      <button className={`ns-tool${activeFormats.italic ? ' pressed' : ''}`} title="Italic" onMouseDown={e => { e.preventDefault(); exec('italic'); }}><em>I</em></button>
+      <button className="ns-tool" title="Underline"                                          onMouseDown={e => { e.preventDefault(); exec('underline'); }}>U̲</button>
       <div className="ns-tool-sep" />
       <button className={`ns-tool${activeFormats.insertUnorderedList ? ' pressed' : ''}`} title="Bullet list"   onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList'); }}><Icon d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" size={13} /></button>
       <button className={`ns-tool${activeFormats.insertOrderedList   ? ' pressed' : ''}`} title="Numbered list" onMouseDown={e => { e.preventDefault(); exec('insertOrderedList'); }}><Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" size={13} /></button>
@@ -431,191 +410,68 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
   );
 }
 
-function combineBlockText(blocks) {
-  return (blocks || [])
-    .map((block) => (block.text || "").trim())
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-function LinkedBlocksWorkspace({
-  imageUrl,
-  imageSize,
-  blocks,
-  activeBlockId,
-  setActiveBlockId,
-  onChangeBlock,
-  onSelectBlock,
-  blockEditorRefs,
-}) {
-  const width = imageSize?.[0] || 1;
-  const height = imageSize?.[1] || 1;
-
-  if (!imageUrl || !blocks.length) {
-    return (
-      <div
-        style={{
-          background: T.surfaceHi,
-          border: `1px solid ${T.border}`,
-          borderRadius: 14,
-          padding: 24,
-          color: T.muted,
-          textAlign: "center",
-        }}
-      >
-        No OCR block data available yet. Upload an image and run OCR first.
-      </div>
-    );
-  }
+// ── Dedicated scan view page ──────────────────────────────────
+function ScanViewPage({ src, title, onBack }) {
+  const [zoom, setZoom] = useState(0.75);
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "1.1fr 1fr",
-        gap: 20,
-        alignItems: "start",
-      }}
-    >
-      <div
-        style={{
-          background: T.surfaceHi,
-          border: `1px solid ${T.border}`,
-          borderRadius: 14,
-          padding: 14,
-        }}
-      >
-        <div style={{ position: "relative", width: "100%" }}>
-          <img
-            src={imageUrl}
-            alt="OCR source"
-            style={{
-              width: "100%",
-              height: "auto",
-              display: "block",
-              borderRadius: 10,
-            }}
-          />
-          <div style={{ position: "absolute", inset: 0 }}>
-            {blocks.map((block) => {
-              const [x1, y1, x2, y2] = block.box || [0, 0, 0, 0];
-              const isActive = activeBlockId === block.id;
-
-              return (
-                <div
-                  key={block.id}
-                  onMouseEnter={() => setActiveBlockId(block.id)}
-                  onMouseLeave={() => setActiveBlockId(null)}
-                  onClick={() => onSelectBlock(block.id)}
-                  title={block.text}
-                  style={{
-                    position: "absolute",
-                    left: `${(x1 / width) * 100}%`,
-                    top: `${(y1 / height) * 100}%`,
-                    width: `${((x2 - x1) / width) * 100}%`,
-                    height: `${((y2 - y1) / height) * 100}%`,
-                    border: isActive
-                      ? `2px solid ${T.amber}`
-                      : "2px solid rgba(52,211,153,0.95)",
-                    background: isActive
-                      ? "rgba(245,166,35,0.18)"
-                      : "rgba(52,211,153,0.07)",
-                    borderRadius: 6,
-                    boxSizing: "border-box",
-                    cursor: "pointer",
-                    transition: "all .12s ease",
-                  }}
-                />
-              );
-            })}
-          </div>
+    <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream, display:'flex', flexDirection:'column', animation:'zoomIn .2s ease both' }}>
+      <div style={{ borderBottom:`1px solid ${T.border}`, padding:'0 24px', display:'flex', alignItems:'center', justifyContent:'space-between', height:58, background:T.bg, flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+          <button className="ns-btn-ghost" onClick={onBack} style={{ padding:'6px 12px', fontSize:13 }}>
+            <Icon d="M15 19l-7-7 7-7" size={14} /> Back to Results
+          </button>
+          <div style={{ height:20, width:1, background:T.border }} />
+          <span style={{ fontFamily:T.serif, fontSize:16, color:T.cream }}>{title || 'Original Scan'}</span>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:12, color:T.muted, fontFamily:T.font }}>{Math.round(zoom * 100)}%</span>
+          <button className="ns-btn-ghost" onClick={() => setZoom(z => Math.max(0.25, parseFloat((z - 0.25).toFixed(2))))} style={{ padding:'5px 12px', fontSize:13 }}>−</button>
+          <button className="ns-btn-ghost" onClick={() => setZoom(0.75)} style={{ padding:'5px 12px', fontSize:12 }}>Reset</button>
+          <button className="ns-btn-ghost" onClick={() => setZoom(z => Math.min(1, parseFloat((z + 0.25).toFixed(2))))} disabled={zoom >= 1} style={{ padding:'5px 12px', fontSize:13, opacity: zoom >= 1 ? 0.4 : 1 }}>+</button>
         </div>
       </div>
-
-      <div
-        className="ns-scrollbar"
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-          maxHeight: 720,
-          overflowY: "auto",
-          paddingRight: 4,
-        }}
-      >
-        {blocks.map((block, idx) => {
-          const isActive = activeBlockId === block.id;
-
-          return (
-            <div
-              key={block.id}
-              ref={(el) => {
-                if (el) blockEditorRefs.current[block.id] = el;
-              }}
-              onMouseEnter={() => setActiveBlockId(block.id)}
-              onMouseLeave={() => setActiveBlockId(null)}
-              onClick={() => onSelectBlock(block.id)}
-              style={{
-                background: isActive ? T.amberDim : T.surfaceHi,
-                border: `1px solid ${
-                  isActive ? "rgba(245,166,35,.28)" : T.border
-                }`,
-                borderRadius: 12,
-                padding: 14,
-                transition: "all .12s ease",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: 8,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: 1.2,
-                    textTransform: "uppercase",
-                    color: isActive ? T.amber : T.muted,
-                  }}
-                >
-                  Block {idx + 1}
-                </span>
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: T.muted,
-                  }}
-                >
-                  {(block.score ?? 0).toFixed(2)}
-                </span>
-              </div>
-
-              <textarea
-                value={block.text || ""}
-                onChange={(e) => onChangeBlock(block.id, e.target.value)}
-                style={{
-                  width: "100%",
-                  minHeight: 92,
-                  resize: "vertical",
-                  boxSizing: "border-box",
-                  background: "rgba(255,255,255,0.02)",
-                  border: `1px solid ${isActive ? "rgba(245,166,35,.28)" : T.border}`,
-                  borderRadius: 10,
-                  padding: "12px 14px",
-                  color: T.cream,
-                  fontFamily: T.font,
-                  fontSize: 13,
-                  lineHeight: 1.6,
-                  outline: "none",
-                }}
-              />
+      <div className="ns-scrollbar" style={{ flex:1, overflow:'auto', display:'flex', alignItems:'flex-start', justifyContent:'center', padding:40 }}>
+        {src ? (
+          <img src={src} alt="Original scan" style={{ width:`${zoom * 100}%`, maxWidth:'100%', height:'auto', display:'block', borderRadius:12, border:`1px solid ${T.border}`, boxShadow:'0 8px 32px rgba(0,0,0,.4)', transition:'width .2s ease' }} />
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:16, padding:60 }}>
+            <div style={{ width:80, height:80, borderRadius:20, background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <Icon d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" size={36} color={T.amber} />
             </div>
-          );
-        })}
+            <p style={{ fontSize:15, color:T.muted, margin:0 }}>No scan image available</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Image pane ────────────────────────────────────────────────
+function ImagePane({ imageUrl, overlayUrl, onExpand }) {
+  const src = imageUrl || overlayUrl;
+  return (
+    <div style={{ flex:1, minWidth:0 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+        <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:0, fontFamily:T.font }}>Original Scan</p>
+        {src && (
+          <button className="ns-btn-ghost" onClick={onExpand} style={{ padding:'4px 10px', fontSize:11 }}>
+            <Icon d="M3 8V5a2 2 0 012-2h3M16 3h3a2 2 0 012 2v3M21 16v3a2 2 0 01-2 2h-3M8 21H5a2 2 0 01-2-2v-3" size={13} />
+            Expand
+          </button>
+        )}
+      </div>
+      <div style={{ background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:14, overflow:'hidden', height:480, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        {src ? (
+          <img src={src} alt="OCR scan" style={{ width:'100%', height:'100%', objectFit:'contain', display:'block' }} />
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12, padding:24 }}>
+            <div style={{ width:64, height:64, borderRadius:16, background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <Icon d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" size={28} color={T.amber} />
+            </div>
+            <p style={{ fontSize:13, color:T.muted, margin:0, textAlign:'center', fontFamily:T.font }}>No scan image available</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -627,12 +483,13 @@ const TABS = [
   { id:'flashcards', label:'Flashcards',   icon:'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
 ];
 
-const ResultsPage = ({ onBack, noteId }) => {
+// ── ResultsPage ───────────────────────────────────────────────
+const ResultsPage = ({ onBack, onSave, noteId }) => {
   const [activeTab,        setActiveTab]        = useState('scan_edit');
   const [isSaved,          setIsSaved]          = useState(false);
   const [showAdd,          setShowAdd]          = useState(false);
   const [editorFullscreen, setEditorFullscreen] = useState(false);
-  const [scanEditView,     setScanEditView]     = useState('image');
+  const [scanEditView,     setScanEditView]     = useState('both');
   const [title,            setTitle]            = useState('');
   const [showExportMenu,   setShowExportMenu]   = useState(false);
   const [confidence,       setConfidence]       = useState(null);
@@ -642,10 +499,10 @@ const ResultsPage = ({ onBack, noteId }) => {
   const [allBusy,          setAllBusy]          = useState(false);
   const [summaryError,     setSummaryError]     = useState('');
   const [flashcardsError,  setFlashcardsError]  = useState('');
+  const [showScanView,     setShowScanView]     = useState(false);
   const exportMenuRef = useRef(null);
   const cardsRef = useRef([]);
 
-  // backend wiring
   const fileId = noteId || sessionStorage.getItem('lastUploadId');
   const token = localStorage.getItem('token') || sessionStorage.getItem('token');
   const headers = token
@@ -655,40 +512,14 @@ const ResultsPage = ({ onBack, noteId }) => {
   const [fileData,            setFileData]            = useState(null);
   const [recognizedText,      setRecognizedText]      = useState('');
   const [aiSummary,           setAiSummary]           = useState('');
-  const [studyGuideText,      setStudyGuideText]      = useState('');
   const [transcriptionEdited, setTranscriptionEdited] = useState(false);
   const [overlayUrl,          setOverlayUrl]          = useState(sessionStorage.getItem('lastOcrOverlayUrl') || '');
+  const [ocrImageUrl,         setOcrImageUrl]         = useState(sessionStorage.getItem('lastOcrImageUrl') || '');
 
-  const [ocrBlocks, setOcrBlocks] = useState(() => {
-    try {
-      return JSON.parse(sessionStorage.getItem('lastOcrBlocks') || '[]');
-    } catch {
-      return [];
-    }
-  });
-
-  const [ocrImageUrl, setOcrImageUrl] = useState(
-    sessionStorage.getItem('lastOcrImageUrl') || ''
-  );
-
-  const [ocrImageSize, setOcrImageSize] = useState(() => {
-    try {
-      return JSON.parse(sessionStorage.getItem('lastOcrImageSize') || '[0,0]');
-    } catch {
-      return [0, 0];
-    }
-  });
-
-  const [activeBlockId, setActiveBlockId] = useState(null);
-  const blockEditorRefs = useRef({});
-
-  useEffect(() => {
-    cardsRef.current = cards;
-  }, [cards]);
+  useEffect(() => { cardsRef.current = cards; }, [cards]);
 
   useEffect(() => {
     if (!fileId) return;
-
     fetch(`/api/files/${fileId}`, { headers })
       .then(async (response) => {
         const data = await response.json();
@@ -702,49 +533,27 @@ const ResultsPage = ({ onBack, noteId }) => {
         if (data.confidence) setConfidence(data.confidence);
 
         const storedMergedText = !noteId ? sessionStorage.getItem('lastOcrMergedText') : '';
-        const resolvedText = storedMergedText || data.currentContent?.transcribedText || data.extractionData?.rawText || '';
+        const resolvedText    = storedMergedText || data.currentContent?.transcribedText || data.extractionData?.rawText || '';
         const resolvedSummary = data.currentContent?.summary || data.aiGeneratedContent?.summary || '';
-        const resolvedCards = data.currentContent?.flashCards || data.aiGeneratedContent?.flashCards || [];
-        const learnedMap = toLearnedMap(cardsRef.current);
+        const resolvedCards   = data.currentContent?.flashCards || data.aiGeneratedContent?.flashCards || [];
+        const learnedMap      = toLearnedMap(cardsRef.current);
 
         setRecognizedText(resolvedText);
         setAiSummary(resolvedSummary);
-        setStudyGuideText(data.currentContent?.studyGuide || '');
         setCards(normalizeFlashcards(resolvedCards, learnedMap));
 
         if (!noteId) {
           const ssOverlay = sessionStorage.getItem('lastOcrOverlayUrl');
           if (ssOverlay) setOverlayUrl(ssOverlay);
-
-          const ssConfidence = sessionStorage.getItem('lastOcrConfidence');
-          if (ssConfidence) setConfidence(Math.round(parseFloat(ssConfidence)));
-
-          const ssBlocksRaw = sessionStorage.getItem('lastOcrBlocks');
-          if (ssBlocksRaw) {
-            try {
-              const parsedBlocks = JSON.parse(ssBlocksRaw);
-              if (Array.isArray(parsedBlocks)) setOcrBlocks(parsedBlocks);
-            } catch {}
-          }
-
           const ssImageUrl = sessionStorage.getItem('lastOcrImageUrl');
           if (ssImageUrl) setOcrImageUrl(ssImageUrl);
-
-          const ssImageSizeRaw = sessionStorage.getItem('lastOcrImageSize');
-          if (ssImageSizeRaw) {
-            try {
-              const parsedSize = JSON.parse(ssImageSizeRaw);
-              if (Array.isArray(parsedSize) && parsedSize.length === 2) {
-                setOcrImageSize(parsedSize);
-              }
-            } catch {}
-          }
+          const ssConfidence = sessionStorage.getItem('lastOcrConfidence');
+          if (ssConfidence) setConfidence(Math.round(parseFloat(ssConfidence)));
         }
       })
       .catch((err) => console.error('Failed to load file data:', err));
   }, [fileId, noteId]);
 
-  // Close export menu when clicking outside
   useEffect(() => {
     const handler = (e) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(e.target))
@@ -757,29 +566,18 @@ const ResultsPage = ({ onBack, noteId }) => {
   const saveEdit = async (endpoint, payload, onSuccess, setEdited) => {
     if (!fileId) return;
     try {
-      const res = await fetch(`/api/files/${fileId}/${endpoint}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
+      const res  = await fetch(`/api/files/${fileId}/${endpoint}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.msg || 'Failed to save changes.');
-      if (data.currentContent) {
-        onSuccess(data.currentContent);
-        if (setEdited) setEdited(true);
-      }
-    } catch (err) {
-      console.error('Save edit error:', err);
-    }
+      if (data.currentContent) { onSuccess(); if (setEdited) setEdited(true); }
+    } catch (err) { console.error('Save edit error:', err); }
   };
 
   const persistFlashcards = async (nextCards) => {
     if (!fileId) return nextCards;
-
-    const res = await fetch(`/api/files/${fileId}/edit/flashcards`, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify({ cards: serializeFlashcards(nextCards) }),
-    });
+    const res  = await fetch(`/api/files/${fileId}/edit/flashcards`, { method: 'PUT', headers, body: JSON.stringify({ cards: serializeFlashcards(nextCards) }) });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.msg || 'Failed to save flashcards.');
-
     const learnedMap = toLearnedMap(nextCards);
     const normalized = normalizeFlashcards(data.currentContent?.flashCards || [], learnedMap);
     cardsRef.current = normalized;
@@ -788,59 +586,38 @@ const ResultsPage = ({ onBack, noteId }) => {
   };
 
   const updateCards = async (updater, { persist = false } = {}) => {
-    const prev = cardsRef.current;
+    const prev    = cardsRef.current;
     const rawNext = typeof updater === 'function' ? updater(prev) : updater;
     const learnedMap = toLearnedMap(rawNext);
-    const next = normalizeFlashcards(rawNext, learnedMap);
-
+    const next    = normalizeFlashcards(rawNext, learnedMap);
     cardsRef.current = next;
     setCards(next);
     setFlashcardsError('');
-
     if (persist) {
-      try {
-        return await persistFlashcards(next);
-      } catch (err) {
-        console.error('Save flashcards error:', err);
-        setFlashcardsError(err.message);
-      }
+      try { return await persistFlashcards(next); }
+      catch (err) { console.error('Save flashcards error:', err); setFlashcardsError(err.message); }
     }
-
     return next;
   };
 
   const generateAiContent = async (contentType) => {
     if (!fileId) return;
-
     if (!recognizedText.trim()) {
       const message = 'No OCR text is available yet. Save or generate text first.';
-      if (contentType === 'summary' || contentType === 'all') setSummaryError(message);
+      if (contentType === 'summary'    || contentType === 'all') setSummaryError(message);
       if (contentType === 'flashCards' || contentType === 'all') setFlashcardsError(message);
       return;
     }
-
-    if (contentType === 'summary') setSummaryBusy(true);
+    if (contentType === 'summary')    setSummaryBusy(true);
     if (contentType === 'flashCards') setFlashcardsBusy(true);
-    if (contentType === 'all') setAllBusy(true);
-    setSummaryError('');
-    setFlashcardsError('');
-
+    if (contentType === 'all')        setAllBusy(true);
+    setSummaryError(''); setFlashcardsError('');
     try {
-      const res = await fetch(`/api/files/${fileId}/generate`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          contentType,
-          sourceText: recognizedText,
-        }),
-      });
+      const res  = await fetch(`/api/files/${fileId}/generate`, { method: 'POST', headers, body: JSON.stringify({ contentType, sourceText: recognizedText }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.msg || 'AI generation failed.');
-
       const learnedMap = toLearnedMap(cardsRef.current);
-      if (typeof data.currentContent?.summary === 'string') {
-        setAiSummary(data.currentContent.summary);
-      }
+      if (typeof data.currentContent?.summary === 'string') setAiSummary(data.currentContent.summary);
       if (Array.isArray(data.currentContent?.flashCards)) {
         const normalized = normalizeFlashcards(data.currentContent.flashCards, learnedMap);
         cardsRef.current = normalized;
@@ -849,72 +626,23 @@ const ResultsPage = ({ onBack, noteId }) => {
       setFileData((prev) => prev ? ({ ...prev, currentContent: data.currentContent, aiGeneratedContent: data.aiGeneratedContent }) : prev);
     } catch (err) {
       console.error('Generate AI content error:', err);
-      if (contentType === 'summary' || contentType === 'all') setSummaryError(err.message);
+      if (contentType === 'summary'    || contentType === 'all') setSummaryError(err.message);
       if (contentType === 'flashCards' || contentType === 'all') setFlashcardsError(err.message);
     } finally {
-      if (contentType === 'summary') setSummaryBusy(false);
+      if (contentType === 'summary')    setSummaryBusy(false);
       if (contentType === 'flashCards') setFlashcardsBusy(false);
-      if (contentType === 'all') setAllBusy(false);
+      if (contentType === 'all')        setAllBusy(false);
     }
   };
 
-  // Export handlers
-  const handleBlockChange = (blockId, newText) => {
-    setOcrBlocks((prev) => {
-      const next = prev.map((block) =>
-        block.id === blockId ? { ...block, text: newText } : block
-      );
-      const combined = combineBlockText(next);
-      setRecognizedText(combined);
-      sessionStorage.setItem("lastOcrBlocks", JSON.stringify(next));
-      sessionStorage.setItem("lastOcrMergedText", combined);
-      return next;
-    });
-    setTranscriptionEdited(true);
-  };
-
-  const handleSaveBlocks = () => {
-    const newText = combineBlockText(ocrBlocks);
-
-    saveEdit(
-      "edit/transcription",
-      { previousText: recognizedText, newText },
-      (c) => {
-        setRecognizedText(c.transcribedText || newText);
-        setTranscriptionEdited(true);
-      },
-      setTranscriptionEdited
-    );
-  };
-
-  const focusBlockEditor = (blockId) => {
-    setActiveBlockId(blockId);
-
-    const el = blockEditorRefs.current[blockId];
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-      const textarea = el.querySelector('textarea');
-      if (textarea) {
-        textarea.focus();
-      }
-    }
-  };
-
-  const handleExportCopy = async () => {
-    await navigator.clipboard.writeText(recognizedText);
-    setShowExportMenu(false);
-  };
-
-  const handleExportTXT = () => {
+  const handleExportCopy = async () => { await navigator.clipboard.writeText(recognizedText); setShowExportMenu(false); };
+  const handleExportTXT  = () => {
     const blob = new Blob([recognizedText], { type: 'text/plain' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href = url; a.download = `${title || 'notes'}.txt`; a.click();
-    URL.revokeObjectURL(url);
-    setShowExportMenu(false);
+    URL.revokeObjectURL(url); setShowExportMenu(false);
   };
-
   const handleExportPDF = () => {
     printDiv.innerHTML = `<h1>${title || 'Notes'}</h1><div>${recognizedText}</div>`;
     window.print();
@@ -923,6 +651,16 @@ const ResultsPage = ({ onBack, noteId }) => {
 
   const learnedCount = cards.filter(c => c.learned).length;
   const pct = cards.length ? Math.round((learnedCount / cards.length) * 100) : 0;
+
+  if (showScanView) {
+    return (
+      <ScanViewPage
+        src={ocrImageUrl || overlayUrl}
+        title={title}
+        onBack={() => setShowScanView(false)}
+      />
+    );
+  }
 
   return (
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream }}>
@@ -936,9 +674,7 @@ const ResultsPage = ({ onBack, noteId }) => {
             </button>
           )}
         </div>
-
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          {/* Export dropdown */}
           <div ref={exportMenuRef} style={{ position:'relative' }}>
             <button className="ns-btn-ghost" onClick={() => setShowExportMenu(v => !v)} style={{ padding:'6px 12px', fontSize:13 }}>
               <Icon d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" size={14} />
@@ -963,8 +699,35 @@ const ResultsPage = ({ onBack, noteId }) => {
             )}
           </div>
 
-          {/* Save Notes */}
-          <button className="ns-btn-amber" onClick={() => setIsSaved(true)} disabled={isSaved} style={{ opacity:isSaved ? .7 : 1 }}>
+          {/* Save Notes button */}
+          <button
+            className="ns-btn-amber"
+            disabled={isSaved}
+            style={{ opacity: isSaved ? 0.7 : 1 }}
+            onClick={async () => {
+              if (!fileId) { if (onSave) onSave(); return; }
+
+              try {
+                // TODO: save title to backend
+                // PATCH /api/files/:fileId/meta  —  body: { title }
+
+                // TODO: save transcription to backend
+                // PUT /api/files/:fileId/edit/transcription  —  body: { newText: recognizedText }
+
+                // TODO: save AI summary to backend
+                // PUT /api/files/:fileId/edit/summary  —  body: { newText: aiSummary }
+
+                // TODO: save flashcards to backend
+                // PUT /api/files/:fileId/edit/flashcards  —  body: { cards: serializeFlashcards(cards) }
+
+              } catch (err) {
+                console.error('Failed to save notes:', err);
+              }
+
+              setIsSaved(true);
+              if (onSave) onSave(); // tells dashboard to refresh notes and navigate back
+            }}
+          >
             {isSaved
               ? <><Icon d="M5 13l4 4L19 7" size={14} color="#0E1117" />Saved</>
               : <><Icon d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" size={14} color="#0E1117" />Save Notes</>
@@ -978,16 +741,9 @@ const ResultsPage = ({ onBack, noteId }) => {
         <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 10px' }}>Processing Complete</p>
         <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', flexWrap:'wrap', gap:16, marginBottom:32 }}>
           <div style={{ flex:1, minWidth:0 }}>
-            {/* Editable title */}
-            <input
-              className="ns-title-input"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="Enter a title for your notes…"
-            />
+            <input className="ns-title-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="Enter a title for your notes…" />
             <p style={{ color:T.muted, fontSize:14, margin:0 }}>Your notes have been scanned and processed successfully.</p>
           </div>
-          {/* Confidence score display */}
           {confidence !== null && (
             <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 16px', background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:99, flexShrink:0 }}>
               <span style={{ fontSize:13, fontWeight:600, color:T.cream }}>{confidence}% Confidence</span>
@@ -1020,7 +776,7 @@ const ResultsPage = ({ onBack, noteId }) => {
           {/* Scan & Edit */}
           {activeTab === 'scan_edit' && (
             <div key="scan_edit" className="ns-tab-panel">
-              <div style={{ display:'flex', gap:6, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
+              <div style={{ display:'flex', gap:6, marginBottom:20, alignItems:'center', flexWrap:'wrap' }}>
                 {[['both','Both'],['image','Scan'],['editor','Editor']].map(([val, label]) => (
                   <button key={val} onClick={() => setScanEditView(val)}
                     style={{ padding:'5px 14px', borderRadius:8, fontSize:12, fontWeight:600, fontFamily:T.font, cursor:'pointer', border:`1px solid ${scanEditView===val ? T.amber : T.border}`, background:scanEditView===val ? T.amberDim : 'transparent', color:scanEditView===val ? T.amber : T.muted, transition:'all .15s' }}>
@@ -1028,12 +784,6 @@ const ResultsPage = ({ onBack, noteId }) => {
                   </button>
                 ))}
                 <div style={{ flex:1 }} />
-
-                <button className="ns-btn-amber" onClick={handleSaveBlocks}>
-                  <Icon d="M5 13l4 4L19 7" size={14} color="#0E1117" />
-                  Save OCR Text
-                </button>
-
                 {transcriptionEdited && (
                   <button className="ns-regen" onClick={() => generateAiContent('all')} disabled={allBusy}>
                     <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} />
@@ -1042,73 +792,36 @@ const ResultsPage = ({ onBack, noteId }) => {
                 )}
               </div>
 
-              <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
-                {(scanEditView === 'both' || scanEditView === 'image') ? (
-                  <LinkedBlocksWorkspace
-                    imageUrl={ocrImageUrl || overlayUrl}
-                    imageSize={ocrImageSize}
-                    blocks={ocrBlocks}
-                    activeBlockId={activeBlockId}
-                    setActiveBlockId={setActiveBlockId}
-                    onChangeBlock={handleBlockChange}
-                    onSelectBlock={focusBlockEditor}
-                    blockEditorRefs={blockEditorRefs}
-                  />
-                ) : (
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        letterSpacing: 1.2,
-                        textTransform: 'uppercase',
-                        color: T.muted,
-                        margin: '0 0 10px',
-                        fontFamily: T.font,
-                      }}
-                    >
-                      Recognized Text
-                    </p>
-                    <RichTextEditor
-                      initialText={recognizedText}
-                      isFullscreen={editorFullscreen}
-                      onToggleFullscreen={() => setEditorFullscreen((f) => !f)}
-                      onSave={(payload) =>
-                        saveEdit(
-                          'edit/transcription',
-                          payload,
-                          (c) => {
-                            setRecognizedText(c.transcribedText);
-                            setTranscriptionEdited(true);
-                          },
-                          setTranscriptionEdited
-                        )
-                      }
-                    />
-                  </div>
-                )}
-
-                {scanEditView === 'both' && (
-                  <div style={{ width:1, alignSelf:'stretch', background:T.border, flexShrink:0 }} />
-                )}
-
-                {(scanEditView === 'both' || scanEditView === 'editor') && (
+              {scanEditView === 'both' && (
+                <div style={{ display:'flex', gap:20, alignItems:'flex-start' }}>
+                  <ImagePane imageUrl={ocrImageUrl} overlayUrl={overlayUrl} onExpand={() => setShowScanView(true)} />
                   <div style={{ flex:1, minWidth:0 }}>
                     <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 10px', fontFamily:T.font }}>Recognized Text</p>
                     <RichTextEditor
                       initialText={recognizedText}
                       isFullscreen={editorFullscreen}
                       onToggleFullscreen={() => setEditorFullscreen(f => !f)}
-                      onSave={(payload) => saveEdit(
-                        'edit/transcription',
-                        payload,
-                        (c) => { setRecognizedText(c.transcribedText); setTranscriptionEdited(true); },
-                        setTranscriptionEdited
-                      )}
+                      onSave={(payload) => saveEdit('edit/transcription', payload, () => { setTranscriptionEdited(true); }, setTranscriptionEdited)}
                     />
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+
+              {scanEditView === 'image' && (
+                <ImagePane imageUrl={ocrImageUrl} overlayUrl={overlayUrl} onExpand={() => setShowScanView(true)} />
+              )}
+
+              {scanEditView === 'editor' && (
+                <div style={{ flex:1, minWidth:0 }}>
+                  <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 10px', fontFamily:T.font }}>Recognized Text</p>
+                  <RichTextEditor
+                    initialText={recognizedText}
+                    isFullscreen={editorFullscreen}
+                    onToggleFullscreen={() => setEditorFullscreen(f => !f)}
+                    onSave={(payload) => saveEdit('edit/transcription', payload, () => { setTranscriptionEdited(true); }, setTranscriptionEdited)}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -1116,9 +829,7 @@ const ResultsPage = ({ onBack, noteId }) => {
           {activeTab === 'summary' && (
             <div key="summary" className="ns-tab-panel">
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:16, flexWrap:'wrap' }}>
-                <p style={{ margin:0, fontSize:13, color:T.muted }}>
-                  Generate a concise summary from the current OCR text when you want it.
-                </p>
+                <p style={{ margin:0, fontSize:13, color:T.muted }}>Generate a concise summary from the current OCR text when you want it.</p>
                 <button
                   className={aiSummary ? 'ns-regen' : 'ns-btn-amber'}
                   onClick={() => generateAiContent('summary')}
@@ -1144,16 +855,14 @@ const ResultsPage = ({ onBack, noteId }) => {
           {activeTab === 'flashcards' && (
             <div key="flashcards" className="ns-tab-panel">
               <div style={{ display:'flex', justifyContent:'flex-end', gap:12, alignItems:'center', flexWrap:'wrap', marginBottom:18 }}>
-                <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-                  <button className={cards.length ? 'ns-regen' : 'ns-btn-amber'} onClick={() => generateAiContent('flashCards')} disabled={flashcardsBusy || !recognizedText.trim()} style={cards.length ? undefined : { padding:'9px 16px' }}>
-                    <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} />
-                    {flashcardsBusy ? 'Generating…' : cards.length ? 'Regenerate Flashcards' : 'Generate Flashcards'}
-                  </button>
-                  <button className="ns-btn-ghost" onClick={() => setShowAdd(true)}>
-                    <Icon d="M12 6v6m0 0v6m0-6h6m-6 0H6" size={14} />
-                    Add Card
-                  </button>
-                </div>
+                <button className={cards.length ? 'ns-regen' : 'ns-btn-amber'} onClick={() => generateAiContent('flashCards')} disabled={flashcardsBusy || !recognizedText.trim()} style={cards.length ? undefined : { padding:'9px 16px' }}>
+                  <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} />
+                  {flashcardsBusy ? 'Generating…' : cards.length ? 'Regenerate Flashcards' : 'Generate Flashcards'}
+                </button>
+                <button className="ns-btn-ghost" onClick={() => setShowAdd(true)}>
+                  <Icon d="M12 6v6m0 0v6m0-6h6m-6 0H6" size={14} />
+                  Add Card
+                </button>
               </div>
 
               {flashcardsError && (
@@ -1161,15 +870,6 @@ const ResultsPage = ({ onBack, noteId }) => {
                   {flashcardsError}
                 </div>
               )}
-
-              <div style={{ marginBottom:28 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, color:T.muted, marginBottom:10 }}>
-                  <span style={{ color:pct === 100 ? T.green : T.amber, fontWeight:600 }}>{pct}%</span>
-                </div>
-                <div style={{ height:5, borderRadius:99, background:T.surfaceHi, overflow:'hidden' }}>
-                  <div style={{ height:'100%', width:`${pct}%`, background:`linear-gradient(90deg,${T.amber},${T.purple})`, borderRadius:99, transition:'width .5s cubic-bezier(.4,0,.2,1)' }} />
-                </div>
-              </div>
 
               {cards.length === 0 ? (
                 <div style={{ background:T.surfaceHi, border:`1px dashed ${T.borderHi}`, borderRadius:14, padding:'28px 24px', textAlign:'center', color:T.muted, marginBottom:28 }}>
