@@ -147,12 +147,27 @@ const api = {
   // ── Notes ──────────────────────────────────────────────────────────────────
 
   getNotes: async () => {
-    const res = await fetch('/api/files', {
+    // correctly fetching user notes but not handling deleted files properly causing a wipe
+    /* const res = await fetch('/api/files', {
       headers: { 'x-auth-token': getToken() || '' },
     });
     //return handleRes(res);
     const data = await handleRes(res);
-    return Array.isArray(data) ? data.map(toNote) : [];
+    return Array.isArray(data) ? data.map(toNote) : []; */
+
+    // fetching active notes and making correct api calls for trashed files
+    // catching responses independently (avoids unintentional wiping of one with the other)
+    const [activeRes, trashRes] = await Promise.all([
+      fetch('/api/files', { headers: { 'x-auth-token': getToken() || '' } }),
+      fetch('/api/files/trash', { headers: { 'x-auth-token': getToken() || '' } }),
+    ]);
+    const [activeData, trashData] = await Promise.all([
+      handleRes(activeRes).catch(() => []),
+      handleRes(trashRes).catch(() => []),
+    ]);
+    const active = Array.isArray(activeData) ? activeData : [];
+    const trash = Array.isArray(trashData) ? trashData : [];
+    return [...active, ...trash].map(toNote);
   },
 
   toggleFavorite: async (id, current) => {
@@ -224,12 +239,20 @@ const api = {
   },
 
   emptyTrash: async (trashedIds) => {
-    await Promise.all(trashedIds.map(id =>
+/*     await Promise.all(trashedIds.map(id =>
       fetch(`/api/files/${id}`, {
         method: 'DELETE',
         headers: { 'x-auth-token': getToken() || '' },
       })
+    )); */
+    const results = await Promise.all(trashedIds.map(id => 
+      fetch(`/api/files/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-auth-token': getToken() || '' },
+      }).then(handleRes).catch((err) => ({ err, id }))
     ));
+    const failed = results.filter(r => r && r.err);
+    if (failed.length) throw new Error(`Failed to delete ${failed.length} of ${trashedIds.length} notes`);
   },
 
   // ── Folders ────────────────────────────────────────────────────────────────
@@ -852,8 +875,9 @@ const UserDashboard = ({
 
   const handleEmptyTrash = async () => {
     const trashed = notes.filter(n => n.deleted);
+    const trashedIds = trashed.map(n => n.id);
     setNotes(p => p.filter(n => !n.deleted));
-    try { await api.emptyTrash(); }
+    try { await api.emptyTrash(trashedIds); }
     catch (err) { setNotes(p => [...p, ...trashed]); showToast('Failed to empty trash'); }
   };
 
