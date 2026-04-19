@@ -107,11 +107,14 @@ const authHeaders = () => ({
 });
 
 const handleRes = async (res) => {
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.msg || err.message || res.statusText);
+    //const err = await res.json().catch(() => ({}));
+    //throw new Error(err.msg || err.message || res.statusText);
+    throw new Error(data.msg || data.message || res.statusText || 'Request failed');
   }
-  return res.json();
+  //return res.json();
+  return data;
 };
 
 const toNote = (file) => ({
@@ -147,7 +150,9 @@ const api = {
     const res = await fetch('/api/files', {
       headers: { 'x-auth-token': getToken() || '' },
     });
-    return handleRes(res);
+    //return handleRes(res);
+    const data = await handleRes(res);
+    return Array.isArray(data) ? data.map(toNote) : [];
   },
 
   toggleFavorite: async (id, current) => {
@@ -505,6 +510,7 @@ const FoldersStrip = ({ folders, notes, selectedFolderId, onSelect, onAdd, onDel
   const handleDrop = (e, fid) => { e.preventDefault(); 
     // causes issues with mongoDB
     // const nid = parseInt(e.dataTransfer.getData('noteId'),10); if (nid) onDropNote(nid, fid); 
+    
     const nid = e.dataTransfer.getData('noteId');
     if (nid) onDropNote(nid, fid);
     setDragOverId(undefined); };

@@ -522,6 +522,11 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
 
   useEffect(() => {
     if (!fileId) return;
+    // reset block
+    if (noteId) {
+      setOcrImageUrl('');
+      setOverlayUrl('');
+    }
     fetch(`/api/files/${fileId}`, { headers })
       .then(async (response) => {
         const data = await response.json();
@@ -545,10 +550,17 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
         setCards(normalizeFlashcards(resolvedCards, learnedMap));
 
         // Resolve image URL from DB for dashboard-opened notes (image files only, not PDFs)
-        if (data.fileLocation && (data.fileType === "image" || data.mimeType?.startsWith("image/"))) {
+        /* if (data.fileLocation && (data.fileType === "image" || data.mimeType?.startsWith("image/"))) {
           const imgUrl = `${BACKEND_URL}/${data.fileLocation.replace(/\\/g, "/")}`;
           setOcrImageUrl(imgUrl);
+        } */
+        // wrapper to protect against characters not in ascii 
+        if (data.fileLocation && (data.fileType === "image" || data.mimeType?.startsWith("image/"))) {
+          const normalized = data.fileLocation.replace(/\\/g, "/").replace(/^\/+/, "");
+          const imgUrl = `${BACKEND_URL}/${encodeURI(normalized)}`;
+          setOcrImageUrl(imgUrl);
         }
+
         // For fresh uploads (no noteId), sessionStorage has fresher data — override the above
         if (!noteId) {
           const ssOverlay = sessionStorage.getItem('lastOcrOverlayUrl');
