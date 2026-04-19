@@ -21,6 +21,13 @@ function App() {
     navigate("note_results");
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    sessionStorage.clear();   // wipes screen, token, userName, userEmail, everything
+    setScreen("landing");     // safe to use setScreen here because sessionStorage is fully clear
+                              // on refresh: getItem("screen") returns null → defaults to "landing"
+  };
+
   return (
     <>
       {screen === "landing" && (
@@ -45,13 +52,8 @@ function App() {
           showResultsPage={false}
           // logout to clear user tokens and info
           //onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
-          onLogout={() => {
-            localStorage.removeItem('token');
-            sessionStorage.removeItem('token');
-            sessionStorage.removeItem('userName');
-            sessionStorage.removeItem('userEmail');
-            setScreen('landing');
-          }}
+          onLogout={handleLogout}
+
           onNewScan={() => navigate("dashboard_upload")}
           onNoteSelect={handleNoteSelect}
           initialTab={dashboardInitialTab}
@@ -66,13 +68,8 @@ function App() {
           showResultsPage={false}
           // logout to clear user tokens and info
           //onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
-          onLogout={() => {
-            localStorage.removeItem('token');
-            sessionStorage.removeItem('token');
-            sessionStorage.removeItem('userName');
-            sessionStorage.removeItem('userEmail');
-            setScreen('landing');
-          }}
+          onLogout={handleLogout}
+
           onNewScan={() => navigate("dashboard_upload")}
           onProcess={() => navigate("results")}
           onNoteSelect={handleNoteSelect}
@@ -85,13 +82,7 @@ function App() {
     onNewScan={() => navigate("dashboard_upload")}
     // logout to clear user tokens and info
     //onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
-    onLogout={() => {
-      localStorage.removeItem('token');
-      sessionStorage.removeItem('token');
-      sessionStorage.removeItem('userName');
-      sessionStorage.removeItem('userEmail');
-      setScreen('landing');
-    }}
+    onLogout={handleLogout}
   />
 )}
 
@@ -112,13 +103,7 @@ function App() {
           onNewScan={() => navigate("dashboard_upload")}
           // logout to clear user tokens and info
           //onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
-          onLogout={() => {
-            localStorage.removeItem('token');
-            sessionStorage.removeItem('token');
-            sessionStorage.removeItem('userName');
-            sessionStorage.removeItem('userEmail');
-            setScreen('landing');
-          }}
+          onLogout={handleLogout}
         />
       )}
     </>
