@@ -11,6 +11,7 @@ export default defineConfig({
         changeOrigin: true, // Changes the origin header to the target URL
         //rewrite: (path) => path.replace(/^\/api/, ''), // Rewrites the path from '/api/...' to '/...'
       },
+      '/uploads': { target: 'http://localhost:5000', changeOrigin: true },
       '/ocr_api': {
         target: 'http://localhost:8000',
         changeOrigin: true,

@@ -25,6 +25,7 @@ const T = {
   serif:     '"DM Serif Display", Georgia, serif',
 };
 
+
 const _fontLink = document.createElement('link');
 _fontLink.rel = 'stylesheet';
 _fontLink.href = 'https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap';
@@ -91,6 +92,8 @@ _style.textContent = `
 `;
 document.head.appendChild(_style);
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // API layer
 // ─────────────────────────────────────────────────────────────────────────────
@@ -106,7 +109,7 @@ const authHeaders = () => ({
 const handleRes = async (res) => {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || res.statusText);
+    throw new Error(err.msg || err.message || res.statusText);
   }
   return res.json();
 };
@@ -124,6 +127,11 @@ const toNote = (file) => ({
   confidence: file.confidence ?? 85,
   favorite:   file.isFavorite ?? false,
   deleted:    file.isDeleted  ?? false,
+  // ── image support ────────────────────────────────────────────────────────
+  fileLocation: file.fileLocation || null,
+  imageUrl:     file.fileLocation
+    ? `${BACKEND_URL}/${file.fileLocation}`
+    : null,
 });
 
 const toFolder = (folder) => ({
@@ -221,13 +229,42 @@ const api = {
 
   // ── Folders ────────────────────────────────────────────────────────────────
 
-  getFolders: async () => [],
+  getFolders: async () => {
+    const res = await fetch('/api/folders', {
+      headers: { 'x-auth-token': getToken() || '' },
+    });
+    return handleRes(res);
+  },
 
-  createFolder: async (name) => ({ _id: Date.now().toString(), name }),
+  //createFolder: async (name) => ({ _id: Date.now().toString(), name }),
 
-  deleteFolder: async () => {},
+  createFolder: async (name) => {
+    const res = await fetch('/api/folders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': getToken() || '' },
+      body: JSON.stringify({ name }),
+    });
+    return handleRes(res);
+  },
 
-  renameFolder: async (id, name) => ({ _id: id, name }),
+  deleteFolder: async (id) => {
+    const res = await fetch(`/api/folders/${id}`, {
+      method: 'DELETE',
+      headers: { 'x-auth-token': getToken() || '' },
+    });
+    return handleRes(res);
+  },
+
+  //renameFolder: async (id, name) => ({ _id: id, name }),
+
+  renameFolder: async (id, name) => {
+    const res = await fetch(`/api/folders/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': getToken() || '' },
+      body: JSON.stringify({ name }),
+    });
+    return handleRes(res);
+  },
 
   // ── Auth ───────────────────────────────────────────────────────────────────
 
