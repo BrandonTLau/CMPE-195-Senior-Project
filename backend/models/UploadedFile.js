@@ -62,7 +62,10 @@ const UploadedFileSchema = new mongoose.Schema({
   uploadDate:   { type: Date, default: Date.now },
   title:        { type: String, default: '' },
   tags:         [{ type: String }],
+  //isFavorite:   { type: Boolean, default: false },
   isFavorite:   { type: Boolean, default: false },
+  isDeleted:    { type: Boolean, default: false },
+  folderId:     { type: String,  default: null  },
   pageCount:    { type: Number, default: 1 },
 
   // ..................................................

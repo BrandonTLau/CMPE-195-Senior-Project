@@ -100,7 +100,7 @@ const getToken = () =>
 
 const authHeaders = () => ({
   'Content-Type': 'application/json',
-  ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+  ...(getToken() ? { 'x-auth-token': getToken() } : {}),
 });
 
 const handleRes = async (res) => {
@@ -135,21 +135,89 @@ const api = {
 
   // ── Notes ──────────────────────────────────────────────────────────────────
 
-  getNotes: async () => [],
+  getNotes: async () => {
+    const res = await fetch('/api/files', {
+      headers: { 'x-auth-token': getToken() || '' },
+    });
+    return handleRes(res);
+  },
 
-  toggleFavorite: async () => {},
+  toggleFavorite: async (id, current) => {
+    const res = await fetch(`/api/files/${id}/meta`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': getToken() || '',
+      },
+      body: JSON.stringify({ isFavorite: !current }),
+    });
+    return handleRes(res);
+  },
 
-  updateTags: async () => {},
+  updateTags: async (id, tags) => {
+    const res = await fetch(`/api/files/${id}/meta`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': getToken() || '',
+      },
+      body: JSON.stringify({ tags }),
+    });
+    return handleRes(res);
+  },
 
-  moveNote: async () => {},
+  moveNote: async (id, folderId) => {
+    const res = await fetch(`/api/files/${id}/meta`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': getToken() || '',
+      },
+      body: JSON.stringify({ folderId }),
+    });
+    return handleRes(res);
+  },
 
-  permanentDelete: async () => {},
+  permanentDelete: async (id) => {
+    const res = await fetch(`/api/files/${id}`, {
+      method: 'DELETE',
+      headers: { 'x-auth-token': getToken() || '' },
+    });
+    return handleRes(res);
+  },
 
-  trashNote: async () => {},
+  trashNote: async (id) => {
+    const res = await fetch(`/api/files/${id}/meta`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': getToken() || '',
+      },
+      body: JSON.stringify({ isDeleted: true }),
+    });
+    return handleRes(res);
+  },
 
-  restoreNote: async () => {},
+  restoreNote: async (id) => {
+    const res = await fetch(`/api/files/${id}/meta`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': getToken() || '',
+      },
+      body: JSON.stringify({ isDeleted: false }),
+    });
+    return handleRes(res);
+  },
 
-  emptyTrash: async () => {},
+  emptyTrash: async (trashedIds) => {
+    await Promise.all(trashedIds.map(id =>
+      fetch(`/api/files/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-auth-token': getToken() || '' },
+      })
+    ));
+  },
 
   // ── Folders ────────────────────────────────────────────────────────────────
 
