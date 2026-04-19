@@ -233,6 +233,9 @@ router.patch('/:id/meta', auth, async (req, res) => {
     res.json(file);
   } catch (err) {
     console.error('Meta error:', err.message);
+      if (err.kind === 'ObjectId') {
+        return res.status(404).json({ msg: 'File not found' });
+      }
     res.status(500).json({ msg: 'Server error' });
   }
 });

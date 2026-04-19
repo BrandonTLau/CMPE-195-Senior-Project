@@ -62,7 +62,6 @@ const UploadedFileSchema = new mongoose.Schema({
   uploadDate:   { type: Date, default: Date.now },
   title:        { type: String, default: '' },
   tags:         [{ type: String }],
-  //isFavorite:   { type: Boolean, default: false },
   isFavorite:   { type: Boolean, default: false },
   isDeleted:    { type: Boolean, default: false },
   folderId:     { type: String,  default: null  },
@@ -168,7 +167,6 @@ const UploadedFileSchema = new mongoose.Schema({
     status:       { type: String, enum: ['pending', 'completed', 'failed'], default: 'pending' },
   }],
 
-  // >>> FUTURE ADDITIONS/INTEGRATIONS: sharing feature; allow guests to upload files; etc...
 }, { timestamps: true });
 
 module.exports = mongoose.model('UploadedFile', UploadedFileSchema);
