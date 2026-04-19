@@ -3,9 +3,12 @@
 
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const UploadedFile = require('../models/UploadedFile');
 const protect = require('../middleware/auth');
 
 const JWT_SECRET  = process.env.JWT_SECRET  || 'dev_jwt_secret_change_in_production';
@@ -115,6 +118,58 @@ router.get('/me', protect, async (req, res) => {
     res.json(user);
   } catch (err) {
     console.error('Me error:', err.message);
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+// ____________________________________________________
+// PASSWORD CHANGE
+// @route   PUT /api/auth/password
+// ____________________________________________________
+router.put('/password', protect, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ msg: 'Current and new passwords are required' });
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ msg: 'New password must be at least 8 characters' });
+  }
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ msg: 'User not found' });
+    const match = await bcrypt.compare(currentPassword, user.password);
+    if (!match) return res.status(400).json({ msg: 'Current password is incorrect' });
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ msg: 'New password must differ from current password' });
+    }
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+    res.json({ msg: 'Password updated successfully' });
+  } catch (err) {
+    console.error('Change password error:', err.message);
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+// ____________________________________________________
+// DELETE ACCOUNT
+// @route   FETCH /api/auth/account
+// ____________________________________________________
+router.delete('/account', protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ msg: 'User not found' });
+    const userUploadsDir = path.join(__dirname, '..', 'uploads', userId);
+    if (fs.existsSync(userUploadsDir)) {
+      fs.rmSync(userUploadsDir, { recursive: true, force: true });
+    }
+    await UploadedFile.deleteMany({ userID: userId });
+    await User.findByIdAndDelete(userId);
+    res.json({ msg: 'Account deleted successfully' });
+  } catch (err) {
+    console.error('Delete account error:', err.message);
     res.status(500).json({ msg: 'Server error' });
   }
 });

@@ -296,9 +296,25 @@ const api = {
 
   // ── Auth ───────────────────────────────────────────────────────────────────
 
-  changePassword: async () => {},
+  changePassword: async (currentPassword, newPassword) => {
+    const res = await fetch('/api/auth/password', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': getToken() || '',
+      },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    return handleRes(res);
+  },
 
-  deleteAccount: async () => {},
+  deleteAccount: async () => {
+    const res = await fetch('/api/auth/account', {
+      method: 'DELETE',
+      headers: { 'x-auth-token': getToken() || '' },
+    });
+    return handleRes(res);
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
