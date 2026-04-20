@@ -330,7 +330,12 @@ async def run_ocr(file: UploadFile = File(...)):
 
     clean_path = preprocess_for_handwriting(raw_path)
 
-    page = ocr.predict(str(clean_path))[0]
+    try:
+        ocr_client = get_ocr()
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    page = ocr_client.predict(str(clean_path))[0]
     lines = page.get("rec_texts", [])
     scores = page.get("rec_scores", [])
     boxes = page.get("rec_boxes", None)
@@ -367,7 +372,12 @@ async def run_ocr_v5(file: UploadFile = File(...)):
 
     norm_path = normalize_image_max_side(raw_path, max_side=1600)
 
-    page = ocr.predict(
+    try:
+        ocr_client = get_ocr()
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    page = ocr_client.predict(
         str(norm_path),
         use_doc_orientation_classify=False,
         use_doc_unwarping=False,
