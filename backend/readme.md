@@ -4,7 +4,7 @@
 [![Coverage](https://img.shields.io/badge/coverage-see%20CI%20artifacts-informational)](#coverage)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 
-REST API for NoteScan — a self-hosted student note-processing application.
+REST API for NoteScan — a self-hosted student note-processing OCR web application.
 
 ## Deployed Instance
 
