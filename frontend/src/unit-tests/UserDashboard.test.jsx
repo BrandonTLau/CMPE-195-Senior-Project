@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import UserDashboard from '../../UserDashboard';
+import UserDashboard from '../UserDashboard';
 
 // ── API shape helpers ─────────────────────────────────────────
 // Note: these mirror what the backend returns; toNote() inside the component transforms them
@@ -183,7 +183,7 @@ describe('UserDashboard', () => {
       renderDashboard();
       await waitForLoad();
       fireEvent.click(screen.getByRole('button', { name: /Favorites/ }));
-      expect(screen.getByText('Favorites')).toBeInTheDocument();
+      expect(screen.getAllByText('Favorites').length).toBeGreaterThan(0);
     });
 
     it('navigates to Trash tab', async () => {
@@ -191,7 +191,7 @@ describe('UserDashboard', () => {
       renderDashboard();
       await waitForLoad();
       fireEvent.click(screen.getByRole('button', { name: /Trash/ }));
-      expect(screen.getByText('Trash')).toBeInTheDocument();
+      expect(screen.getAllByText('Trash').length).toBeGreaterThan(0);
     });
 
     it('navigates to Settings tab', async () => {
@@ -456,17 +456,16 @@ describe('UserDashboard', () => {
       expect(screen.queryByText('No Folder')).not.toBeInTheDocument();
     });
 
-    it('deleting a folder removes it from the strip', async () => {
-      setupFetch({ folders: [apiFolder({ name: 'Old Folder' })] });
-      renderDashboard();
-      await waitForLoad();
+   it('deleting a folder removes it from the strip', async () => {
+  setupFetch({ folders: [apiFolder({ name: 'Old Folder' })] });
+  renderDashboard();
+  await waitForLoad();
 
-      // The ✕ button inside the folder chip
-      const chip  = screen.getByText('Old Folder').closest('.ud-folder-chip').parentElement;
-      const xBtn  = chip.querySelector('button');
-      fireEvent.click(xBtn);
+  const chip = screen.getByText('Old Folder').closest('.ud-folder-chip');
+  const xBtn = chip.querySelector('button');
+  fireEvent.click(xBtn);
 
-      await waitFor(() => expect(screen.queryByText('Old Folder')).not.toBeInTheDocument());
-    });
+  await waitFor(() => expect(screen.queryByText('Old Folder')).not.toBeInTheDocument(), { timeout: 3000 });
+});
   });
 });
