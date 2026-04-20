@@ -40,7 +40,7 @@ def test_health_endpoint_returns_ok():
 
 
 def test_ocr_v5_returns_expected_payload(monkeypatch):
-    monkeypatch.setattr('ocr_backend.app.get_ocr_engine', lambda: FakeOCREngine())
+    monkeypatch.setattr('ocr_backend.app.get_ocr', lambda: FakeOCREngine())
     client = TestClient(app)
 
     res = client.post(
