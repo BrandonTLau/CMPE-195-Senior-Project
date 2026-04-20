@@ -168,12 +168,29 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
 // ____________________________________________________
 router.get('/', auth, async (req, res) => {
   try {
-    const files = await UploadedFile.find({ userID: req.user.id })
+    //const files = await UploadedFile.find({ userID: req.user.id })
+    const files = await UploadedFile.find({ userID: req.user.id, isDeleted: { $ne: true } })
       .sort({ uploadDate: -1 })
       .select('-editHistory -extractionData.rawText -aiGeneratedContent');
     res.json(files);
   } catch (err) {
     console.error('List files error:', err.message);
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+// ____________________________________________________
+// TRASH
+// @route   GET /api/files/trash
+// ____________________________________________________
+router.get('/trash', auth, async (req, res) => {
+  try {
+    const files = await UploadedFile.find({ userID: req.user.id, isDeleted: true })
+      .sort({ uploadDate: -1 })
+      .select('-editHistory -extractionData.rawText -aiGeneratedContent');
+    res.json(files);
+  } catch (err) {
+    console.error('Trash list error:', err.message);
     res.status(500).json({ msg: 'Server error' });
   }
 });
@@ -206,14 +223,19 @@ router.patch('/:id/meta', auth, async (req, res) => {
     const access = requireOwnedFile(file, req.user.id);
     if (access) return res.status(access.status).json({ msg: access.err });
 
-    const { title, tags, isFavorite } = req.body;
+    const { title, tags, isFavorite, isDeleted, folderId } = req.body;
     if (title !== undefined) file.title = title;
     if (tags !== undefined) file.tags = tags;
     if (isFavorite !== undefined) file.isFavorite = isFavorite;
+    if (isDeleted !== undefined) file.isDeleted = isDeleted;
+    if (folderId  !== undefined) file.folderId  = folderId;
     await file.save();
     res.json(file);
   } catch (err) {
     console.error('Meta error:', err.message);
+      if (err.kind === 'ObjectId') {
+        return res.status(404).json({ msg: 'File not found' });
+      }
     res.status(500).json({ msg: 'Server error' });
   }
 });

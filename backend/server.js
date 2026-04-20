@@ -26,6 +26,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/files', require('./routes/files'));
 
+app.use('/api/folders', require('./routes/folders')); // user folders
+
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
 /**

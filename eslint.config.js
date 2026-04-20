@@ -10,16 +10,9 @@ export default defineConfig([
     'src/unit-tests/**',
     'src/integration-tests/**',
     'src/e2e-tests/**',
-    'coverage/**',
   ]),
   {
-    files: ['src/**/*.{js,jsx}'],
-    ignores: [
-      'src/unit-tests/**',
-      'src/integration-tests/**',
-      'src/e2e-tests/**',
-      'coverage/**',
-    ],
+    files: ['**/*.{js,jsx}'],
     extends: [
       js.configs.recommended,
       reactHooks.configs.flat.recommended,
@@ -38,10 +31,7 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': 'warn',
-      'no-empty': 'warn',
-      'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/static-components': 'warn',
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
 ])

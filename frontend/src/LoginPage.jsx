@@ -169,9 +169,16 @@ const LoginPage = ({ onBack, onLoginSuccess, onGoToSignUp }) => {
 
       // returns { token } from backend
       if (data?.token) {
-        if (rememberMe) localStorage.setItem('token', data.token);
-        else            sessionStorage.setItem('token', data.token);
-         sessionStorage.setItem('userEmail', email);
+        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
+        if (rememberMe) { localStorage.setItem('token', data.token); 
+        } else { sessionStorage.setItem('token', data.token); }
+         //sessionStorage.setItem('userEmail', email);
+      }
+
+      if (data?.user) { 
+        sessionStorage.setItem('userName', data.user.fullName || '');
+        sessionStorage.setItem('userEmail', data.user.email || '');
       }
 
       onLoginSuccess();

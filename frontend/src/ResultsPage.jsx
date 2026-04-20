@@ -191,6 +191,8 @@ if (!printDiv) {
   document.body.appendChild(printDiv);
 }
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
 const Icon = ({ d, size = 18, color = 'currentColor', fill = 'none' }) => (
   <svg width={size} height={size} fill={fill} stroke={color} viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={d} />
@@ -520,6 +522,11 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
 
   useEffect(() => {
     if (!fileId) return;
+    // reset block
+    if (noteId) {
+      setOcrImageUrl('');
+      setOverlayUrl('');
+    }
     fetch(`/api/files/${fileId}`, { headers })
       .then(async (response) => {
         const data = await response.json();
@@ -542,6 +549,19 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
         setAiSummary(resolvedSummary);
         setCards(normalizeFlashcards(resolvedCards, learnedMap));
 
+        // Resolve image URL from DB for dashboard-opened notes (image files only, not PDFs)
+        /* if (data.fileLocation && (data.fileType === "image" || data.mimeType?.startsWith("image/"))) {
+          const imgUrl = `${BACKEND_URL}/${data.fileLocation.replace(/\\/g, "/")}`;
+          setOcrImageUrl(imgUrl);
+        } */
+        // wrapper to protect against characters not in ascii 
+        if (data.fileLocation && (data.fileType === "image" || data.mimeType?.startsWith("image/"))) {
+          const normalized = data.fileLocation.replace(/\\/g, "/").replace(/^\/+/, "");
+          const imgUrl = `${BACKEND_URL}/${encodeURI(normalized)}`;
+          setOcrImageUrl(imgUrl);
+        }
+
+        // For fresh uploads (no noteId), sessionStorage has fresher data — override the above
         if (!noteId) {
           const ssOverlay = sessionStorage.getItem('lastOcrOverlayUrl');
           if (ssOverlay) setOverlayUrl(ssOverlay);

@@ -25,6 +25,7 @@ const T = {
   serif:     '"DM Serif Display", Georgia, serif',
 };
 
+
 const _fontLink = document.createElement('link');
 _fontLink.rel = 'stylesheet';
 _fontLink.href = 'https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap';
@@ -91,6 +92,8 @@ _style.textContent = `
 `;
 document.head.appendChild(_style);
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // API layer
 // ─────────────────────────────────────────────────────────────────────────────
@@ -100,15 +103,18 @@ const getToken = () =>
 
 const authHeaders = () => ({
   'Content-Type': 'application/json',
-  ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+  ...(getToken() ? { 'x-auth-token': getToken() } : {}),
 });
 
 const handleRes = async (res) => {
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || res.statusText);
+    //const err = await res.json().catch(() => ({}));
+    //throw new Error(err.msg || err.message || res.statusText);
+    throw new Error(data.msg || data.message || res.statusText || 'Request failed');
   }
-  return res.json();
+  //return res.json();
+  return data;
 };
 
 const toNote = (file) => ({
@@ -124,6 +130,11 @@ const toNote = (file) => ({
   confidence: file.confidence ?? 85,
   favorite:   file.isFavorite ?? false,
   deleted:    file.isDeleted  ?? false,
+  // ── image support ────────────────────────────────────────────────────────
+  fileLocation: file.fileLocation || null,
+  imageUrl:     file.fileLocation
+    ? `${BACKEND_URL}/${file.fileLocation}`
+    : null,
 });
 
 const toFolder = (folder) => ({
@@ -135,37 +146,175 @@ const api = {
 
   // ── Notes ──────────────────────────────────────────────────────────────────
 
-  getNotes: async () => [],
+  getNotes: async () => {
+    // correctly fetching user notes but not handling deleted files properly causing a wipe
+    /* const res = await fetch('/api/files', {
+      headers: { 'x-auth-token': getToken() || '' },
+    });
+    //return handleRes(res);
+    const data = await handleRes(res);
+    return Array.isArray(data) ? data.map(toNote) : []; */
 
-  toggleFavorite: async () => {},
+    // fetching active notes and making correct api calls for trashed files
+    // catching responses independently (avoids unintentional wiping of one with the other)
+    const [activeRes, trashRes] = await Promise.all([
+      fetch('/api/files', { headers: { 'x-auth-token': getToken() || '' } }),
+      fetch('/api/files/trash', { headers: { 'x-auth-token': getToken() || '' } }),
+    ]);
+    const [activeData, trashData] = await Promise.all([
+      handleRes(activeRes).catch(() => []),
+      handleRes(trashRes).catch(() => []),
+    ]);
+    const active = Array.isArray(activeData) ? activeData : [];
+    const trash = Array.isArray(trashData) ? trashData : [];
+    return [...active, ...trash].map(toNote);
+  },
 
-  updateTags: async () => {},
+  toggleFavorite: async (id, current) => {
+    const res = await fetch(`/api/files/${id}/meta`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': getToken() || '',
+      },
+      body: JSON.stringify({ isFavorite: !current }),
+    });
+    return handleRes(res);
+  },
 
-  moveNote: async () => {},
+  updateTags: async (id, tags) => {
+    const res = await fetch(`/api/files/${id}/meta`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': getToken() || '',
+      },
+      body: JSON.stringify({ tags }),
+    });
+    return handleRes(res);
+  },
 
-  permanentDelete: async () => {},
+  moveNote: async (id, folderId) => {
+    const res = await fetch(`/api/files/${id}/meta`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': getToken() || '',
+      },
+      body: JSON.stringify({ folderId }),
+    });
+    return handleRes(res);
+  },
 
-  trashNote: async () => {},
+  permanentDelete: async (id) => {
+    const res = await fetch(`/api/files/${id}`, {
+      method: 'DELETE',
+      headers: { 'x-auth-token': getToken() || '' },
+    });
+    return handleRes(res);
+  },
 
-  restoreNote: async () => {},
+  trashNote: async (id) => {
+    const res = await fetch(`/api/files/${id}/meta`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': getToken() || '',
+      },
+      body: JSON.stringify({ isDeleted: true }),
+    });
+    return handleRes(res);
+  },
 
-  emptyTrash: async () => {},
+  restoreNote: async (id) => {
+    const res = await fetch(`/api/files/${id}/meta`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': getToken() || '',
+      },
+      body: JSON.stringify({ isDeleted: false }),
+    });
+    return handleRes(res);
+  },
+
+  emptyTrash: async (trashedIds) => {
+/*     await Promise.all(trashedIds.map(id =>
+      fetch(`/api/files/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-auth-token': getToken() || '' },
+      })
+    )); */
+    const results = await Promise.all(trashedIds.map(id => 
+      fetch(`/api/files/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-auth-token': getToken() || '' },
+      }).then(handleRes).catch((err) => ({ err, id }))
+    ));
+    const failed = results.filter(r => r && r.err);
+    if (failed.length) throw new Error(`Failed to delete ${failed.length} of ${trashedIds.length} notes`);
+  },
 
   // ── Folders ────────────────────────────────────────────────────────────────
 
-  getFolders: async () => [],
+  getFolders: async () => {
+    const res = await fetch('/api/folders', {
+      headers: { 'x-auth-token': getToken() || '' },
+    });
+    return handleRes(res);
+  },
 
-  createFolder: async (name) => ({ _id: Date.now().toString(), name }),
+  //createFolder: async (name) => ({ _id: Date.now().toString(), name }),
 
-  deleteFolder: async () => {},
+  createFolder: async (name) => {
+    const res = await fetch('/api/folders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': getToken() || '' },
+      body: JSON.stringify({ name }),
+    });
+    return handleRes(res);
+  },
 
-  renameFolder: async (id, name) => ({ _id: id, name }),
+  deleteFolder: async (id) => {
+    const res = await fetch(`/api/folders/${id}`, {
+      method: 'DELETE',
+      headers: { 'x-auth-token': getToken() || '' },
+    });
+    return handleRes(res);
+  },
+
+  //renameFolder: async (id, name) => ({ _id: id, name }),
+
+  renameFolder: async (id, name) => {
+    const res = await fetch(`/api/folders/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': getToken() || '' },
+      body: JSON.stringify({ name }),
+    });
+    return handleRes(res);
+  },
 
   // ── Auth ───────────────────────────────────────────────────────────────────
 
-  changePassword: async () => {},
+  changePassword: async (currentPassword, newPassword) => {
+    const res = await fetch('/api/auth/password', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': getToken() || '',
+      },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    return handleRes(res);
+  },
 
-  deleteAccount: async () => {},
+  deleteAccount: async () => {
+    const res = await fetch('/api/auth/account', {
+      method: 'DELETE',
+      headers: { 'x-auth-token': getToken() || '' },
+    });
+    return handleRes(res);
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -313,6 +462,80 @@ const NewFolderModal = ({ onSave, onClose }) => {
   );
 };
 
+const MoveToFolderModal = ({ folders, currentFolderId, onMove, onClose, onCreateFolder }) =>
+  createPortal(
+    <div className="ud-modal-overlay" onClick={onClose}>
+      <div className="ud-modal" onClick={e => e.stopPropagation()} style={{ width: 340 }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <p style={{ fontFamily: T.serif, fontSize: 20, color: T.cream, margin: 0 }}>Move to Folder</p>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, display: 'flex' }}>
+            <Icon d="M6 18L18 6M6 6l12 12" size={16} />
+          </button>
+        </div>
+
+        {/* No folders exist */}
+        {folders.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '16px 0 8px' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: T.surfaceHi, border: `1px solid ${T.border}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+              <Icon d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" size={20} color={T.muted} />
+            </div>
+            <p style={{ fontFamily: T.font, fontSize: 13, color: T.muted, marginBottom: 16, maxWidth: '26ch', margin: '0 auto 16px' }}>
+              No folders yet. Create one to organise your notes.
+            </p>
+            <button className="ud-btn-amber" onClick={() => { onClose(); onCreateFolder(); }}>
+              <Icon d="M12 4v16m8-8H4" size={13} color="#0E1117" />
+              New Folder
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+
+            {/* "Remove from folder" option — only if currently in one */}
+            {currentFolderId && (
+              <>
+                <button className="ud-dot-item" onClick={() => { onMove(null); onClose(); }}>
+                  <Icon d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" size={14} />
+                  All Notes (remove from folder)
+                </button>
+                <div className="ud-dot-sep" />
+              </>
+            )}
+
+            {/* Folder list */}
+            {folders.map(folder => {
+              const isCurrent = folder.id === currentFolderId;
+              return (
+                <button
+                  key={folder.id}
+                  className="ud-dot-item"
+                  onClick={() => { if (!isCurrent) { onMove(folder.id); onClose(); } }}
+                  style={{ opacity: isCurrent ? 0.5 : 1, cursor: isCurrent ? 'default' : 'pointer' }}
+                >
+                  <Icon
+                    d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
+                    size={14}
+                    color={isCurrent ? T.amber : 'currentColor'}
+                  />
+                  {folder.name}
+                  {isCurrent && (
+                    <span style={{ marginLeft: 'auto', fontSize: 10, color: T.amber, fontWeight: 700,
+                      fontFamily: T.font, letterSpacing: '0.5px' }}>
+                      Current
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+
 //folders strip
 const FoldersStrip = ({ folders, notes, selectedFolderId, onSelect, onAdd, onDelete, onRename, onDropNote, search='' }) => {
   const [renamingId, setRenamingId] = useState(null);
@@ -323,7 +546,13 @@ const FoldersStrip = ({ folders, notes, selectedFolderId, onSelect, onAdd, onDel
   const visible = search.trim() ? folders.filter(f => f.name.toLowerCase().includes(search.toLowerCase())) : folders;
   const count = (fid) => notes.filter(n => n.folderId === fid).length;
   const handleDragOver = (e, id) => { if (!draggingNoteId) return; e.preventDefault(); setDragOverId(id); };
-  const handleDrop = (e, fid) => { e.preventDefault(); const nid = parseInt(e.dataTransfer.getData('noteId'),10); if (nid) onDropNote(nid, fid); setDragOverId(undefined); };
+  const handleDrop = (e, fid) => { e.preventDefault(); 
+    // causes issues with mongoDB
+    // const nid = parseInt(e.dataTransfer.getData('noteId'),10); if (nid) onDropNote(nid, fid); 
+    
+    const nid = e.dataTransfer.getData('noteId');
+    if (nid) onDropNote(nid, fid);
+    setDragOverId(undefined); };
 
   return (
     <div style={{ marginBottom:16 }}>
@@ -384,7 +613,7 @@ const FoldersStrip = ({ folders, notes, selectedFolderId, onSelect, onAdd, onDel
 };
 
 //note card
-const NoteCard = ({ note, onOpen, onToggleFavorite, onDelete, onUpdateTags }) => {
+const NoteCard = ({ note, onOpen, onToggleFavorite, onDelete, onUpdateTags, folders = [], onMoveNote, onCreateFolder }) => {
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [menuPos,    setMenuPos]    = useState({ top:0, right:0 });
   const [trashModal, setTrashModal] = useState(false);
@@ -392,6 +621,7 @@ const NoteCard = ({ note, onOpen, onToggleFavorite, onDelete, onUpdateTags }) =>
   const menuRef = useRef(null);
   const { draggingNoteId, setDraggingNoteId } = React.useContext(DragContext);
   const isDragging = draggingNoteId === note.id;
+  const [moveModal, setMoveModal] = useState(false);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -453,6 +683,12 @@ const NoteCard = ({ note, onOpen, onToggleFavorite, onDelete, onUpdateTags }) =>
             <Icon d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a2 2 0 012-2z" size={14} />
             Edit tags
           </button>
+          {/* NEW: Move to folder */}
+          <button className="ud-dot-item" onClick={e => { e.stopPropagation(); setMenuOpen(false); setMoveModal(true); }}>
+            <Icon d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" size={14} />
+            Move to folder
+          </button>
+          <div className="ud-dot-sep" />
           <button className="ud-dot-item danger" onClick={e => { e.stopPropagation(); setMenuOpen(false); setTrashModal(true); }}>
             <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" size={14} color={T.red} />
             Move to Trash
@@ -462,6 +698,15 @@ const NoteCard = ({ note, onOpen, onToggleFavorite, onDelete, onUpdateTags }) =>
       )}
       {trashModal && createPortal(<TrashConfirmModal noteTitle={note.title} onConfirm={() => { setTrashModal(false); onDelete(note.id); }} onCancel={() => setTrashModal(false)} />, document.body)}
       {tagModal && createPortal(<TagEditorModal tags={note.tags} onSave={(tags) => onUpdateTags(note.id, tags)} onClose={() => setTagModal(false)} />, document.body)}
+      {moveModal && (
+        <MoveToFolderModal
+          folders={folders}
+          currentFolderId={note.folderId ?? null}
+          onMove={folderId => onMoveNote(note.id, folderId)}
+          onClose={() => setMoveModal(false)}
+          onCreateFolder={onCreateFolder}
+        />
+      )}
     </>
   );
 };
@@ -520,7 +765,16 @@ const NotesHome = ({ notes, onNewScan, onNoteSelect, onToggleFavorite, onDelete,
           </div>
         ) : (
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:12 }}>
-            {sorted.map(n => <NoteCard key={n.id} note={n} onOpen={onNoteSelect} onToggleFavorite={onToggleFavorite} onDelete={onDelete} onUpdateTags={onUpdateTags} />)}
+            {sorted.map(n => <NoteCard
+            key={n.id}
+            note={n}
+            onOpen={onNoteSelect}
+            onToggleFavorite={onToggleFavorite}
+            onDelete={onDelete}
+            onUpdateTags={onUpdateTags}
+            folders={folders}
+            onMoveNote={onMoveNote}
+            onCreateFolder={onAddFolder} />)}
           </div>
         )
       )}
@@ -637,8 +891,9 @@ const UserDashboard = ({
 
   const handleEmptyTrash = async () => {
     const trashed = notes.filter(n => n.deleted);
+    const trashedIds = trashed.map(n => n.id);
     setNotes(p => p.filter(n => !n.deleted));
-    try { await api.emptyTrash(); }
+    try { await api.emptyTrash(trashedIds); }
     catch (err) { setNotes(p => [...p, ...trashed]); showToast('Failed to empty trash'); }
   };
 
