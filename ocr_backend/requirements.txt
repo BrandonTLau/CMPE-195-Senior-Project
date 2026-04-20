@@ -3,3 +3,4 @@ uvicorn[standard]
 python-multipart
 opencv-python
 paddleocr
+paddlepaddle==3.2.0
