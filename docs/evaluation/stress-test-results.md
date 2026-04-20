@@ -1,55 +1,41 @@
-# Stress Test Results
+## Stress Test Results
 
-This document records the stress-test approach for the PaddleOCR version of NoteScan.
-
-## Test Targets
-1. Node/Express API for authentication and file metadata routes.
-2. FastAPI OCR service for OCR inference requests.
-
-## Tooling
-- tool: `k6`
-- Scripts included:
-  - `docs/evaluation/k6-backend-smoke.js`
-  - `docs/evaluation/k6-ocr-load.js`
-
-## Recommended Execution Commands
-```bash
-k6 run docs/evaluation/k6-backend-smoke.js
-k6 run docs/evaluation/k6-ocr-load.js
-```
-
-## Result Template
-
-### Backend API Load
+### Test Configuration
 - Tool: k6
-- Duration: 5 minutes
-- Virtual Users: 20
-- Target: `/api/auth/login`, `/api/files`, `/api/files/:id`
+- Duration: 30 seconds
+- Virtual Users: 2 concurrent users
+- Target: `POST /ocr_api/ocr_v5`
+- Environment: Local OCR backend running on `http://127.0.0.1:8000`
+- Test Input: Sample handwritten note image uploaded as multipart form data
 
+### Results
 | Metric | Value |
 |--------|-------|
-| Avg Response Time | Fill in after test |
-| 95th Percentile | Fill in after test |
-| Requests/Second | Fill in after test |
-| Error Rate | Fill in after test |
+| Avg Response Time | 25.83 s |
+| Median Response Time | 30.58 s |
+| 90th Percentile | 31.20 s |
+| 95th Percentile | 31.27 s |
+| Min Response Time | 15.55 s |
+| Max Response Time | 31.35 s |
+| Avg Iteration Duration | 26.84 s |
+| Requests/Second | 0.062 req/s |
+| Total Requests | 3 |
+| Error Rate | 0% |
+| Successful Checks | 6 / 6 |
+| Failed Checks | 0 / 6 |
 
-### OCR Load
-- Tool: k6
-- Duration: 2 minutes
-- Virtual Users: 2 to 5
-- Target: `/ocr_api/ocr_v5`
+### Observations
+- The OCR backend successfully handled all requests submitted during the test.
+- All requests returned HTTP 200 responses and included a valid `merged_text` field.
+- Response times were relatively high, with an average of 25.83 seconds per request and a 95th percentile of 31.27 seconds.
+- Throughput was low at 0.062 requests per second, which is expected for a computationally expensive OCR pipeline running locally.
+- The service appears functionally stable under light concurrent load, but latency would likely become a bottleneck under heavier usage.
 
-| Metric | Value |
-|--------|-------|
-| Avg Response Time | Fill in after test |
-| 95th Percentile | Fill in after test |
-| Requests/Second | Fill in after test |
-| Error Rate | Fill in after test |
+### Bottlenecks / Limits
+- The main bottleneck is OCR inference time rather than request failure.
+- Because each request takes roughly 16 to 31 seconds, the system is better suited for low-concurrency use in its current form.
+- For larger-scale use, likely improvements would include faster preprocessing, lighter OCR settings, batching strategies, or more powerful hardware.
 
-## Expected Bottlenecks
-- The OCR service is expected to be the primary bottleneck because PaddleOCR inference is CPU-intensive.
-- Local Ollama generation is expected to be slower than standard CRUD routes and should be tested separately when enough system memory is available.
-- MongoDB and standard file metadata routes are expected to remain responsive under modest class-project loads.
-
-## Notes
-These templates are included so the team can run and document real measurements on the final deployment target. The CI pipeline validates correctness and coverage, while stress testing should be run against the environment used for the demo or staging deployment.
+### Conclusion
+- The OCR backend passed this stress test in terms of correctness and stability, with a 0% error rate.
+- However, performance is limited by high per-request processing time, so the current implementation is most appropriate for small-scale or prototype usage rather than high-throughput deployment.
