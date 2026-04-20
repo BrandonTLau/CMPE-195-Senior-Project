@@ -20,7 +20,6 @@ def test_normalize_image_max_side_resizes_large_image(tmp_path, monkeypatch):
     img = cv2.imread(str(out))
     assert max(img.shape[:2]) == 1000
 
-
 def test_preprocess_for_handwriting_creates_output(tmp_path, monkeypatch):
     monkeypatch.setattr(ocr_utils, 'OUTPUT_DIR', tmp_path)
     src = tmp_path / 'notes.png'
@@ -30,6 +29,7 @@ def test_preprocess_for_handwriting_creates_output(tmp_path, monkeypatch):
     assert out.exists()
     processed = cv2.imread(str(out), cv2.IMREAD_GRAYSCALE)
     assert processed is not None
+
 
 def test_merge_items_into_lines_groups_by_row_and_gap():
     items = [

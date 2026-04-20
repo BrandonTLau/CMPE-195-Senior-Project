@@ -21,6 +21,13 @@ function App() {
     navigate("note_results");
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    sessionStorage.clear();   // wipes screen, token, userName, userEmail, everything
+    setScreen("landing");     // safe to use setScreen here because sessionStorage is fully clear
+                              // on refresh: getItem("screen") returns null → defaults to "landing"
+  };
+
   return (
     <>
       {screen === "landing" && (
@@ -43,7 +50,10 @@ function App() {
           showUploadPage={false}
           showProcessingPage={false}
           showResultsPage={false}
-          onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
+          // logout to clear user tokens and info
+          //onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
+          onLogout={handleLogout}
+
           onNewScan={() => navigate("dashboard_upload")}
           onNoteSelect={handleNoteSelect}
           initialTab={dashboardInitialTab}
@@ -56,7 +66,10 @@ function App() {
           showUploadPage={true}
           showProcessingPage={false}
           showResultsPage={false}
-          onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
+          // logout to clear user tokens and info
+          //onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
+          onLogout={handleLogout}
+
           onNewScan={() => navigate("dashboard_upload")}
           onProcess={() => navigate("results")}
           onNoteSelect={handleNoteSelect}
@@ -67,7 +80,9 @@ function App() {
   <ResultsPage
     onBack={() => navigate("dashboard")}
     onNewScan={() => navigate("dashboard_upload")}
-    onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
+    // logout to clear user tokens and info
+    //onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
+    onLogout={handleLogout}
   />
 )}
 
@@ -86,7 +101,9 @@ function App() {
             navigate("dashboard");
           }}
           onNewScan={() => navigate("dashboard_upload")}
-          onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
+          // logout to clear user tokens and info
+          //onLogout={() => { sessionStorage.clear(); navigate("landing"); }}
+          onLogout={handleLogout}
         />
       )}
     </>

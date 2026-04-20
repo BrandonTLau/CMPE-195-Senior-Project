@@ -25,6 +25,13 @@ const UserSchema = new mongoose.Schema({
   lastLogin: { type: Date },
   isActive: { type: Boolean, default: true },
   fileUploads: [{ type: mongoose.Schema.Types.ObjectId, ref: 'UploadedFile' }],
+  folders: [
+    {
+      _id: false,
+      id:   { type: String, required: true },
+      name: { type: String, trim: true, required: true },
+    },
+  ],
   /** 
    * ----------------------------------------------------------------------
    * FUTURE ADDITIONS:
