@@ -30,7 +30,7 @@ describe('End-to-end user workflow', () => {
 
   beforeEach(async () => { await clearDatabase(); });
 
-  test('complete student workflow: register, login, upload, organize, edit, trash, delete', async () => {
+  test('complete user workflow: register, login, upload, organize, edit, trash, delete', async () => {
     const registerRes = await request(app)
       .post('/api/auth/register')
       .send({
