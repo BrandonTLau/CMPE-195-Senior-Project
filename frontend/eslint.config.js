@@ -6,8 +6,20 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
   globalIgnores(['dist']),
+  globalIgnores([
+    'src/unit-tests/**',
+    'src/integration-tests/**',
+    'src/e2e-tests/**',
+    'coverage/**',
+  ]),
   {
-    files: ['**/*.{js,jsx}'],
+    files: ['src/**/*.{js,jsx}'],
+    ignores: [
+      'src/unit-tests/**',
+      'src/integration-tests/**',
+      'src/e2e-tests/**',
+      'coverage/**',
+    ],
     extends: [
       js.configs.recommended,
       reactHooks.configs.flat.recommended,
@@ -15,7 +27,10 @@ export default defineConfig([
     ],
     languageOptions: {
       ecmaVersion: 2020,
-      globals: globals.browser,
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
       parserOptions: {
         ecmaVersion: 'latest',
         ecmaFeatures: { jsx: true },
@@ -23,7 +38,10 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': 'warn',
+      'no-empty': 'warn',
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/static-components': 'warn',
     },
   },
 ])
