@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+coverage
+.env
+.env.local
+.git
+.gitignore
+tests
+uploads
+*.md
+.github
+.vercel
