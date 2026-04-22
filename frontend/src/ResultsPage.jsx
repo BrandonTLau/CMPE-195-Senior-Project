@@ -495,6 +495,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
   const [title,            setTitle]            = useState('');
   const [showExportMenu,   setShowExportMenu]   = useState(false);
   const [confidence,       setConfidence]       = useState(null);
+  const [ocrEngine,        setOcrEngine]        = useState(sessionStorage.getItem('lastOcrEngine') || '');
   const [cards,            setCards]            = useState([]);
   const [summaryBusy,      setSummaryBusy]      = useState(false);
   const [flashcardsBusy,   setFlashcardsBusy]   = useState(false);
@@ -526,6 +527,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
     if (noteId) {
       setOcrImageUrl('');
       setOverlayUrl('');
+      setOcrEngine('');
     }
     fetch(`/api/files/${fileId}`, { headers })
       .then(async (response) => {
@@ -549,12 +551,6 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
         setAiSummary(resolvedSummary);
         setCards(normalizeFlashcards(resolvedCards, learnedMap));
 
-        // Resolve image URL from DB for dashboard-opened notes (image files only, not PDFs)
-        /* if (data.fileLocation && (data.fileType === "image" || data.mimeType?.startsWith("image/"))) {
-          const imgUrl = `${BACKEND_URL}/${data.fileLocation.replace(/\\/g, "/")}`;
-          setOcrImageUrl(imgUrl);
-        } */
-        // wrapper to protect against characters not in ascii 
         if (data.fileLocation && (data.fileType === "image" || data.mimeType?.startsWith("image/"))) {
           const normalized = data.fileLocation.replace(/\\/g, "/").replace(/^\/+/, "");
           const imgUrl = `${BACKEND_URL}/${encodeURI(normalized)}`;
@@ -569,6 +565,8 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
           if (ssImageUrl) setOcrImageUrl(ssImageUrl);
           const ssConfidence = sessionStorage.getItem('lastOcrConfidence');
           if (ssConfidence) setConfidence(Math.round(parseFloat(ssConfidence)));
+          const ssEngine = sessionStorage.getItem('lastOcrEngine');
+          if (ssEngine) setOcrEngine(ssEngine);
         }
       })
       .catch((err) => console.error('Failed to load file data:', err));
@@ -682,6 +680,8 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
     );
   }
 
+  const engineLabel = ocrEngine === 'chandra' ? 'Chandra' : ocrEngine === 'paddleocr' ? 'PaddleOCR' : '';
+
   return (
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream }}>
 
@@ -745,7 +745,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
               }
 
               setIsSaved(true);
-              if (onSave) onSave(); // tells dashboard to refresh notes and navigate back
+              if (onSave) onSave();
             }}
           >
             {isSaved
@@ -764,8 +764,18 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
             <input className="ns-title-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="Enter a title for your notes…" />
             <p style={{ color:T.muted, fontSize:14, margin:0 }}>Your notes have been scanned and processed successfully.</p>
           </div>
+
+          {/* Confidence + OCR engine pill */}
           {confidence !== null && (
             <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 16px', background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:99, flexShrink:0 }}>
+              {engineLabel && (
+                <>
+                  <span style={{ fontSize:11, fontWeight:700, letterSpacing:1, textTransform:'uppercase', color:T.amber, fontFamily:T.font }}>
+                    {engineLabel}
+                  </span>
+                  <div style={{ width:1, height:12, background:T.borderHi, flexShrink:0 }} />
+                </>
+              )}
               <span style={{ fontSize:13, fontWeight:600, color:T.cream }}>{confidence}% Confidence</span>
             </div>
           )}

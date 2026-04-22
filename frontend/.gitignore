@@ -24,3 +24,11 @@ dist-ssr
 *.sw?
 
 coverage/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env

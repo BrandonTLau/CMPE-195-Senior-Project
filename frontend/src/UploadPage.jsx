@@ -79,15 +79,49 @@ styleEl.textContent = `
   }
   .up-process:hover:not(:disabled) { opacity: .88; transform: translateY(-2px); box-shadow: 0 8px 32px rgba(245,166,35,.35); }
   .up-process:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+  .up-seg {
+    display: flex;
+    background: ${T.surfaceHi};
+    border: 1px solid ${T.border};
+    border-radius: 10px;
+    padding: 4px;
+    gap: 4px;
+  }
+  .up-seg-btn {
+    flex: 1;
+    padding: 10px 14px;
+    border: none;
+    border-radius: 7px;
+    font-family: ${T.font};
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .2s, color .2s, box-shadow .2s;
+    background: transparent;
+    color: ${T.muted};
+    line-height: 1.3;
+  }
+  .up-seg-btn.selected {
+    background: ${T.amber};
+    color: #0E1117;
+    font-weight: 700;
+    box-shadow: 0 2px 10px rgba(245,166,35,.3);
+  }
+  .up-seg-btn:not(.selected):hover {
+    background: rgba(255,255,255,0.05);
+    color: ${T.cream};
+  }
+  .up-seg-btn:disabled { opacity: .5; cursor: not-allowed; }
   @keyframes fadeUp  { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
   @keyframes fadeIn  { from { opacity:0 } to { opacity:1 } }
   @keyframes spin    { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
   @keyframes float   { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-8px) } }
   @keyframes stepIn  { from { opacity:0; transform:translateX(-8px) } to { opacity:1; transform:translateX(0) } }
 `;
-if (!document.head.querySelector('#up-styles')) {
-  document.head.appendChild(styleEl);
-}
+// Always overwrite so new styles aren't blocked by a stale cached element
+const existingStyle = document.head.querySelector('#up-styles');
+if (existingStyle) existingStyle.remove();
+document.head.appendChild(styleEl);
 
 const Icon = ({ d, size = 18, color = 'currentColor' }) => (
   <svg width={size} height={size} fill="none" stroke={color} viewBox="0 0 24 24" style={{ flexShrink:0 }}>
@@ -130,12 +164,18 @@ const StepRow = ({ label, status }) => {
   );
 };
 
+const OCR_ENGINES = [
+  { id: 'paddleocr', label: 'PaddleOCR'},
+  { id: 'chandra',   label: 'Chandra'},
+];
+
 // ── component ──────────────────────────────────────────────────
 const UploadPage = ({ onBack, onProcess }) => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [dragActive,    setDragActive]    = useState(false);
   const [uploading,     setUploading]     = useState(false);
   const [error,         setError]         = useState('');
+  const [ocrEngine,     setOcrEngine]     = useState('paddleocr');
 
   const [steps, setSteps] = useState({
     upload:    'pending',
@@ -232,9 +272,10 @@ const UploadPage = ({ onBack, onProcess }) => {
         // Step 3 — OCR
         setStep('ocr', 'active');
         try {
-          const ocrData = await runOcr(first.file);
+          const ocrData = await runOcr(first.file, ocrEngine);
           console.log('OCR response:', ocrData);
 
+          sessionStorage.setItem('lastOcrEngine',      ocrEngine);
           sessionStorage.setItem('lastOcrOverlayUrl',  ocrData?.overlay_url  || '');
           sessionStorage.setItem('lastOcrMergedText',  ocrData?.merged_text  || ocrData?.text || '');
           sessionStorage.setItem('lastOcrBlocks',      JSON.stringify(ocrData?.blocks      || []));
@@ -249,6 +290,7 @@ const UploadPage = ({ onBack, onProcess }) => {
           sessionStorage.setItem('lastOcrConfidence', avgConfidence ?? '');
         } catch (ocrErr) {
           console.warn('OCR service unavailable, skipping:', ocrErr.message);
+          sessionStorage.removeItem('lastOcrEngine');
           sessionStorage.removeItem('lastOcrOverlayUrl');
           sessionStorage.removeItem('lastOcrMergedText');
           sessionStorage.removeItem('lastOcrBlocks');
@@ -270,6 +312,7 @@ const UploadPage = ({ onBack, onProcess }) => {
         setStep('results', 'active');
         await new Promise(r => setTimeout(r, 300));
         setStep('results', 'done');
+        sessionStorage.removeItem('lastOcrEngine');
         sessionStorage.removeItem('lastOcrOverlayUrl');
         sessionStorage.removeItem('lastOcrMergedText');
         sessionStorage.removeItem('lastOcrBlocks');
@@ -317,7 +360,7 @@ const UploadPage = ({ onBack, onProcess }) => {
             <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 10px' }}>Please Wait</p>
             <h2 style={{ fontFamily:T.serif, fontSize:32, fontWeight:400, color:T.cream, margin:'0 0 8px', lineHeight:1.1 }}>Processing Your Notes</h2>
             <p style={{ color:T.muted, fontSize:13, margin:0 }}>
-              {steps.ocr     === 'active' ? 'Running OCR engine — this is the longest step…' :
+              {steps.ocr     === 'active' ? `Running ${ocrEngine === 'chandra' ? 'Chandra' : 'PaddleOCR'} engine — this is the longest step…` :
                steps.upload  === 'active' ? 'Uploading your file…'  :
                steps.results === 'active' ? 'Finalizing results…'   :
                'Almost there…'}
@@ -328,7 +371,7 @@ const UploadPage = ({ onBack, onProcess }) => {
           <div style={{ display:'flex', flexDirection:'column', gap:8, width:'100%', maxWidth:360 }}>
             <StepRow label="Uploading file"      status={steps.upload}     />
             <StepRow label="Preprocessing image" status={steps.preprocess} />
-            <StepRow label="Running OCR engine"  status={steps.ocr}        />
+            <StepRow label={`Running ${ocrEngine === 'chandra' ? 'Chandra' : 'PaddleOCR'} engine`} status={steps.ocr} />
             <StepRow label="Generating results"  status={steps.results}    />
           </div>
         </div>
@@ -392,6 +435,61 @@ const UploadPage = ({ onBack, onProcess }) => {
               </div>
             </div>
           )}
+
+          {/* OCR Engine selector */}
+          <div style={{ marginTop:28 }}>
+            <p style={{
+              fontSize:11, fontWeight:700, letterSpacing:1.2,
+              textTransform:'uppercase', color:T.muted,
+              margin:'0 0 10px', fontFamily:T.font,
+            }}>
+              OCR Engine
+            </p>
+            <div style={{
+              display:'flex',
+              background:T.surfaceHi,
+              border:`1px solid ${T.border}`,
+              borderRadius:10,
+              padding:4,
+              gap:4,
+            }}>
+              {OCR_ENGINES.map(({ id, label, sub }) => {
+                const selected = ocrEngine === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => setOcrEngine(id)}
+                    disabled={uploading}
+                    style={{
+                      flex:1,
+                      padding:'10px 14px',
+                      border:'none',
+                      borderRadius:7,
+                      fontFamily:T.font,
+                      fontSize:13,
+                      fontWeight: selected ? 700 : 500,
+                      cursor: uploading ? 'not-allowed' : 'pointer',
+                      lineHeight:1.3,
+                      textAlign:'center',
+                      opacity: uploading ? 0.5 : 1,
+                      background: selected ? T.amber : 'transparent',
+                      color: selected ? '#0E1117' : T.muted,
+                      boxShadow: selected ? '0 2px 10px rgba(245,166,35,.3)' : 'none',
+                      transition:'background .2s, color .2s, box-shadow .2s',
+                    }}
+                  >
+                    <div>{label}</div>
+                    <div style={{
+                      fontSize:10, fontWeight:400, marginTop:2,
+                      opacity: selected ? 0.7 : 0.5,
+                    }}>
+                      {sub}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {/* Process button */}
           <button
