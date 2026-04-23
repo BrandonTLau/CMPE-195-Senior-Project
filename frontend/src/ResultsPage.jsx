@@ -766,17 +766,15 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
           </div>
 
           {/* Confidence + OCR engine pill */}
-          {confidence !== null && (
+          {(confidence !== null || engineLabel) && (
             <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 16px', background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:99, flexShrink:0 }}>
               {engineLabel && (
-                <>
-                  <span style={{ fontSize:11, fontWeight:700, letterSpacing:1, textTransform:'uppercase', color:T.amber, fontFamily:T.font }}>
-                    {engineLabel}
-                  </span>
-                  <div style={{ width:1, height:12, background:T.borderHi, flexShrink:0 }} />
-                </>
+                <span style={{ fontSize:11, fontWeight:700, letterSpacing:1, textTransform:'uppercase', color:T.amber, fontFamily:T.font }}>
+                  {engineLabel}
+                </span>
               )}
-              <span style={{ fontSize:13, fontWeight:600, color:T.cream }}>{confidence}% Confidence</span>
+              {engineLabel && confidence !== null && <div style={{ width:1, height:12, background:T.borderHi, flexShrink:0 }} />}
+              {confidence !== null && <span style={{ fontSize:13, fontWeight:600, color:T.cream }}>{confidence}% Confidence</span>}
             </div>
           )}
         </div>
