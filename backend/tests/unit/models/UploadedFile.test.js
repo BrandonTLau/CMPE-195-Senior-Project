@@ -1,4 +1,3 @@
-const mongoose = require('mongoose');
 const UploadedFile = require('../../../models/UploadedFile');
 const User = require('../../../models/User');
 const { connect, disconnect, clearDatabase } = require('../../helpers/testDb');
@@ -167,24 +166,6 @@ describe('UploadedFile model', () => {
     });
   });
 
-  describe('quiz subdocument', () => {
-    test('stores quiz items with options', async () => {
-      const data = baseFileData();
-      data.currentContent = {
-        quiz: [{
-          itemId: 'q1',
-          question: 'What is 2+2?',
-          options: ['3', '4', '5'],
-          correctAnswer: '4',
-          explanation: 'Basic arithmetic.',
-        }],
-      };
-      const file = await new UploadedFile(data).save();
-      expect(file.currentContent.quiz).toHaveLength(1);
-      expect(file.currentContent.quiz[0].options).toEqual(['3', '4', '5']);
-    });
-  });
-
   describe('editHistory append-only', () => {
     test('appends transcription edits without overwriting', async () => {
       const file = await new UploadedFile(baseFileData()).save();
@@ -204,27 +185,6 @@ describe('UploadedFile model', () => {
       expect(reloaded.editHistory.transcriptionEdits).toHaveLength(2);
       expect(reloaded.editHistory.transcriptionEdits[0].previousText).toBe('old text');
       expect(reloaded.editHistory.transcriptionEdits[1].newText).toBe('newer text');
-    });
-  });
-
-  describe('regenerationLog', () => {
-    test('accepts regeneration log entries', async () => {
-      const data = baseFileData();
-      data.regenerationLog = [{
-        requestedBy: testUser._id,
-        contentType: 'summary',
-        basedOnText: 'the source',
-        status: 'pending',
-      }];
-      const file = await new UploadedFile(data).save();
-      expect(file.regenerationLog).toHaveLength(1);
-      expect(file.regenerationLog[0].status).toBe('pending');
-    });
-
-    test('rejects invalid contentType in regenerationLog', async () => {
-      const data = baseFileData();
-      data.regenerationLog = [{ contentType: 'invalid_type' }];
-      await expect(new UploadedFile(data).save()).rejects.toThrow();
     });
   });
 

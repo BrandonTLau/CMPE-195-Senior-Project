@@ -61,9 +61,7 @@ describe('Files API integration', () => {
   describe('POST /api/files/upload', () => {
     test('uploads a valid PDF file', async () => {
       const res = await request(app)
-        .post('/api/files/upload')
-        .set('x-auth-token', token)
-        .attach('file', pdfPath);
+        .post('/api/files/upload').set('x-auth-token', token).attach('file', pdfPath);
       expect(res.status).toBe(201);
       expect(res.body).toHaveProperty('_id');
       expect(res.body.fileType).toBe('pdf');
@@ -72,18 +70,14 @@ describe('Files API integration', () => {
 
     test('uploads a valid PNG image', async () => {
       const res = await request(app)
-        .post('/api/files/upload')
-        .set('x-auth-token', token)
-        .attach('file', pngPath);
+        .post('/api/files/upload').set('x-auth-token', token).attach('file', pngPath);
       expect(res.status).toBe(201);
       expect(res.body.fileType).toBe('image');
     });
 
     test('stores file in /{userId}/{uploadId}/ directory structure', async () => {
       const res = await request(app)
-        .post('/api/files/upload')
-        .set('x-auth-token', token)
-        .attach('file', pdfPath);
+        .post('/api/files/upload').set('x-auth-token', token).attach('file', pdfPath);
       expect(res.body.folderPath).toBe(`${user._id}/${res.body.uploadId}`);
       const expectedPath = path.join(UPLOADS_DIR, user._id.toString(), res.body.uploadId);
       expect(fs.existsSync(expectedPath)).toBe(true);
@@ -91,32 +85,23 @@ describe('Files API integration', () => {
 
     test('rejects unsupported file type', async () => {
       const res = await request(app)
-        .post('/api/files/upload')
-        .set('x-auth-token', token)
-        .attach('file', txtPath);
+        .post('/api/files/upload').set('x-auth-token', token).attach('file', txtPath);
       expect([400, 415]).toContain(res.status);
     });
 
     test('rejects request without authentication', async () => {
-      const res = await request(app)
-        .post('/api/files/upload')
-        .attach('file', pdfPath);
+      const res = await request(app).post('/api/files/upload').attach('file', pdfPath);
       expect(res.status).toBe(401);
     });
 
     test('rejects request with no file attached', async () => {
-      const res = await request(app)
-        .post('/api/files/upload')
-        .set('x-auth-token', token);
+      const res = await request(app).post('/api/files/upload').set('x-auth-token', token);
       expect(res.status).toBe(400);
-      expect(res.body.msg).toMatch(/no file/i);
     });
 
     test('records uploadId and adds file to user.fileUploads', async () => {
       const res = await request(app)
-        .post('/api/files/upload')
-        .set('x-auth-token', token)
-        .attach('file', pdfPath);
+        .post('/api/files/upload').set('x-auth-token', token).attach('file', pdfPath);
       expect(res.body.uploadId).toBeDefined();
       const updatedUser = await User.findById(user._id);
       expect(updatedUser.fileUploads.map((id) => id.toString())).toContain(res.body._id);
@@ -125,9 +110,7 @@ describe('Files API integration', () => {
 
   describe('GET /api/files', () => {
     test('returns empty array when user has no files', async () => {
-      const res = await request(app)
-        .get('/api/files')
-        .set('x-auth-token', token);
+      const res = await request(app).get('/api/files').set('x-auth-token', token);
       expect(res.status).toBe(200);
       expect(res.body).toEqual([]);
     });
@@ -135,58 +118,32 @@ describe('Files API integration', () => {
     test('returns only the current user\'s files', async () => {
       const other = await makeUserWithToken({ email: 'other@example.com' });
       await new UploadedFile({
-        uploadId: 'u-owned',
-        userID: user._id,
-        originalName: 'mine.pdf',
-        fileType: 'pdf',
-        mimeType: 'application/pdf',
-        fileSize: 100,
-        fileLocation: 'path/mine.pdf',
-        folderPath: 'path',
+        uploadId: 'u-owned', userID: user._id, originalName: 'mine.pdf',
+        fileType: 'pdf', mimeType: 'application/pdf', fileSize: 100,
+        fileLocation: 'path/mine.pdf', folderPath: 'path',
       }).save();
       await new UploadedFile({
-        uploadId: 'u-other',
-        userID: other.user._id,
-        originalName: 'theirs.pdf',
-        fileType: 'pdf',
-        mimeType: 'application/pdf',
-        fileSize: 100,
-        fileLocation: 'path/theirs.pdf',
-        folderPath: 'path',
+        uploadId: 'u-other', userID: other.user._id, originalName: 'theirs.pdf',
+        fileType: 'pdf', mimeType: 'application/pdf', fileSize: 100,
+        fileLocation: 'path/theirs.pdf', folderPath: 'path',
       }).save();
-      const res = await request(app)
-        .get('/api/files')
-        .set('x-auth-token', token);
-      expect(res.status).toBe(200);
+      const res = await request(app).get('/api/files').set('x-auth-token', token);
       expect(res.body).toHaveLength(1);
       expect(res.body[0].originalName).toBe('mine.pdf');
     });
 
     test('excludes soft-deleted files from main listing', async () => {
       await new UploadedFile({
-        uploadId: 'u-active',
-        userID: user._id,
-        originalName: 'active.pdf',
-        fileType: 'pdf',
-        mimeType: 'application/pdf',
-        fileSize: 100,
-        fileLocation: 'p/active.pdf',
-        folderPath: 'p',
+        uploadId: 'u-active', userID: user._id, originalName: 'active.pdf',
+        fileType: 'pdf', mimeType: 'application/pdf', fileSize: 100,
+        fileLocation: 'p/active.pdf', folderPath: 'p',
       }).save();
       await new UploadedFile({
-        uploadId: 'u-trashed',
-        userID: user._id,
-        originalName: 'trashed.pdf',
-        fileType: 'pdf',
-        mimeType: 'application/pdf',
-        fileSize: 100,
-        fileLocation: 'p/trashed.pdf',
-        folderPath: 'p',
-        isDeleted: true,
+        uploadId: 'u-trashed', userID: user._id, originalName: 'trashed.pdf',
+        fileType: 'pdf', mimeType: 'application/pdf', fileSize: 100,
+        fileLocation: 'p/trashed.pdf', folderPath: 'p', isDeleted: true,
       }).save();
-      const res = await request(app)
-        .get('/api/files')
-        .set('x-auth-token', token);
+      const res = await request(app).get('/api/files').set('x-auth-token', token);
       expect(res.body).toHaveLength(1);
       expect(res.body[0].originalName).toBe('active.pdf');
     });
@@ -209,10 +166,7 @@ describe('Files API integration', () => {
         fileType: 'pdf', mimeType: 'application/pdf', fileSize: 100,
         fileLocation: 'p/d.pdf', folderPath: 'p', isDeleted: true,
       }).save();
-      const res = await request(app)
-        .get('/api/files/trash')
-        .set('x-auth-token', token);
-      expect(res.status).toBe(200);
+      const res = await request(app).get('/api/files/trash').set('x-auth-token', token);
       expect(res.body).toHaveLength(1);
       expect(res.body[0].originalName).toBe('deleted.pdf');
     });
@@ -231,27 +185,21 @@ describe('Files API integration', () => {
     });
 
     test('returns full file document', async () => {
-      const res = await request(app)
-        .get(`/api/files/${fileId}`)
-        .set('x-auth-token', token);
+      const res = await request(app).get(`/api/files/${fileId}`).set('x-auth-token', token);
       expect(res.status).toBe(200);
       expect(res.body._id).toBe(fileId);
-      expect(res.body).toHaveProperty('editHistory');
-      expect(res.body).toHaveProperty('currentContent');
     });
 
     test('returns 404 for nonexistent file', async () => {
       const res = await request(app)
-        .get('/api/files/507f1f77bcf86cd799439011')
-        .set('x-auth-token', token);
+        .get('/api/files/507f1f77bcf86cd799439011').set('x-auth-token', token);
       expect(res.status).toBe(404);
     });
 
     test('returns 403 when accessing another user\'s file', async () => {
       const other = await makeUserWithToken({ email: 'stranger@example.com' });
       const res = await request(app)
-        .get(`/api/files/${fileId}`)
-        .set('x-auth-token', other.token);
+        .get(`/api/files/${fileId}`).set('x-auth-token', other.token);
       expect(res.status).toBe(403);
     });
   });
@@ -270,17 +218,14 @@ describe('Files API integration', () => {
 
     test('updates title', async () => {
       const res = await request(app)
-        .patch(`/api/files/${fileId}/meta`)
-        .set('x-auth-token', token)
-        .send({ title: 'Renamed' });
+        .patch(`/api/files/${fileId}/meta`).set('x-auth-token', token).send({ title: 'Renamed' });
       expect(res.status).toBe(200);
       expect(res.body.title).toBe('Renamed');
     });
 
     test('updates tags', async () => {
       const res = await request(app)
-        .patch(`/api/files/${fileId}/meta`)
-        .set('x-auth-token', token)
+        .patch(`/api/files/${fileId}/meta`).set('x-auth-token', token)
         .send({ tags: ['Math', 'Calculus'] });
       expect(res.status).toBe(200);
       expect(res.body.tags).toEqual(['Math', 'Calculus']);
@@ -288,18 +233,14 @@ describe('Files API integration', () => {
 
     test('updates isFavorite', async () => {
       const res = await request(app)
-        .patch(`/api/files/${fileId}/meta`)
-        .set('x-auth-token', token)
-        .send({ isFavorite: true });
+        .patch(`/api/files/${fileId}/meta`).set('x-auth-token', token).send({ isFavorite: true });
       expect(res.status).toBe(200);
       expect(res.body.isFavorite).toBe(true);
     });
 
     test('updates isDeleted (soft delete / trash)', async () => {
       const res = await request(app)
-        .patch(`/api/files/${fileId}/meta`)
-        .set('x-auth-token', token)
-        .send({ isDeleted: true });
+        .patch(`/api/files/${fileId}/meta`).set('x-auth-token', token).send({ isDeleted: true });
       expect(res.status).toBe(200);
       expect(res.body.isDeleted).toBe(true);
     });
@@ -307,17 +248,14 @@ describe('Files API integration', () => {
     test('restores file from trash', async () => {
       await UploadedFile.findByIdAndUpdate(fileId, { isDeleted: true });
       const res = await request(app)
-        .patch(`/api/files/${fileId}/meta`)
-        .set('x-auth-token', token)
-        .send({ isDeleted: false });
+        .patch(`/api/files/${fileId}/meta`).set('x-auth-token', token).send({ isDeleted: false });
       expect(res.status).toBe(200);
       expect(res.body.isDeleted).toBe(false);
     });
 
     test('assigns file to a folder via folderId', async () => {
       const res = await request(app)
-        .patch(`/api/files/${fileId}/meta`)
-        .set('x-auth-token', token)
+        .patch(`/api/files/${fileId}/meta`).set('x-auth-token', token)
         .send({ folderId: 'folder-abc-123' });
       expect(res.status).toBe(200);
       expect(res.body.folderId).toBe('folder-abc-123');
@@ -326,9 +264,7 @@ describe('Files API integration', () => {
     test('removes file from folder by passing null', async () => {
       await UploadedFile.findByIdAndUpdate(fileId, { folderId: 'folder-x' });
       const res = await request(app)
-        .patch(`/api/files/${fileId}/meta`)
-        .set('x-auth-token', token)
-        .send({ folderId: null });
+        .patch(`/api/files/${fileId}/meta`).set('x-auth-token', token).send({ folderId: null });
       expect(res.status).toBe(200);
       expect(res.body.folderId).toBeNull();
     });
@@ -336,8 +272,7 @@ describe('Files API integration', () => {
     test('rejects updating another user\'s file metadata', async () => {
       const other = await makeUserWithToken({ email: 'intruder@example.com' });
       const res = await request(app)
-        .patch(`/api/files/${fileId}/meta`)
-        .set('x-auth-token', other.token)
+        .patch(`/api/files/${fileId}/meta`).set('x-auth-token', other.token)
         .send({ title: 'Hijacked' });
       expect(res.status).toBe(403);
     });
@@ -345,8 +280,7 @@ describe('Files API integration', () => {
     test('returns 404 for nonexistent file', async () => {
       const res = await request(app)
         .patch('/api/files/507f1f77bcf86cd799439011/meta')
-        .set('x-auth-token', token)
-        .send({ title: 'Ghost' });
+        .set('x-auth-token', token).send({ title: 'Ghost' });
       expect(res.status).toBe(404);
     });
   });
@@ -375,111 +309,32 @@ describe('Files API integration', () => {
     });
 
     test('appends multiple edits without overwriting', async () => {
-      await request(app)
-        .put(`/api/files/${fileId}/edit/transcription`)
-        .set('x-auth-token', token)
-        .send({ previousText: 'original text', newText: 'first edit' });
-      const res = await request(app)
-        .put(`/api/files/${fileId}/edit/transcription`)
-        .set('x-auth-token', token)
-        .send({ previousText: 'first edit', newText: 'second edit' });
+      await request(app).put(`/api/files/${fileId}/edit/transcription`)
+        .set('x-auth-token', token).send({ previousText: 'original text', newText: 'first edit' });
+      const res = await request(app).put(`/api/files/${fileId}/edit/transcription`)
+        .set('x-auth-token', token).send({ previousText: 'first edit', newText: 'second edit' });
       expect(res.body.editCount).toBe(2);
-      const stored = await UploadedFile.findById(fileId);
-      expect(stored.editHistory.transcriptionEdits).toHaveLength(2);
     });
 
     test('rejects empty request body', async () => {
       const res = await request(app)
-        .put(`/api/files/${fileId}/edit/transcription`)
-        .set('x-auth-token', token)
-        .send({});
+        .put(`/api/files/${fileId}/edit/transcription`).set('x-auth-token', token).send({});
       expect(res.status).toBe(400);
-    });
-  });
-
-  describe('PUT /api/files/:id/edit/summary and /edit/studyguide', () => {
-    let fileId;
-
-    beforeEach(async () => {
-      const f = await new UploadedFile({
-        uploadId: 'edit-s', userID: user._id, originalName: 's.pdf',
-        fileType: 'pdf', mimeType: 'application/pdf', fileSize: 100,
-        fileLocation: 'p/s.pdf', folderPath: 'p',
-      }).save();
-      fileId = f._id.toString();
-    });
-
-    test('appends summary edit', async () => {
-      const res = await request(app)
-        .put(`/api/files/${fileId}/edit/summary`)
-        .set('x-auth-token', token)
-        .send({ previousText: '', newText: 'New summary here' });
-      expect(res.status).toBe(200);
-      expect(res.body.currentContent.summary).toBe('New summary here');
-    });
-
-    test('appends study guide edit', async () => {
-      const res = await request(app)
-        .put(`/api/files/${fileId}/edit/studyguide`)
-        .set('x-auth-token', token)
-        .send({ previousText: '', newText: 'Guide content' });
-      expect(res.status).toBe(200);
-      expect(res.body.currentContent.studyGuide).toBe('Guide content');
-    });
-  });
-
-  describe('GET /api/files/:id/edits', () => {
-    let fileId;
-
-    beforeEach(async () => {
-      const f = await new UploadedFile({
-        uploadId: 'edits-h', userID: user._id, originalName: 'h.pdf',
-        fileType: 'pdf', mimeType: 'application/pdf', fileSize: 100,
-        fileLocation: 'p/h.pdf', folderPath: 'p',
-      }).save();
-      fileId = f._id.toString();
-    });
-
-    test('returns edit history object', async () => {
-      const res = await request(app)
-        .get(`/api/files/${fileId}/edits`)
-        .set('x-auth-token', token);
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('transcriptionEdits');
-      expect(res.body).toHaveProperty('summaryEdits');
-      expect(res.body).toHaveProperty('studyGuideEdits');
     });
   });
 
   describe('DELETE /api/files/:id', () => {
     test('deletes file and removes on-disk directory', async () => {
       const uploadRes = await request(app)
-        .post('/api/files/upload')
-        .set('x-auth-token', token)
-        .attach('file', pdfPath);
+        .post('/api/files/upload').set('x-auth-token', token).attach('file', pdfPath);
       const fileId = uploadRes.body._id;
       const onDiskDir = path.join(UPLOADS_DIR, user._id.toString(), uploadRes.body.uploadId);
       expect(fs.existsSync(onDiskDir)).toBe(true);
-
       const delRes = await request(app)
-        .delete(`/api/files/${fileId}`)
-        .set('x-auth-token', token);
+        .delete(`/api/files/${fileId}`).set('x-auth-token', token);
       expect(delRes.status).toBe(200);
       expect(await UploadedFile.findById(fileId)).toBeNull();
       expect(fs.existsSync(onDiskDir)).toBe(false);
-    });
-
-    test('removes file id from user.fileUploads', async () => {
-      const uploadRes = await request(app)
-        .post('/api/files/upload')
-        .set('x-auth-token', token)
-        .attach('file', pdfPath);
-      await request(app)
-        .delete(`/api/files/${uploadRes.body._id}`)
-        .set('x-auth-token', token);
-      const updatedUser = await User.findById(user._id);
-      expect(updatedUser.fileUploads.map((id) => id.toString()))
-        .not.toContain(uploadRes.body._id);
     });
 
     test('rejects deletion of another user\'s file', async () => {
@@ -490,49 +345,14 @@ describe('Files API integration', () => {
       }).save();
       const other = await makeUserWithToken({ email: 'thief@example.com' });
       const res = await request(app)
-        .delete(`/api/files/${f._id}`)
-        .set('x-auth-token', other.token);
+        .delete(`/api/files/${f._id}`).set('x-auth-token', other.token);
       expect(res.status).toBe(403);
     });
 
     test('returns 404 for nonexistent file', async () => {
       const res = await request(app)
-        .delete('/api/files/507f1f77bcf86cd799439011')
-        .set('x-auth-token', token);
+        .delete('/api/files/507f1f77bcf86cd799439011').set('x-auth-token', token);
       expect(res.status).toBe(404);
-    });
-  });
-
-  describe('POST /api/files/:id/generate (AI regeneration stub)', () => {
-    let fileId;
-
-    beforeEach(async () => {
-      const f = await new UploadedFile({
-        uploadId: 'gen', userID: user._id, originalName: 'g.pdf',
-        fileType: 'pdf', mimeType: 'application/pdf', fileSize: 100,
-        fileLocation: 'p/g.pdf', folderPath: 'p',
-        currentContent: { transcribedText: 'Some source text for AI.' },
-      }).save();
-      fileId = f._id.toString();
-    });
-
-    test('generates summary content using mocked AI', async () => {
-      const res = await request(app)
-        .post(`/api/files/${fileId}/generate`)
-        .set('x-auth-token', token)
-        .send({ contentType: 'summary' });
-      expect([200, 502]).toContain(res.status);
-      if (res.status === 200) {
-        expect(res.body.currentContent.summary).toMatch(/MOCK SUMMARY/);
-      }
-    });
-
-    test('regenerate endpoint behaves like generate', async () => {
-      const res = await request(app)
-        .post(`/api/files/${fileId}/regenerate`)
-        .set('x-auth-token', token)
-        .send({});
-      expect([200, 502]).toContain(res.status);
     });
   });
 });

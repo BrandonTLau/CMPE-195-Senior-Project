@@ -1,4 +1,3 @@
-const mongoose = require('mongoose');
 const User = require('../../../models/User');
 const { connect, disconnect, clearDatabase } = require('../../helpers/testDb');
 
@@ -30,53 +29,35 @@ describe('User model', () => {
 
   describe('defaults', () => {
     test('defaults role to user', async () => {
-      const user = await new User({
-        email: 'default@example.com',
-        password: 'hashed',
-      }).save();
+      const user = await new User({ email: 'default@example.com', password: 'hashed' }).save();
       expect(user.role).toBe('user');
     });
 
     test('defaults isActive to true', async () => {
-      const user = await new User({
-        email: 'active@example.com',
-        password: 'hashed',
-      }).save();
+      const user = await new User({ email: 'active@example.com', password: 'hashed' }).save();
       expect(user.isActive).toBe(true);
     });
 
     test('defaults fullName to empty string', async () => {
-      const user = await new User({
-        email: 'noname@example.com',
-        password: 'hashed',
-      }).save();
+      const user = await new User({ email: 'noname@example.com', password: 'hashed' }).save();
       expect(user.fullName).toBe('');
     });
 
     test('sets dateJoined automatically', async () => {
       const before = Date.now();
-      const user = await new User({
-        email: 'dated@example.com',
-        password: 'hashed',
-      }).save();
+      const user = await new User({ email: 'dated@example.com', password: 'hashed' }).save();
       expect(user.dateJoined).toBeInstanceOf(Date);
       expect(user.dateJoined.getTime()).toBeGreaterThanOrEqual(before - 1000);
     });
 
     test('initializes empty fileUploads array', async () => {
-      const user = await new User({
-        email: 'files@example.com',
-        password: 'hashed',
-      }).save();
+      const user = await new User({ email: 'files@example.com', password: 'hashed' }).save();
       expect(Array.isArray(user.fileUploads)).toBe(true);
       expect(user.fileUploads).toHaveLength(0);
     });
 
     test('initializes empty folders array', async () => {
-      const user = await new User({
-        email: 'folders@example.com',
-        password: 'hashed',
-      }).save();
+      const user = await new User({ email: 'folders@example.com', password: 'hashed' }).save();
       expect(Array.isArray(user.folders)).toBe(true);
       expect(user.folders).toHaveLength(0);
     });
@@ -84,18 +65,12 @@ describe('User model', () => {
 
   describe('normalization', () => {
     test('lowercases email automatically', async () => {
-      const user = await new User({
-        email: 'MixedCase@Example.COM',
-        password: 'hashed',
-      }).save();
+      const user = await new User({ email: 'MixedCase@Example.COM', password: 'hashed' }).save();
       expect(user.email).toBe('mixedcase@example.com');
     });
 
     test('trims whitespace from email', async () => {
-      const user = await new User({
-        email: '  spaced@example.com  ',
-        password: 'hashed',
-      }).save();
+      const user = await new User({ email: '  spaced@example.com  ', password: 'hashed' }).save();
       expect(user.email).toBe('spaced@example.com');
     });
 
@@ -111,62 +86,36 @@ describe('User model', () => {
 
   describe('uniqueness', () => {
     test('enforces unique email', async () => {
-      await new User({
-        email: 'unique@example.com',
-        password: 'pw1',
-      }).save();
-      await expect(new User({
-        email: 'unique@example.com',
-        password: 'pw2',
-      }).save()).rejects.toThrow();
+      await new User({ email: 'unique@example.com', password: 'pw1' }).save();
+      await expect(new User({ email: 'unique@example.com', password: 'pw2' }).save())
+        .rejects.toThrow();
     });
 
     test('treats emails as unique after lowercasing', async () => {
-      await new User({
-        email: 'Case@Example.com',
-        password: 'pw1',
-      }).save();
-      await expect(new User({
-        email: 'CASE@EXAMPLE.COM',
-        password: 'pw2',
-      }).save()).rejects.toThrow();
+      await new User({ email: 'Case@Example.com', password: 'pw1' }).save();
+      await expect(new User({ email: 'CASE@EXAMPLE.COM', password: 'pw2' }).save())
+        .rejects.toThrow();
     });
   });
 
   describe('role enum', () => {
     test('accepts user role', async () => {
-      const user = await new User({
-        email: 'regular@example.com',
-        password: 'hashed',
-        role: 'user',
-      }).save();
+      const user = await new User({ email: 'regular@example.com', password: 'h', role: 'user' }).save();
       expect(user.role).toBe('user');
     });
 
     test('accepts admin role', async () => {
-      const user = await new User({
-        email: 'admin@example.com',
-        password: 'hashed',
-        role: 'admin',
-      }).save();
+      const user = await new User({ email: 'admin@example.com', password: 'h', role: 'admin' }).save();
       expect(user.role).toBe('admin');
     });
 
     test('accepts guest role', async () => {
-      const user = await new User({
-        email: 'guest@example.com',
-        password: 'hashed',
-        role: 'guest',
-      }).save();
+      const user = await new User({ email: 'guest@example.com', password: 'h', role: 'guest' }).save();
       expect(user.role).toBe('guest');
     });
 
     test('rejects invalid role', async () => {
-      const user = new User({
-        email: 'bad@example.com',
-        password: 'hashed',
-        role: 'superuser',
-      });
+      const user = new User({ email: 'bad@example.com', password: 'h', role: 'superuser' });
       await expect(user.save()).rejects.toThrow();
     });
   });
@@ -198,10 +147,7 @@ describe('User model', () => {
 
   describe('timestamps', () => {
     test('sets createdAt and updatedAt', async () => {
-      const user = await new User({
-        email: 'timed@example.com',
-        password: 'hashed',
-      }).save();
+      const user = await new User({ email: 'timed@example.com', password: 'hashed' }).save();
       expect(user.createdAt).toBeInstanceOf(Date);
       expect(user.updatedAt).toBeInstanceOf(Date);
     });

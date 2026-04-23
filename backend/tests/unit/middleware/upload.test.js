@@ -1,12 +1,7 @@
 const path = require('path');
-const fs = require('fs');
-const os = require('os');
-
-jest.mock('uuid', () => ({ v4: jest.fn(() => 'test-upload-uuid') }));
 
 describe('upload middleware', () => {
   let uploadModule;
-  let originalUploadsPath;
 
   beforeAll(() => {
     uploadModule = require('../../../middleware/upload');

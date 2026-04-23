@@ -42,16 +42,14 @@ describe('CORS configuration', () => {
   afterAll(async () => { await disconnect(); });
 
   test('responds to OPTIONS preflight', async () => {
-    const res = await request(app)
-      .options('/api/auth/login')
+    const res = await request(app).options('/api/auth/login')
       .set('Origin', 'http://localhost:5173')
       .set('Access-Control-Request-Method', 'POST');
     expect([200, 204]).toContain(res.status);
   });
 
   test('allows configured frontend origin', async () => {
-    const res = await request(app)
-      .get('/api/health')
+    const res = await request(app).get('/api/health')
       .set('Origin', 'http://localhost:5173');
     expect(res.headers['access-control-allow-origin']).toBeDefined();
   });
@@ -72,10 +70,8 @@ describe('Global error handling', () => {
   });
 
   test('handles malformed JSON in request body', async () => {
-    const res = await request(app)
-      .post('/api/auth/login')
-      .set('Content-Type', 'application/json')
-      .send('{not valid json');
+    const res = await request(app).post('/api/auth/login')
+      .set('Content-Type', 'application/json').send('{not valid json');
     expect([400, 500]).toContain(res.status);
   });
 });
