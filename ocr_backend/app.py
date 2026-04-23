@@ -185,18 +185,8 @@ def run_chandra_api(input_path: Path) -> dict:
 
 @app.get("/ocr_api/health")
 def health():
-    """Health check — reports both engines."""
-    return {
-        "ok": True,
-        "engines": {
-            "paddle":  "ready",
-            "chandra": {
-                "provider":    "datalab.to hosted API",
-                "mode":        CHANDRA_MODE,
-                "api_key_set": bool(DATALAB_API_KEY),
-            },
-        },
-    }
+    """Health check."""
+    return {"ok": True}
 
 
 @app.post("/ocr_api/ocr")
