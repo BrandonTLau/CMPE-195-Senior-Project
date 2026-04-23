@@ -61,7 +61,7 @@ describe('End-to-end user workflow', () => {
 
     const editRes = await request(app)
       .put(`/api/files/${fileId}/edit/transcription`).set('x-auth-token', token)
-      .send({ previousText: '', newText: 'Mitochondria are the powerhouse of the cell.' });
+      .send({ previousText: '[empty]', newText: 'Mitochondria are the powerhouse of the cell.' });
     expect(editRes.status).toBe(200);
 
     const trashRes = await request(app)
