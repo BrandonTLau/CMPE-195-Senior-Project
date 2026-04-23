@@ -8,9 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test": "vitest --config Vitest.config.js",
+    "test:run": "vitest run --config Vitest.config.js",
+    "test:coverage": "vitest run --coverage --config Vitest.config.js"
   },
   "dependencies": {
     "lucide-react": "^0.555.0",
