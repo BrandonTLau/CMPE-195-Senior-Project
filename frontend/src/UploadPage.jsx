@@ -286,7 +286,9 @@ const UploadPage = ({ onBack, onProcess }) => {
             ? Math.round(
                 (ocrData.items.reduce((sum, item) => sum + (item.score || 0), 0) / ocrData.items.length) * 100
               )
-            : null;
+            : ocrData?.confidence != null
+              ? Math.round(ocrData.confidence * 100)
+              : null;
           sessionStorage.setItem('lastOcrConfidence', avgConfidence ?? '');
         } catch (ocrErr) {
           console.warn('OCR service unavailable, skipping:', ocrErr.message);
