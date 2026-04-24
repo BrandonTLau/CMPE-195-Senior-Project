@@ -1,10 +1,12 @@
+const OCR_BASE = import.meta.env.VITE_OCR_URL || 'http://localhost:8000';
+
 export async function runOcr(file, engine = 'paddleocr') {
   const form = new FormData();
   form.append("file", file);
 
   const engineParam = engine === 'chandra' ? 'chandra' : 'paddle';
 
-  const res = await fetch(`/ocr_api/ocr_v5?engine=${engineParam}`, {
+  const res = await fetch(`${OCR_BASE}/ocr_api/ocr_v5?engine=${engineParam}`, {
     method: "POST",
     body: form,
   });
