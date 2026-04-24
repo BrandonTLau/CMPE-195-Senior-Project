@@ -110,4 +110,61 @@ describe('Folders API integration', () => {
       expect(reloaded.folderId).toBeNull();
     });
   });
+
+  describe('PATCH /api/folders/:id', () => {
+    let folderId;
+
+    beforeEach(async () => {
+      const res = await request(app).post('/api/folders')
+        .set('x-auth-token', token).send({ name: 'Original Name' });
+      folderId = res.body.id;
+    });
+
+    test('renames an existing folder', async () => {
+      const res = await request(app).patch(`/api/folders/${folderId}`)
+        .set('x-auth-token', token).send({ name: 'Renamed' });
+      expect(res.status).toBe(200);
+      expect(res.body.name).toBe('Renamed');
+      expect(res.body.id).toBe(folderId);
+    });
+
+    test('trims whitespace when renaming', async () => {
+      const res = await request(app).patch(`/api/folders/${folderId}`)
+        .set('x-auth-token', token).send({ name: '   Trimmed Name   ' });
+      expect(res.status).toBe(200);
+      expect(res.body.name).toBe('Trimmed Name');
+    });
+
+    test('rejects rename with empty name', async () => {
+      const res = await request(app).patch(`/api/folders/${folderId}`)
+        .set('x-auth-token', token).send({ name: '' });
+      expect(res.status).toBe(400);
+    });
+
+    test('rejects rename with whitespace-only name', async () => {
+      const res = await request(app).patch(`/api/folders/${folderId}`)
+        .set('x-auth-token', token).send({ name: '   ' });
+      expect(res.status).toBe(400);
+    });
+
+    test('rejects rename with missing name field', async () => {
+      const res = await request(app).patch(`/api/folders/${folderId}`)
+        .set('x-auth-token', token).send({});
+      expect(res.status).toBe(400);
+    });
+
+    test('rejects unauthenticated rename', async () => {
+      const res = await request(app).patch(`/api/folders/${folderId}`)
+        .send({ name: 'Hijacked' });
+      expect(res.status).toBe(401);
+    });
+
+    test('persists the rename across requests', async () => {
+      await request(app).patch(`/api/folders/${folderId}`)
+        .set('x-auth-token', token).send({ name: 'Persisted' });
+      const listRes = await request(app).get('/api/folders').set('x-auth-token', token);
+      const found = listRes.body.find((f) => f.id === folderId);
+      expect(found.name).toBe('Persisted');
+    });
+  });
 });

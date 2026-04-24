@@ -176,4 +176,103 @@ describe('Auth API integration', () => {
       expect(res.status).toBe(401);
     });
   });
+
+  describe('PUT /api/auth/password', () => {
+    let token;
+
+    beforeEach(async () => {
+      const res = await request(app).post('/api/auth/register').send({
+        fullName: 'Password User', email: 'pwchange@example.com', password: 'originalpass1',
+      });
+      token = res.body.token;
+    });
+
+    test('changes password with correct current password', async () => {
+      const res = await request(app).put('/api/auth/password')
+        .set('x-auth-token', token)
+        .send({ currentPassword: 'originalpass1', newPassword: 'newpassword2' });
+      expect(res.status).toBe(200);
+      expect(res.body.msg).toMatch(/password updated/i);
+    });
+
+    test('allows login with new password after change', async () => {
+      await request(app).put('/api/auth/password').set('x-auth-token', token)
+        .send({ currentPassword: 'originalpass1', newPassword: 'newpassword2' });
+      const loginRes = await request(app).post('/api/auth/login')
+        .send({ email: 'pwchange@example.com', password: 'newpassword2' });
+      expect(loginRes.status).toBe(200);
+    });
+
+    test('rejects password change with wrong current password', async () => {
+      const res = await request(app).put('/api/auth/password')
+        .set('x-auth-token', token)
+        .send({ currentPassword: 'wrongpass', newPassword: 'newpassword2' });
+      expect(res.status).toBe(400);
+      expect(res.body.msg).toMatch(/incorrect/i);
+    });
+
+    test('rejects password change with missing current password', async () => {
+      const res = await request(app).put('/api/auth/password')
+        .set('x-auth-token', token).send({ newPassword: 'newpassword2' });
+      expect(res.status).toBe(400);
+    });
+
+    test('rejects password change with missing new password', async () => {
+      const res = await request(app).put('/api/auth/password')
+        .set('x-auth-token', token).send({ currentPassword: 'originalpass1' });
+      expect(res.status).toBe(400);
+    });
+
+    test('rejects new password shorter than 8 characters', async () => {
+      const res = await request(app).put('/api/auth/password')
+        .set('x-auth-token', token)
+        .send({ currentPassword: 'originalpass1', newPassword: 'short' });
+      expect(res.status).toBe(400);
+      expect(res.body.msg).toMatch(/8 characters/i);
+    });
+
+    test('rejects when new password matches current password', async () => {
+      const res = await request(app).put('/api/auth/password')
+        .set('x-auth-token', token)
+        .send({ currentPassword: 'originalpass1', newPassword: 'originalpass1' });
+      expect(res.status).toBe(400);
+      expect(res.body.msg).toMatch(/differ/i);
+    });
+
+    test('rejects unauthenticated password change', async () => {
+      const res = await request(app).put('/api/auth/password')
+        .send({ currentPassword: 'originalpass1', newPassword: 'newpassword2' });
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('DELETE /api/auth/account', () => {
+    let token;
+
+    beforeEach(async () => {
+      const res = await request(app).post('/api/auth/register').send({
+        fullName: 'Deletable', email: 'delete@example.com', password: 'deleteme123',
+      });
+      token = res.body.token;
+    });
+
+    test('deletes the user account', async () => {
+      const res = await request(app).delete('/api/auth/account').set('x-auth-token', token);
+      expect(res.status).toBe(200);
+      expect(res.body.msg).toMatch(/deleted/i);
+      const stillExists = await User.findOne({ email: 'delete@example.com' });
+      expect(stillExists).toBeNull();
+    });
+
+    test('rejects unauthenticated account deletion', async () => {
+      const res = await request(app).delete('/api/auth/account');
+      expect(res.status).toBe(401);
+    });
+
+    test('subsequent requests with the deleted user\'s token fail', async () => {
+      await request(app).delete('/api/auth/account').set('x-auth-token', token);
+      const meRes = await request(app).get('/api/auth/me').set('x-auth-token', token);
+      expect([401, 404]).toContain(meRes.status);
+    });
+  });
 });
