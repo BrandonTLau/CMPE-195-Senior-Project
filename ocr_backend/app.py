@@ -157,13 +157,24 @@ def run_chandra_api(input_path: Path) -> dict:
         status = result.get("status", "")
 
         if status == "complete":
+            # Debug: print all keys returned by Datalab API
+            print("Datalab result keys:", list(result.keys()))
+            print("parse_quality_score:", result.get("parse_quality_score"))
+
+            # parse_quality_score is 0-5, convert to 0-1 to match paddle format
+            raw_score = result.get("parse_quality_score")
+            if raw_score is not None:
+                quality_score = round(float(raw_score) / 5, 4)
+            else:
+                # Fallback: estimate from markdown length if no score provided
+                markdown = result.get("markdown", "")
+                quality_score = round(min(len(markdown) / 500, 1.0), 4) if markdown else None
+
             return {
-                "markdown":   result.get("markdown", ""),
-                "metadata":   result.get("metadata", {}),
-                "page_count": result.get("page_count"),
-                # parse_quality_score is 0-5, convert to 0-1 to match paddle format
-                "quality_score": round(result["parse_quality_score"] / 5, 4)
-                if result.get("parse_quality_score") is not None else None,
+                "markdown":      result.get("markdown", ""),
+                "metadata":      result.get("metadata", {}),
+                "page_count":    result.get("page_count"),
+                "quality_score": quality_score,
             }
 
         if status == "failed":
