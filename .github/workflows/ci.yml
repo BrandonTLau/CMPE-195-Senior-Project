@@ -1,51 +1,50 @@
 name: CI
- 
+
 on:
   push:
     branches: ["**"]
   pull_request:
     branches: ["**"]
- 
+
 jobs:
   #frontend
   frontend-tests:
     name: Frontend Tests
     runs-on: ubuntu-latest
- 
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
- 
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
- 
+
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
- 
+
       - name: Run linter
         working-directory: frontend
         run: npm run lint --if-present || true
- 
+
       - name: Run tests
         working-directory: frontend
         run: npm run test:run
- 
+
       - name: Generate coverage report
         working-directory: frontend
         run: npm run test:coverage
- 
+
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: frontend-coverage
           path: frontend/coverage/
 
- 
   #backend
   backend-tests:
     name: Backend Tests
@@ -55,9 +54,66 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Placeholder
-        run: echo "Backend tests pending, to be implemented"
- 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run linter
+        working-directory: backend
+        run: npm run lint --if-present || true
+
+      - name: Run unit tests
+        working-directory: backend
+        run: npm run test:unit
+        env:
+          NODE_ENV: test
+
+      - name: Run integration tests
+        working-directory: backend
+        run: npm run test:integration
+        env:
+          NODE_ENV: test
+
+      - name: Run end-to-end tests
+        working-directory: backend
+        run: npm run test:e2e
+        env:
+          NODE_ENV: test
+
+      - name: Generate coverage report
+        working-directory: backend
+        run: npm run test:coverage
+        env:
+          NODE_ENV: test
+
+      - name: Upload backend coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: docs/evaluation/coverage-report/backend
+
+      - name: Coverage summary
+        working-directory: backend
+        run: |
+          echo "### Backend Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat ../docs/evaluation/coverage-report/backend/coverage-summary.json | node -e "
+            const s = JSON.parse(require('fs').readFileSync(0, 'utf-8')).total;
+            const pct = (k) => s[k].pct.toFixed(2) + '%';
+            console.log('Statements: ' + pct('statements'));
+            console.log('Branches:   ' + pct('branches'));
+            console.log('Functions:  ' + pct('functions'));
+            console.log('Lines:      ' + pct('lines'));
+          " >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
   #ocr backend
   ocr-tests:
     name: OCR Backend Tests
