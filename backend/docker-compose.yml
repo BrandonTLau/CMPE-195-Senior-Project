@@ -1,5 +1,5 @@
 version: '3.8'
-
+ 
 services:
   mongodb:
     image: mongo:7.0
@@ -14,8 +14,7 @@ services:
       MONGO_INITDB_DATABASE: notescan_db
     networks:
       - notescan_net
-
-  # to run backend inside Docker alongside MongoDB
+ 
   backend:
     build: .
     container_name: notescan_backend
@@ -32,11 +31,33 @@ services:
       - mongodb
     networks:
       - notescan_net
-
+ 
+  ocr_backend:
+    build: ./ocr_backend
+    container_name: notescan_ocr
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ocr_uploads:/app/uploads
+      - ocr_output:/app/output
+    env_file:
+      - .env
+    environment:
+      # Chandra — Datalab hosted API key (set CHANDRA_API_KEY in your .env file)
+      CHANDRA_API_KEY: ${CHANDRA_API_KEY}
+      CHANDRA_MODE: ${CHANDRA_MODE:-fast}
+      CHANDRA_TIMEOUT_SECONDS: ${CHANDRA_TIMEOUT_SECONDS:-120}
+    networks:
+      - notescan_net
+ 
 volumes:
   mongodb_data:
   uploads_data:
-
+  ocr_uploads:
+  ocr_output:
+ 
 networks:
   notescan_net:
     driver: bridge
+ 

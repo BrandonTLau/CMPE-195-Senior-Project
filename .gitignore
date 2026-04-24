@@ -1,0 +1,7 @@
+
+.venv/
+__pycache__/
+*.pyc
+ocr_backend/uploads/
+ocr_backend/output/
+backend/uploads/

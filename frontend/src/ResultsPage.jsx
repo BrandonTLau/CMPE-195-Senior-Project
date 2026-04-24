@@ -1,7 +1,6 @@
 import { createPortal } from "react-dom";
 import React, { useState, useRef, useEffect } from 'react';
 
-//Design tokens
 const T = {
   bg:        '#0E1117',
   surface:   '#161B27',
@@ -168,18 +167,20 @@ styleEl.textContent = `
   .ns-unsaved    { font-size:11px; color:${T.amber}; font-family:${T.font}; }
 
   @media print {
+    @page { size: A4; margin: 1.2cm 1.5cm; }
     body * { visibility:hidden; }
     #ns-print-area, #ns-print-area * { visibility:visible; }
     #ns-print-area {
-      position:fixed; left:0; top:0; width:100%;
-      font-family:Georgia,serif; font-size:14pt; line-height:1.7;
-      color:#111; background:#fff; padding:40px 60px; box-sizing:border-box;
+      position:absolute; left:0; top:0; width:100%;
+      font-family:Georgia,serif; font-size:12pt; line-height:1.7;
+      color:#111; background:#fff; padding:0; box-sizing:border-box;
     }
-    #ns-print-area h1 { font-size:24pt; margin-bottom:12pt; }
-    #ns-print-area h2 { font-size:18pt; margin-bottom:10pt; }
-    #ns-print-area h3 { font-size:13pt; font-weight:bold; margin-bottom:8pt; }
-    #ns-print-area ul, #ns-print-area ol { padding-left:20pt; }
-    #ns-print-area li { margin-bottom:4pt; }
+    #ns-print-area h1 { font-size:22pt; margin:0 0 10pt; page-break-after:avoid; }
+    #ns-print-area h2 { font-size:16pt; margin:10pt 0 8pt; page-break-after:avoid; }
+    #ns-print-area h3 { font-size:13pt; font-weight:bold; margin:8pt 0 6pt; page-break-after:avoid; }
+    #ns-print-area p  { margin:0 0 6pt; orphans:3; widows:3; }
+    #ns-print-area ul, #ns-print-area ol { padding-left:18pt; margin:4pt 0; }
+    #ns-print-area li { margin-bottom:3pt; }
   }
 `;
 document.head.appendChild(styleEl);
@@ -232,14 +233,15 @@ function serializeFlashcards(cards = []) {
   }));
 }
 
-function CardModal({ onSave, onClose }) {
-  const [q, setQ] = useState('');
-  const [a, setA] = useState('');
+function CardModal({ onSave, onClose, initialValues }) {
+  const [q, setQ] = useState(initialValues?.question || '');
+  const [a, setA] = useState(initialValues?.answer   || '');
   const valid = q.trim() && a.trim();
+  const isEdit = Boolean(initialValues);
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.7)', backdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
       <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:20, padding:32, width:440, maxWidth:'90vw', boxShadow:'0 32px 64px rgba(0,0,0,.6)' }}>
-        <p style={{ fontFamily:T.serif, fontSize:22, color:T.cream, margin:'0 0 24px' }}>New Flashcard</p>
+        <p style={{ fontFamily:T.serif, fontSize:22, color:T.cream, margin:'0 0 24px' }}>{isEdit ? 'Edit Flashcard' : 'New Flashcard'}</p>
         {[['Question', q, setQ], ['Answer', a, setA]].map(([label, val, set]) => (
           <div key={label} style={{ marginBottom:18 }}>
             <label style={{ display:'block', fontSize:11, fontWeight:600, letterSpacing:1, textTransform:'uppercase', color:T.muted, marginBottom:8, fontFamily:T.font }}>{label}</label>
@@ -249,18 +251,23 @@ function CardModal({ onSave, onClose }) {
         ))}
         <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:8 }}>
           <button className="ns-btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="ns-btn-amber" onClick={() => valid && onSave(q.trim(), a.trim())} style={{ opacity: valid ? 1 : 0.4 }}>Save Card</button>
+          <button className="ns-btn-amber" onClick={() => valid && onSave(q.trim(), a.trim())} style={{ opacity: valid ? 1 : 0.4 }}>{isEdit ? 'Save Changes' : 'Save Card'}</button>
         </div>
       </div>
     </div>
   );
 }
 
-function PreviewCard({ card }) {
-  const [flipped, setFlipped] = useState(false);
+function PreviewCard({ card, onEdit, onDelete }) {
+  const [flipped,  setFlipped]  = useState(false);
+  const [hovered,  setHovered]  = useState(false);
   const face = { position:'absolute', inset:0, backfaceVisibility:'hidden', WebkitBackfaceVisibility:'hidden', borderRadius:14, border:`1px solid ${T.border}`, display:'flex', flexDirection:'column', padding:'16px 18px', overflow:'hidden' };
   return (
-    <div style={{ perspective:700, height:140, flex:'0 0 220px' }}>
+    <div
+      style={{ perspective:700, height:140, flex:'0 0 220px', position:'relative' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <div onClick={() => setFlipped(f => !f)} style={{ position:'relative', width:'100%', height:'100%', transformStyle:'preserve-3d', transition:'transform .5s cubic-bezier(.4,0,.2,1)', transform:flipped ? 'rotateY(180deg)' : 'none', cursor:'pointer' }}>
         <div style={{ ...face, background:T.surfaceHi }}>
           <span className="ns-tag" style={{ background:T.amberDim, color:T.amber, marginBottom:10, alignSelf:'flex-start' }}>Q</span>
@@ -271,11 +278,35 @@ function PreviewCard({ card }) {
           <p style={{ fontSize:13, fontWeight:400, color:T.muted, margin:0, lineHeight:1.5, fontFamily:T.font, display:'-webkit-box', WebkitLineClamp:4, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{card.answer}</p>
         </div>
       </div>
+
+      
+      {hovered && (
+        <div style={{ position:'absolute', top:8, right:8, display:'flex', gap:5, zIndex:10 }}>
+          <button
+            onClick={e => { e.stopPropagation(); onEdit(card); }}
+            title="Edit card"
+            style={{ width:26, height:26, borderRadius:8, background:T.surfaceHi, border:`1px solid ${T.border}`, color:T.muted, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', transition:'color .15s, border-color .15s' }}
+            onMouseEnter={e => { e.currentTarget.style.color = T.amber; e.currentTarget.style.borderColor = T.amber; }}
+            onMouseLeave={e => { e.currentTarget.style.color = T.muted; e.currentTarget.style.borderColor = T.border; }}
+          >
+            <Icon d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" size={13} />
+          </button>
+          <button
+            onClick={e => { e.stopPropagation(); onDelete(card.id); }}
+            title="Delete card"
+            style={{ width:26, height:26, borderRadius:8, background:'rgba(248,113,113,.1)', border:'1px solid rgba(248,113,113,.2)', color:'#F87171', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', transition:'background .15s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(248,113,113,.2)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(248,113,113,.1)'; }}
+          >
+            <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" size={13} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen }) {
+function RichTextEditor({ initialText, onSave, onLiveChange, isFullscreen, onToggleFullscreen }) {
   const editorRef = useRef(null);
   const [editorHTML,    setEditorHTML]    = useState('');
   const [charCount,     setCharCount]     = useState(0);
@@ -320,14 +351,18 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
     italic:              document.queryCommandState('italic'),
     insertUnorderedList: document.queryCommandState('insertUnorderedList'),
     insertOrderedList:   document.queryCommandState('insertOrderedList'),
+    block:               document.queryCommandValue('formatBlock').toLowerCase(),
   });
 
   const handleInput = () => {
     if (!editorRef.current) return;
-    setEditorHTML(editorRef.current.innerHTML);
-    setCharCount(editorRef.current.innerText.length);
+    const html = editorRef.current.innerHTML;
+    const text = editorRef.current.innerText;
+    setEditorHTML(html);
+    setCharCount(text.length);
     setIsDirty(true);
     updateFormats();
+    if (onLiveChange) onLiveChange({ text, html });
   };
 
   const handleKeyUp   = () => updateFormats();
@@ -340,10 +375,17 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
 
   const toolbar = (fullscreen = false) => (
     <div className={`ns-toolbar${fullscreen ? ' fullscreen-bar' : ''}`}>
-      {['h1','h2','h3'].map((h, i) => (
-        <button key={h} className="ns-tool" title={`Heading ${i+1}`} onMouseDown={e => { e.preventDefault(); exec('formatBlock', h); }}>{h.toUpperCase()}</button>
-      ))}
-      <button className="ns-tool" title="Paragraph" onMouseDown={e => { e.preventDefault(); exec('formatBlock', 'p'); }}>¶</button>
+      {['h1','h2','h3'].map((h, i) => {
+        const isActive = activeFormats.block === h;
+        return (
+          <button key={h} className={`ns-tool${isActive ? ' pressed' : ''}`} title={`Heading ${i+1}`} onMouseDown={e => {
+            e.preventDefault();
+            const current = document.queryCommandValue('formatBlock').toLowerCase();
+            exec('formatBlock', current === h ? 'p' : h);
+          }}>{h.toUpperCase()}</button>
+        );
+      })}
+      <button className={`ns-tool${(activeFormats.block === 'p' || activeFormats.block === 'div') ? ' pressed' : ''}`} title="Paragraph" onMouseDown={e => { e.preventDefault(); exec('formatBlock', 'p'); }}>¶</button>
       <div className="ns-tool-sep" />
       <button className={`ns-tool${activeFormats.bold   ? ' pressed' : ''}`} title="Bold"   onMouseDown={e => { e.preventDefault(); exec('bold'); }}><strong>B</strong></button>
       <button className={`ns-tool${activeFormats.italic ? ' pressed' : ''}`} title="Italic" onMouseDown={e => { e.preventDefault(); exec('italic'); }}><em>I</em></button>
@@ -412,7 +454,7 @@ function RichTextEditor({ initialText, onSave, isFullscreen, onToggleFullscreen 
   );
 }
 
-// ── Dedicated scan view page ──────────────────────────────────
+
 function ScanViewPage({ src, title, onBack }) {
   const [zoom, setZoom] = useState(0.75);
 
@@ -449,7 +491,7 @@ function ScanViewPage({ src, title, onBack }) {
   );
 }
 
-// ── Image pane ────────────────────────────────────────────────
+
 function ImagePane({ imageUrl, overlayUrl, onExpand }) {
   const src = imageUrl || overlayUrl;
   return (
@@ -483,18 +525,21 @@ const TABS = [
   { id:'scan_edit',  label:'Scan & Edit',  icon:'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
   { id:'summary',    label:'AI Summary',   icon:'M13 10V3L4 14h7v7l9-11h-7z' },
   { id:'flashcards', label:'Flashcards',   icon:'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
+  { id:'quiz',       label:'Quiz',         icon:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
 ];
 
-// ── ResultsPage ───────────────────────────────────────────────
+
 const ResultsPage = ({ onBack, onSave, noteId }) => {
   const [activeTab,        setActiveTab]        = useState('scan_edit');
   const [isSaved,          setIsSaved]          = useState(false);
   const [showAdd,          setShowAdd]          = useState(false);
+  const [editingCard,      setEditingCard]      = useState(null);
   const [editorFullscreen, setEditorFullscreen] = useState(false);
   const [scanEditView,     setScanEditView]     = useState('both');
   const [title,            setTitle]            = useState('');
   const [showExportMenu,   setShowExportMenu]   = useState(false);
   const [confidence,       setConfidence]       = useState(null);
+  const [ocrEngine,        setOcrEngine]        = useState(sessionStorage.getItem('lastOcrEngine') || '');
   const [cards,            setCards]            = useState([]);
   const [summaryBusy,      setSummaryBusy]      = useState(false);
   const [flashcardsBusy,   setFlashcardsBusy]   = useState(false);
@@ -502,8 +547,32 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
   const [summaryError,     setSummaryError]     = useState('');
   const [flashcardsError,  setFlashcardsError]  = useState('');
   const [showScanView,     setShowScanView]     = useState(false);
+  const [quizQuestions,    setQuizQuestions]    = useState([
+    {
+      question: "What is the main topic of the scanned notes?",
+      options: ["Mathematics", "Reading comprehension", "Science experiments", "History"],
+      correctIndex: 1,
+    },
+    {
+      question: "Which of the following best describes the purpose of OCR?",
+      options: ["Translating text between languages", "Converting images of text into editable text", "Summarizing documents automatically", "Storing files in the cloud"],
+      correctIndex: 1,
+    },
+    {
+      question: "What should you do if the recognized text contains errors?",
+      options: ["Delete the file and re-upload", "Edit the text directly in the editor", "Contact support immediately", "Ignore the errors"],
+      correctIndex: 1,
+    },
+  ]);
+  const [quizBusy,         setQuizBusy]         = useState(false);
+  const [quizError,        setQuizError]        = useState('');
+  const [quizAnswers,      setQuizAnswers]      = useState({});
+  const [quizSubmitted,    setQuizSubmitted]    = useState(false);
+  const [quizCurrent,      setQuizCurrent]      = useState(0);
   const exportMenuRef = useRef(null);
-  const cardsRef = useRef([]);
+  const cardsRef      = useRef([]);
+  const liveTextRef   = useRef('');
+  const liveHtmlRef   = useRef('');
 
   const fileId = noteId || sessionStorage.getItem('lastUploadId');
   const token = localStorage.getItem('token') || sessionStorage.getItem('token');
@@ -526,6 +595,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
     if (noteId) {
       setOcrImageUrl('');
       setOverlayUrl('');
+      setOcrEngine('');
     }
     fetch(`/api/files/${fileId}`, { headers })
       .then(async (response) => {
@@ -549,19 +619,13 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
         setAiSummary(resolvedSummary);
         setCards(normalizeFlashcards(resolvedCards, learnedMap));
 
-        // Resolve image URL from DB for dashboard-opened notes (image files only, not PDFs)
-        /* if (data.fileLocation && (data.fileType === "image" || data.mimeType?.startsWith("image/"))) {
-          const imgUrl = `${BACKEND_URL}/${data.fileLocation.replace(/\\/g, "/")}`;
-          setOcrImageUrl(imgUrl);
-        } */
-        // wrapper to protect against characters not in ascii 
         if (data.fileLocation && (data.fileType === "image" || data.mimeType?.startsWith("image/"))) {
           const normalized = data.fileLocation.replace(/\\/g, "/").replace(/^\/+/, "");
           const imgUrl = `${BACKEND_URL}/${encodeURI(normalized)}`;
           setOcrImageUrl(imgUrl);
         }
 
-        // For fresh uploads (no noteId), sessionStorage has fresher data — override the above
+        
         if (!noteId) {
           const ssOverlay = sessionStorage.getItem('lastOcrOverlayUrl');
           if (ssOverlay) setOverlayUrl(ssOverlay);
@@ -569,6 +633,8 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
           if (ssImageUrl) setOcrImageUrl(ssImageUrl);
           const ssConfidence = sessionStorage.getItem('lastOcrConfidence');
           if (ssConfidence) setConfidence(Math.round(parseFloat(ssConfidence)));
+          const ssEngine = sessionStorage.getItem('lastOcrEngine');
+          if (ssEngine) setOcrEngine(ssEngine);
         }
       })
       .catch((err) => console.error('Failed to load file data:', err));
@@ -655,18 +721,53 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
     }
   };
 
-  const handleExportCopy = async () => { await navigator.clipboard.writeText(recognizedText); setShowExportMenu(false); };
-  const handleExportTXT  = () => {
-    const blob = new Blob([recognizedText], { type: 'text/plain' });
+  const generateQuiz = async () => {
+    if (!fileId) return;
+    if (!recognizedText.trim()) { setQuizError('No OCR text available yet.'); return; }
+    setQuizBusy(true);
+    setQuizError('');
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    try {
+      const res  = await fetch(`/api/files/${fileId}/generate`, { method: 'POST', headers, body: JSON.stringify({ contentType: 'quiz', sourceText: recognizedText }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.msg || 'Quiz generation failed.');
+      const questions = data.currentContent?.quiz || data.aiGeneratedContent?.quiz || [];
+      setQuizQuestions(questions);
+      if (!questions.length) setQuizError('No quiz questions were returned. Try regenerating.');
+    } catch (err) {
+      console.error('Generate quiz error:', err);
+      setQuizError(err.message);
+    } finally {
+      setQuizBusy(false);
+    }
+  };
+
+  const getCurrentText = () => liveTextRef.current || recognizedText;
+  const getCurrentHtml = () => liveHtmlRef.current || `<p>${recognizedText}</p>`;
+
+  const handleExportCopy = async () => {
+    await navigator.clipboard.writeText(getCurrentText());
+    setShowExportMenu(false);
+  };
+
+  const handleExportTXT = () => {
+    const blob = new Blob([getCurrentText()], { type: 'text/plain' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href = url; a.download = `${title || 'notes'}.txt`; a.click();
-    URL.revokeObjectURL(url); setShowExportMenu(false);
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
   };
+
   const handleExportPDF = () => {
-    printDiv.innerHTML = `<h1>${title || 'Notes'}</h1><div>${recognizedText}</div>`;
-    window.print();
-    setTimeout(() => { printDiv.innerHTML = ''; setShowExportMenu(false); }, 500);
+    const titleHtml = title ? `<h1>${title}</h1>` : '';
+    printDiv.innerHTML = `${titleHtml}<div>${getCurrentHtml()}</div>`;
+    setShowExportMenu(false);
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => { printDiv.innerHTML = ''; }, 1000);
+    }, 100);
   };
 
   const learnedCount = cards.filter(c => c.learned).length;
@@ -681,6 +782,8 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
       />
     );
   }
+
+  const engineLabel = ocrEngine === 'chandra' ? 'Chandra' : ocrEngine === 'paddleocr' ? 'PaddleOCR' : '';
 
   return (
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream }}>
@@ -745,7 +848,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
               }
 
               setIsSaved(true);
-              if (onSave) onSave(); // tells dashboard to refresh notes and navigate back
+              if (onSave) onSave();
             }}
           >
             {isSaved
@@ -764,9 +867,17 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
             <input className="ns-title-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="Enter a title for your notes…" />
             <p style={{ color:T.muted, fontSize:14, margin:0 }}>Your notes have been scanned and processed successfully.</p>
           </div>
-          {confidence !== null && (
+
+          {/* Confidence + OCR engine pill */}
+          {(confidence !== null || engineLabel) && (
             <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 16px', background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:99, flexShrink:0 }}>
-              <span style={{ fontSize:13, fontWeight:600, color:T.cream }}>{confidence}% Confidence</span>
+              {engineLabel && (
+                <span style={{ fontSize:11, fontWeight:700, letterSpacing:1, textTransform:'uppercase', color:T.amber, fontFamily:T.font }}>
+                  {engineLabel}
+                </span>
+              )}
+              {engineLabel && confidence !== null && <div style={{ width:1, height:12, background:T.borderHi, flexShrink:0 }} />}
+              {confidence !== null && <span style={{ fontSize:13, fontWeight:600, color:T.cream }}>{confidence}% Confidence</span>}
             </div>
           )}
         </div>
@@ -821,6 +932,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
                       initialText={recognizedText}
                       isFullscreen={editorFullscreen}
                       onToggleFullscreen={() => setEditorFullscreen(f => !f)}
+                      onLiveChange={({ text, html }) => { liveTextRef.current = text; liveHtmlRef.current = html; }}
                       onSave={(payload) => saveEdit('edit/transcription', payload, () => { setTranscriptionEdited(true); }, setTranscriptionEdited)}
                     />
                   </div>
@@ -838,6 +950,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
                     initialText={recognizedText}
                     isFullscreen={editorFullscreen}
                     onToggleFullscreen={() => setEditorFullscreen(f => !f)}
+                    onLiveChange={({ text, html }) => { liveTextRef.current = text; liveHtmlRef.current = html; }}
                     onSave={(payload) => saveEdit('edit/transcription', payload, () => { setTranscriptionEdited(true); }, setTranscriptionEdited)}
                   />
                 </div>
@@ -897,11 +1010,162 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
                 </div>
               ) : (
                 <div style={{ display:'flex', flexWrap:'wrap', gap:14, marginBottom:28 }}>
-                  {cards.map(c => <PreviewCard key={c.id} card={c} />)}
+                  {cards.map(c => (
+                    <PreviewCard
+                      key={c.id}
+                      card={c}
+                      onEdit={(card) => setEditingCard(card)}
+                      onDelete={(id) => updateCards(prev => prev.filter(x => x.id !== id), { persist: true })}
+                    />
+                  ))}
                 </div>
               )}
             </div>
           )}
+
+          {/* Quiz */}
+          {activeTab === 'quiz' && (() => {
+            const q           = quizQuestions[quizCurrent];
+            const correctCount = quizQuestions.filter((qq, i) => quizAnswers[i] === (qq.correctIndex ?? qq.correct_index ?? 0)).length;
+            const pct         = quizQuestions.length ? Math.round(correctCount / quizQuestions.length * 100) : 0;
+            const answeredAll = Object.keys(quizAnswers).length === quizQuestions.length;
+            const scoreColor  = pct >= 70 ? T.green : T.amber;
+            const scoreDimColor = pct >= 70 ? T.greenDim : T.amberDim;
+            const scoreBorderColor = pct >= 70 ? 'rgba(52,211,153,.4)' : 'rgba(245,166,35,.4)';
+
+            return (
+              <div key="quiz" className="ns-tab-panel">
+
+                {/* Header */}
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:20, flexWrap:'wrap' }}>
+                  <p style={{ margin:0, fontSize:13, color:T.muted }}>Generate a multiple choice quiz from your scanned notes.</p>
+                  <button
+                    className={quizQuestions.length ? 'ns-regen' : 'ns-btn-amber'}
+                    onClick={() => { setQuizAnswers({}); setQuizSubmitted(false); setQuizCurrent(0); generateQuiz(); }}
+                    disabled={quizBusy || !recognizedText.trim()}
+                    style={quizQuestions.length ? undefined : { padding:'9px 16px' }}
+                  >
+                    <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} />
+                    {quizBusy ? 'Generating…' : quizQuestions.length ? 'Regenerate Quiz' : 'Generate Quiz'}
+                  </button>
+                </div>
+
+                {/* Error */}
+                {quizError && (
+                  <div style={{ marginBottom:16, padding:'10px 12px', borderRadius:10, border:'1px solid rgba(248,113,113,.35)', background:'rgba(248,113,113,.08)', color:'#FCA5A5', fontSize:13 }}>
+                    {quizError}
+                  </div>
+                )}
+
+                {/* Empty state */}
+                {quizQuestions.length === 0 && !quizBusy && (
+                  <div style={{ background:T.surfaceHi, border:`1px dashed ${T.borderHi}`, borderRadius:14, padding:'40px 24px', textAlign:'center', color:T.muted }}>
+                    No quiz yet. Click Generate Quiz to create one from your notes.
+                  </div>
+                )}
+
+                {/* Score screen */}
+                {quizQuestions.length > 0 && quizSubmitted && (
+                  <div style={{ background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:14, padding:'48px 32px', textAlign:'center' }}>
+                    <div style={{ fontFamily:T.serif, fontSize:64, fontWeight:400, color:scoreColor, lineHeight:1, marginBottom:8 }}>{pct}%</div>
+                    <p style={{ fontSize:15, color:T.muted, margin:'0 0 24px' }}>{correctCount} out of {quizQuestions.length} correct</p>
+                    <div style={{ display:'flex', gap:12, justifyContent:'center', marginBottom:32 }}>
+                      <span style={{ padding:'8px 20px', borderRadius:99, fontSize:13, fontWeight:600, background:T.greenDim, color:T.green, border:'1px solid rgba(52,211,153,.3)' }}>{correctCount} correct</span>
+                      <span style={{ padding:'8px 20px', borderRadius:99, fontSize:13, fontWeight:600, background:'rgba(248,113,113,.10)', color:'#FCA5A5', border:'1px solid rgba(248,113,113,.3)' }}>{quizQuestions.length - correctCount} wrong</span>
+                    </div>
+                    <div style={{ display:'flex', gap:10, justifyContent:'center' }}>
+                      <button className="ns-btn-ghost" onClick={() => { setQuizAnswers({}); setQuizSubmitted(false); setQuizCurrent(0); }}>
+                        <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} />
+                        Retake
+                      </button>
+                      <button className="ns-btn-amber" onClick={() => { setQuizAnswers({}); setQuizSubmitted(false); setQuizCurrent(0); generateQuiz(); }}>
+                        <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} color="#0E1117" />
+                        New Quiz
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Stepper */}
+                {quizQuestions.length > 0 && !quizSubmitted && q && (
+                  <>
+                    {/* Question counter */}
+                    <p style={{ fontSize:12, color:T.muted, margin:'0 0 16px', fontFamily:T.font }}>
+                      Question {quizCurrent + 1} of {quizQuestions.length}
+                      <span style={{ marginLeft:12, color: answeredAll ? T.green : T.muted }}>
+                        · {Object.keys(quizAnswers).length} answered
+                      </span>
+                    </p>
+
+                    {/* Question card */}
+                    <div style={{ background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:14, padding:'28px', marginBottom:20, minHeight:300, display:'flex', flexDirection:'column', gap:20 }}>
+                      <p style={{ fontSize:16, fontWeight:600, color:T.cream, lineHeight:1.6, margin:0, fontFamily:T.font }}>
+                        <span style={{ color:T.amber, marginRight:6 }}>{quizCurrent + 1}.</span>
+                        {q.question}
+                      </p>
+                      <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                        {(q.options || q.choices || []).map((opt, oi) => {
+                          const isSelected = quizAnswers[quizCurrent] === oi;
+                          return (
+                            <button
+                              key={oi}
+                              onClick={() => setQuizAnswers(prev => ({ ...prev, [quizCurrent]: oi }))}
+                              style={{
+                                display:'flex', alignItems:'center', gap:14,
+                                padding:'13px 16px', borderRadius:10,
+                                border:`1px solid ${isSelected ? 'rgba(245,166,35,.4)' : T.border}`,
+                                background: isSelected ? T.amberDim : 'transparent',
+                                color: isSelected ? T.amber : T.muted,
+                                cursor:'pointer', textAlign:'left',
+                                fontFamily:T.font, fontSize:14,
+                                transition:'all .15s',
+                              }}
+                            >
+                              <span style={{ width:26, height:26, borderRadius:'50%', border:`1.5px solid currentColor`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, flexShrink:0 }}>
+                                {String.fromCharCode(65 + oi)}
+                              </span>
+                              {opt}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Nav row */}
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                      <button
+                        className="ns-btn-ghost"
+                        onClick={() => setQuizCurrent(c => c - 1)}
+                        disabled={quizCurrent === 0}
+                        style={{ opacity: quizCurrent === 0 ? 0.3 : 1 }}
+                      >
+                        <Icon d="M15 19l-7-7 7-7" size={13} />
+                        Previous
+                      </button>
+
+                      {quizCurrent < quizQuestions.length - 1 ? (
+                        <button className="ns-btn-amber" onClick={() => setQuizCurrent(c => c + 1)}>
+                          Next
+                          <Icon d="M9 5l7 7-7 7" size={13} color="#0E1117" />
+                        </button>
+                      ) : (
+                        <button
+                          className="ns-btn-amber"
+                          onClick={() => setQuizSubmitted(true)}
+                          disabled={!answeredAll}
+                          style={{ opacity: !answeredAll ? 0.4 : 1 }}
+                        >
+                          <Icon d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" size={13} color="#0E1117" />
+                          Submit Quiz
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+
+              </div>
+            );
+          })()}
 
         </div>
       </div>
@@ -914,6 +1178,20 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
             setShowAdd(false);
           }}
           onClose={() => setShowAdd(false)}
+        />
+      )}
+
+      {editingCard && (
+        <CardModal
+          initialValues={{ question: editingCard.question, answer: editingCard.answer }}
+          onSave={async (q, a) => {
+            await updateCards(
+              prev => prev.map(c => c.id === editingCard.id ? { ...c, question: q, answer: a } : c),
+              { persist: true }
+            );
+            setEditingCard(null);
+          }}
+          onClose={() => setEditingCard(null)}
         />
       )}
     </div>

@@ -1,8 +1,10 @@
-export async function runOcr(file) {
+export async function runOcr(file, engine = 'paddleocr') {
   const form = new FormData();
   form.append("file", file);
 
-  const res = await fetch("/ocr_api/ocr_v5", {
+  const engineParam = engine === 'chandra' ? 'chandra' : 'paddle';
+
+  const res = await fetch(`/ocr_api/ocr_v5?engine=${engineParam}`, {
     method: "POST",
     body: form,
   });
@@ -10,8 +12,7 @@ export async function runOcr(file) {
   let data = null;
   try {
     data = await res.json();
-  } catch (e) {
-  }
+  } catch (e) {}
 
   if (!res.ok) {
     const msg =
