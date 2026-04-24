@@ -2,6 +2,14 @@ const DEFAULT_BASE_URL = process.env.OLLAMA_API_URL || process.env.LLM_API_URL |
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL || process.env.LLM_MODEL || 'gemma3:1b';
 const DEFAULT_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS || 120000);
 
+const AI_PROVIDER = (process.env.AI_PROVIDER || 'ollama').toLowerCase();
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama3-8b-8192';
+const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const OPENAI_BASE_URL = 'https://api.openai.com/v1/chat/completions';
+
 function getOllamaConfig() {
   return {
     baseUrl: DEFAULT_BASE_URL.replace(/\/$/, ''),
@@ -33,6 +41,44 @@ function buildContextWindow(text, maxChars = 7000) {
     cleaned.slice(middleStart, middleStart + middleSize).trim(),
     cleaned.slice(cleaned.length - tailSize).trim(),
   ].filter(Boolean).join('\n\n[... omitted for length ...]\n\n');
+}
+
+async function callGroq(prompt) {
+  if (!GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY is not set.');
+  }
+
+  const response = await fetch(GROQ_BASE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+      max_tokens: 2048,
+    }),
+  });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (err) {
+    throw new Error('Groq returned an unreadable response.');
+  }
+
+  if (!response.ok) {
+    throw new Error(data?.error?.message || `Groq request failed (${response.status}).`);
+  }
+
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error('Groq returned an empty response.');
+  }
+
+  return String(content).trim();
 }
 
 async function callOllama(prompt, { format } = {}) {
@@ -86,6 +132,55 @@ async function callOllama(prompt, { format } = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function callOpenAI(prompt) {
+  if (!OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is not set.');
+  }
+
+  const response = await fetch(OPENAI_BASE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+      max_tokens: 2048,
+    }),
+  });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (err) {
+    throw new Error('OpenAI returned an unreadable response.');
+  }
+
+  if (!response.ok) {
+    throw new Error(data?.error?.message || `OpenAI request failed (${response.status}).`);
+  }
+
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error('OpenAI returned an empty response.');
+  }
+
+  return String(content).trim();
+}
+
+// Route to OpenAI, Groq, or Ollama based on AI_PROVIDER env var
+async function callAI(prompt, options = {}) {
+  if (AI_PROVIDER === 'openai') {
+    return callOpenAI(prompt);
+  }
+  if (AI_PROVIDER === 'groq') {
+    return callGroq(prompt);
+  }
+  return callOllama(prompt, options);
 }
 
 function stripCodeFences(text) {
@@ -186,7 +281,7 @@ async function generateSummary(text) {
     context,
   ].join('\n');
 
-  return callOllama(prompt);
+  return callAI(prompt);
 }
 
 async function generateFlashcards(text) {
@@ -208,7 +303,7 @@ async function generateFlashcards(text) {
     context,
   ].join('\n');
 
-  const raw = await callOllama(prompt);
+  const raw = await callAI(prompt);
   const cards = parseFlashcardsFromText(raw);
 
   const cleanedCards = cards
