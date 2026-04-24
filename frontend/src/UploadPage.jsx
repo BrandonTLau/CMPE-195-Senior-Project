@@ -79,46 +79,12 @@ styleEl.textContent = `
   }
   .up-process:hover:not(:disabled) { opacity: .88; transform: translateY(-2px); box-shadow: 0 8px 32px rgba(245,166,35,.35); }
   .up-process:disabled { opacity: .4; cursor: not-allowed; transform: none; }
-  .up-seg {
-    display: flex;
-    background: ${T.surfaceHi};
-    border: 1px solid ${T.border};
-    border-radius: 10px;
-    padding: 4px;
-    gap: 4px;
-  }
-  .up-seg-btn {
-    flex: 1;
-    padding: 10px 14px;
-    border: none;
-    border-radius: 7px;
-    font-family: ${T.font};
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background .2s, color .2s, box-shadow .2s;
-    background: transparent;
-    color: ${T.muted};
-    line-height: 1.3;
-  }
-  .up-seg-btn.selected {
-    background: ${T.amber};
-    color: #0E1117;
-    font-weight: 700;
-    box-shadow: 0 2px 10px rgba(245,166,35,.3);
-  }
-  .up-seg-btn:not(.selected):hover {
-    background: rgba(255,255,255,0.05);
-    color: ${T.cream};
-  }
-  .up-seg-btn:disabled { opacity: .5; cursor: not-allowed; }
   @keyframes fadeUp  { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
   @keyframes fadeIn  { from { opacity:0 } to { opacity:1 } }
   @keyframes spin    { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
   @keyframes float   { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-8px) } }
   @keyframes stepIn  { from { opacity:0; transform:translateX(-8px) } to { opacity:1; transform:translateX(0) } }
 `;
-// Always overwrite so new styles aren't blocked by a stale cached element
 const existingStyle = document.head.querySelector('#up-styles');
 if (existingStyle) existingStyle.remove();
 document.head.appendChild(styleEl);
@@ -129,7 +95,6 @@ const Icon = ({ d, size = 18, color = 'currentColor' }) => (
   </svg>
 );
 
-// Step indicator used in the loading overlay
 const StepRow = ({ label, status }) => {
   const isDone   = status === 'done';
   const isActive = status === 'active';
@@ -165,11 +130,10 @@ const StepRow = ({ label, status }) => {
 };
 
 const OCR_ENGINES = [
-  { id: 'paddleocr', label: 'PaddleOCR'},
-  { id: 'chandra',   label: 'Chandra'},
+  { id: 'paddleocr', label: 'PaddleOCR', sub: 'General purpose' },
+  { id: 'chandra',   label: 'Chandra',   sub: 'Handwriting optimized' },
 ];
 
-// ── component ──────────────────────────────────────────────────
 const UploadPage = ({ onBack, onProcess }) => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [dragActive,    setDragActive]    = useState(false);
@@ -188,7 +152,6 @@ const UploadPage = ({ onBack, onProcess }) => {
   const setStep = (key, status) =>
     setSteps(prev => ({ ...prev, [key]: status }));
 
-  // Only keep the first file — single file upload
   const parseFiles = (files) =>
     Array.from(files).slice(0, 1).map((file) => ({
       file,
@@ -215,7 +178,6 @@ const UploadPage = ({ onBack, onProcess }) => {
 
   const removeFile = () => setUploadedFiles([]);
 
-  // ── backend ──────────────────────────────────────────────────
   const uploadOne = async (fileObj) => {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     const form  = new FormData();
@@ -275,11 +237,15 @@ const UploadPage = ({ onBack, onProcess }) => {
           const ocrData = await runOcr(first.file, ocrEngine);
           console.log('OCR response:', ocrData);
 
+          // Prefix relative URLs with the OCR backend base so they work in production
+          const ocrBase = import.meta.env.VITE_OCR_URL || 'http://localhost:8000';
+          const prefixUrl = (url) => url ? (url.startsWith('http') ? url : `${ocrBase}${url}`) : '';
+
           sessionStorage.setItem('lastOcrEngine',      ocrEngine);
-          sessionStorage.setItem('lastOcrOverlayUrl',  ocrData?.overlay_url  || '');
+          sessionStorage.setItem('lastOcrOverlayUrl',  prefixUrl(ocrData?.overlay_url));
           sessionStorage.setItem('lastOcrMergedText',  ocrData?.merged_text  || ocrData?.text || '');
           sessionStorage.setItem('lastOcrBlocks',      JSON.stringify(ocrData?.blocks      || []));
-          sessionStorage.setItem('lastOcrImageUrl',    ocrData?.image_url    || '');
+          sessionStorage.setItem('lastOcrImageUrl',    prefixUrl(ocrData?.image_url || ocrData?.original_url));
           sessionStorage.setItem('lastOcrImageSize',   JSON.stringify(ocrData?.image_size  || [0, 0]));
 
           const avgConfidence = ocrData?.items?.length
@@ -335,19 +301,16 @@ const UploadPage = ({ onBack, onProcess }) => {
       setUploading(false);
     }
   };
-  // ─────────────────────────────────────────────────────────────
 
   return (
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream }}>
 
-      {/* Loading overlay */}
       {showOverlay && (
         <div style={{
           position:'fixed', inset:0, background:T.bg, zIndex:999,
           display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
           gap:32, animation:'fadeIn .2s ease both',
         }}>
-          {/* Spinner */}
           <div style={{ position:'relative', width:80, height:80, animation:'float 3s ease-in-out infinite' }}>
             <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:`3px solid ${T.border}` }} />
             <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:`3px solid transparent`, borderTopColor:T.amber, animation:'spin 1s linear infinite' }} />
@@ -357,7 +320,6 @@ const UploadPage = ({ onBack, onProcess }) => {
             </div>
           </div>
 
-          {/* Title */}
           <div style={{ textAlign:'center' }}>
             <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 10px' }}>Please Wait</p>
             <h2 style={{ fontFamily:T.serif, fontSize:32, fontWeight:400, color:T.cream, margin:'0 0 8px', lineHeight:1.1 }}>Processing Your Notes</h2>
@@ -369,7 +331,6 @@ const UploadPage = ({ onBack, onProcess }) => {
             </p>
           </div>
 
-          {/* Live step indicators */}
           <div style={{ display:'flex', flexDirection:'column', gap:8, width:'100%', maxWidth:360 }}>
             <StepRow label="Uploading file"      status={steps.upload}     />
             <StepRow label="Preprocessing image" status={steps.preprocess} />
@@ -379,18 +340,15 @@ const UploadPage = ({ onBack, onProcess }) => {
         </div>
       )}
 
-      {/* Hero */}
       <div style={{ padding:'48px 40px 0', animation:'fadeUp .4s ease both' }}>
         <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 10px' }}>Get Started</p>
         <h1 style={{ fontFamily:T.serif, fontSize:38, fontWeight:400, margin:'0 0 8px', lineHeight:1.1, letterSpacing:'-.4px' }}>Upload Your Notes</h1>
         <p style={{ color:T.muted, fontSize:14, margin:'0 0 40px' }}>Supports PDF, JPG, JPEG, PNG, and HEIC</p>
       </div>
 
-      {/* Main card */}
       <div style={{ padding:'0 40px 64px', animation:'fadeUp .4s ease .1s both' }}>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, padding:'36px 40px' }}>
 
-          {/* Drop zone */}
           <div
             className={`up-dropzone${dragActive ? ' active' : ''}`}
             onDragEnter={handleDrag}
@@ -417,7 +375,6 @@ const UploadPage = ({ onBack, onProcess }) => {
             />
           </div>
 
-          {/* Selected file */}
           {uploadedFiles.length > 0 && (
             <div style={{ marginTop:28 }}>
               <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 12px', fontFamily:T.font }}>
@@ -481,10 +438,7 @@ const UploadPage = ({ onBack, onProcess }) => {
                     }}
                   >
                     <div>{label}</div>
-                    <div style={{
-                      fontSize:10, fontWeight:400, marginTop:2,
-                      opacity: selected ? 0.7 : 0.5,
-                    }}>
+                    <div style={{ fontSize:10, fontWeight:400, marginTop:2, opacity: selected ? 0.7 : 0.5 }}>
                       {sub}
                     </div>
                   </button>
@@ -493,7 +447,6 @@ const UploadPage = ({ onBack, onProcess }) => {
             </div>
           </div>
 
-          {/* Process button */}
           <button
             className="up-process"
             onClick={handleProcessNotes}
@@ -502,7 +455,6 @@ const UploadPage = ({ onBack, onProcess }) => {
             {uploading ? 'Processing…' : 'Process Notes'}
           </button>
 
-          {/* Error */}
           {error && (
             <div style={{ marginTop:16, padding:'12px 16px', background:T.redDim, border:`1px solid rgba(248,113,113,.2)`, borderRadius:10, display:'flex', alignItems:'center', gap:10 }}>
               <Icon d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" size={16} color={T.red} />
