@@ -1,0 +1,20 @@
+{
+  "env": {
+    "node": true,
+    "commonjs": true,
+    "es2022": true,
+    "jest": true
+  },
+  "extends": "eslint:recommended",
+  "parserOptions": {
+    "ecmaVersion": 2022
+  },
+  "rules": {
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^(_|next|req|res)" }],
+    "no-console": "off",
+    "no-process-exit": "off",
+    "semi": ["error", "always"],
+    "no-trailing-spaces": "warn"
+  },
+  "ignorePatterns": ["node_modules/", "coverage/", "uploads/", "tests/fixtures/"]
+}

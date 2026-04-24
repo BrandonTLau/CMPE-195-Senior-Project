@@ -1,7 +1,4 @@
-/**
- * MAIN SERVER */
-
-const express = require('express');
+/* const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
@@ -30,12 +27,6 @@ app.use('/api/folders', require('./routes/folders')); // user folders
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
-/**
- * ---------------------------------------------------------
- * FUTURE INTEGRATIONS: 
- * app.use('/api/process', require('./routes/process'));  
- * --------------------------------------------------------- */
-
 //const uri = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/notes_app_local";
 
 async function start() {
@@ -58,4 +49,40 @@ async function start() {
 
 start();
 
-//app.use('/uploads', express.static('uploads'));
+//app.use('/uploads', express.static('uploads')); */
+
+/**
+ * REWORK FOR TESTING SUITE (keeping original version commented out for now)
+ * Thin wrapper that imports `app.js`. 
+ * Only calls `start()` when run as main, so tests can `require('./server')` 
+ * without triggering a listener.
+ */
+const mongoose = require('mongoose');
+require('dotenv').config();
+
+const buildApp = require('./app');
+
+const PORT = process.env.PORT || 5000;
+
+async function start() {
+  try {
+    const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/notescan_db';
+    await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 10000,
+    });
+    console.log('MongoDB connected');
+
+    const app = buildApp();
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  } catch (err) {
+    console.error('Startup error:', err.message);
+    process.exit(1);
+  }
+}
+
+if (require.main === module) {
+  start();
+}
+
+module.exports = { start };
