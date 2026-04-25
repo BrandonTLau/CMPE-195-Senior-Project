@@ -1,15 +1,10 @@
 /**
  * Dashboard integration tests
- *
- * These tests render the full UserDashboard and verify that actions in
- * one view (Notes) correctly propagate to other views (Favorites, Trash)
- * and that API failures properly roll back optimistic UI changes.
  */
 import { render, screen, fireEvent, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import UserDashboard from '../UserDashboard';
 
-// ── helpers ───────────────────────────────────────────────────
 const apiNote = (overrides = {}) => ({
   _id:            'n1',
   title:          'Integration Note',
@@ -63,7 +58,6 @@ const renderDashboard = (props = {}) =>
 const waitForLoad = () =>
   waitForElementToBeRemoved(() => screen.queryByText('Loading your notes…'), { timeout: 3000 });
 
-// ── tests ─────────────────────────────────────────────────────
 describe('Dashboard Integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -71,7 +65,6 @@ describe('Dashboard Integration', () => {
     localStorage.clear();
   });
 
-  // ── Favorites ↔ Notes consistency ────────────────────────────
   describe('Favorites ↔ Notes', () => {
     it('favoriting a note makes it appear in Favorites tab immediately', async () => {
       setupFetch({ active: [apiNote({ isFavorite: false })] });
@@ -82,7 +75,6 @@ describe('Dashboard Integration', () => {
       fireEvent.click(card.querySelector('button'));
       fireEvent.click(screen.getByText('Add to favorites'));
 
-      // Switch to Favorites tab
       fireEvent.click(screen.getByRole('button', { name: /Favorites/ }));
       await waitFor(() => expect(screen.getByText('Integration Note')).toBeInTheDocument());
     });
@@ -92,12 +84,14 @@ describe('Dashboard Integration', () => {
       renderDashboard();
       await waitForLoad();
 
-      // Go to Favorites first
+      // Go to Favorites tab
       fireEvent.click(screen.getByRole('button', { name: /Favorites/ }));
       await waitFor(() => expect(screen.getByText('Integration Note')).toBeInTheDocument());
 
-      // Remove from favorites using the X button on the FavoritesPage card
-      fireEvent.click(screen.getByTitle('Remove from favorites'));
+      // Open 3-dot menu on the note card and click Remove from favorites
+      const card = screen.getByText('Integration Note').closest('.ud-card');
+      fireEvent.click(card.querySelector('button'));
+      fireEvent.click(screen.getByText('Remove from favorites'));
 
       await waitFor(() => expect(screen.queryByText('Integration Note')).not.toBeInTheDocument());
     });
@@ -115,23 +109,19 @@ describe('Dashboard Integration', () => {
     });
   });
 
-  // ── Trash ↔ Notes consistency ─────────────────────────────────
   describe('Trash ↔ Notes', () => {
     it('deleting a note removes it from Notes and adds it to Trash', async () => {
       setupFetch({ active: [apiNote()] });
       renderDashboard();
       await waitForLoad();
 
-      // Delete note
       const card = screen.getByText('Integration Note').closest('.ud-card');
       fireEvent.click(card.querySelector('button'));
       fireEvent.click(screen.getByText('Move to Trash'));
       fireEvent.click(screen.getByText('Move to Trash', { selector: 'button' }));
 
-      // Check Notes view is empty
       await waitFor(() => expect(screen.queryByText('Integration Note')).not.toBeInTheDocument());
 
-      // Check Trash view has it
       fireEvent.click(screen.getByRole('button', { name: /Trash/ }));
       expect(screen.getByText('Integration Note')).toBeInTheDocument();
     });
@@ -141,15 +131,12 @@ describe('Dashboard Integration', () => {
       renderDashboard();
       await waitForLoad();
 
-      // Go to Trash
       fireEvent.click(screen.getByRole('button', { name: /Trash/ }));
       expect(screen.getByText('Integration Note')).toBeInTheDocument();
 
-      // Restore
       fireEvent.click(screen.getByText('Restore'));
       await waitFor(() => expect(screen.queryByText('Integration Note')).not.toBeInTheDocument());
 
-      // Go to Notes — should be there
       fireEvent.click(screen.getByRole('button', { name: /My Notes/ }));
       expect(screen.getByText('Integration Note')).toBeInTheDocument();
     });
@@ -160,7 +147,6 @@ describe('Dashboard Integration', () => {
       await waitForLoad();
 
       const trashNavBefore = screen.getByRole('button', { name: /Trash/ });
-      // No badge before deletion
       expect(within(trashNavBefore).queryByText('1')).not.toBeInTheDocument();
 
       const card = screen.getByText('Integration Note').closest('.ud-card');
@@ -175,7 +161,6 @@ describe('Dashboard Integration', () => {
     });
   });
 
-  // ── API failure rollback ──────────────────────────────────────
   describe('API failure → rollback', () => {
     it('reverts favorite toggle on API failure', async () => {
       setupFetch({ active: [apiNote({ isFavorite: false })], patchOk: false });
@@ -186,8 +171,6 @@ describe('Dashboard Integration', () => {
       fireEvent.click(card.querySelector('button'));
       fireEvent.click(screen.getByText('Add to favorites'));
 
-      // Optimistic: sidebar badge appears briefly
-      // After failure: badge gone and toast shown
       await waitFor(() => expect(screen.getByText('Failed to update favorite')).toBeInTheDocument());
 
       const favNav = screen.getByRole('button', { name: /Favorites/ });
@@ -205,7 +188,6 @@ describe('Dashboard Integration', () => {
       fireEvent.click(screen.getByText('Move to Trash', { selector: 'button' }));
 
       await waitFor(() => expect(screen.getByText('Failed to move note to trash')).toBeInTheDocument());
-      // Note should be back
       expect(screen.getByText('Integration Note')).toBeInTheDocument();
     });
 
@@ -222,7 +204,6 @@ describe('Dashboard Integration', () => {
     });
   });
 
-  // ── Folder ↔ Notes consistency ────────────────────────────────
   describe('Folder ↔ Notes', () => {
     it('notes count in folder chip updates when note is moved in', async () => {
       const note = apiNote({ folderId: null });
@@ -231,15 +212,12 @@ describe('Dashboard Integration', () => {
       renderDashboard();
       await waitForLoad();
 
-      // Initially folder has 0 notes
       const chip = screen.getByText('Science').closest('.ud-folder-chip');
       expect(within(chip).getByText('0')).toBeInTheDocument();
 
-      // Move note into folder via dot menu
       const card = screen.getByText('Integration Note').closest('.ud-card');
       fireEvent.click(card.querySelector('button'));
       fireEvent.click(screen.getByText('Move to folder'));
-      // 'Science' appears in both the folder chip and the MoveToFolderModal — pick the modal button
       const scienceEls = screen.getAllByText('Science');
       const modalBtn = scienceEls.find(el => el.closest('.ud-dot-item'));
       fireEvent.click(modalBtn || scienceEls[scienceEls.length - 1]);
@@ -257,17 +235,14 @@ describe('Dashboard Integration', () => {
       renderDashboard();
       await waitForLoad();
 
-      // The X button is nested INSIDE the .ud-folder-chip button
       const chip = screen.getByText('ToDelete').closest('.ud-folder-chip');
       fireEvent.click(chip.querySelector('button'));
 
       await waitFor(() => expect(screen.queryByText('ToDelete')).not.toBeInTheDocument());
-      // Note should still be visible (now in "All Notes")
       expect(screen.getByText('Integration Note')).toBeInTheDocument();
     });
   });
 
-  // ── Tags ──────────────────────────────────────────────────────
   describe('Tag updates', () => {
     it('tags update reflects immediately in note card', async () => {
       setupFetch({ active: [apiNote({ tags: [] })] });
@@ -278,7 +253,6 @@ describe('Dashboard Integration', () => {
       fireEvent.click(card.querySelector('button'));
       fireEvent.click(screen.getByText('Edit tags'));
 
-      // TagEditorModal should be open
       const tagInput = screen.getByPlaceholderText('Type a tag and press Enter…');
       fireEvent.change(tagInput, { target: { value: 'important' } });
       fireEvent.keyDown(tagInput, { key: 'Enter' });

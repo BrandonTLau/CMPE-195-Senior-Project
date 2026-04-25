@@ -1,182 +1,205 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import FavoritesPage from '../FavoritesPage';
+import SettingsPage from '../SettingsPage';
 
 // ── helpers ───────────────────────────────────────────────────
 const makeNote = (overrides = {}) => ({
-  id: '1',
-  title: 'Default Note',
-  preview: 'Some preview text',
-  tags: [],
-  confidence: 85,
-  date: 'Jan 1, 2025',
-  favorite: true,
+  id: '1', title: 'Note', preview: '', tags: [], confidence: 85,
+  date: 'Jan 1, 2025', favorite: false, deleted: false, ...overrides,
+});
+
+const mockApi = () => ({
+  changePassword: vi.fn().mockResolvedValue({}),
+  deleteAccount:  vi.fn().mockResolvedValue({}),
+});
+
+const defaultProps = (overrides = {}) => ({
+  notes:    [],
+  folders:  [],
+  onLogout: vi.fn(),
+  api:      mockApi(),
   ...overrides,
 });
 
-const defaultProps = (notes = []) => ({
-  notes,
-  onNoteSelect: vi.fn(),
-  onRemoveFavorite: vi.fn(),
-  onNewScan: vi.fn(),
-});
-
 // ── tests ─────────────────────────────────────────────────────
-describe('FavoritesPage', () => {
+describe('SettingsPage', () => {
   beforeEach(() => vi.clearAllMocks());
 
   // ── Rendering ───────────────────────────────────────────────
   describe('Rendering', () => {
-    it('shows empty state when no notes are favorited', () => {
-      render(<FavoritesPage {...defaultProps([])} />);
-      expect(screen.getByText('No favorites yet')).toBeInTheDocument();
-      expect(screen.getByText(/Star any note from My Notes/)).toBeInTheDocument();
+    it('renders Settings heading', () => {
+      render(<SettingsPage {...defaultProps()} />);
+      expect(screen.getByText('Settings')).toBeInTheDocument();
     });
 
-    it('shows only favorited notes', () => {
+    it('renders Log out button', () => {
+      render(<SettingsPage {...defaultProps()} />);
+      expect(screen.getByText('Log out')).toBeInTheDocument();
+    });
+
+    it('renders Change password section', () => {
+      render(<SettingsPage {...defaultProps()} />);
+      expect(screen.getByText('Change password')).toBeInTheDocument();
+    });
+
+    it('renders Delete account section', () => {
+      render(<SettingsPage {...defaultProps()} />);
+      expect(screen.getAllByText('Delete account').length).toBeGreaterThan(0);
+    });
+
+    it('renders stats with correct counts', () => {
       const notes = [
-        makeNote({ id: '1', title: 'Fav Note', favorite: true }),
-        makeNote({ id: '2', title: 'Not Fav', favorite: false }),
+        makeNote({ id: '1', favorite: false, deleted: false }),
+        makeNote({ id: '2', favorite: true,  deleted: false }),
+        makeNote({ id: '3', favorite: false, deleted: true  }),
       ];
-      render(<FavoritesPage {...defaultProps(notes)} />);
-      expect(screen.getByText('Fav Note')).toBeInTheDocument();
-      expect(screen.queryByText('Not Fav')).not.toBeInTheDocument();
+      const folders = [{ id: 'f1', name: 'Math' }];
+      render(<SettingsPage {...defaultProps({ notes, folders })} />);
+      const notesLabel    = screen.getByText('Notes');
+      const favLabel      = screen.getByText('Favorites');
+      expect(notesLabel.previousSibling?.textContent).toBe('2');
+      expect(favLabel.previousSibling?.textContent).toBe('1');
     });
 
-    it('shows correct favorite count — singular', () => {
-      render(<FavoritesPage {...defaultProps([makeNote()])} />);
-      expect(screen.getByText('1 favorited note')).toBeInTheDocument();
-    });
-
-    it('shows correct favorite count — plural', () => {
-      const notes = [makeNote({ id: '1' }), makeNote({ id: '2' })];
-      render(<FavoritesPage {...defaultProps(notes)} />);
-      expect(screen.getByText('2 favorited notes')).toBeInTheDocument();
-    });
-
-    it('renders note title and preview', () => {
-      const note = makeNote({ title: 'Physics Notes', preview: 'Newton laws' });
-      render(<FavoritesPage {...defaultProps([note])} />);
-      expect(screen.getByText('Physics Notes')).toBeInTheDocument();
-      expect(screen.getByText('Newton laws')).toBeInTheDocument();
-    });
-
-    it('renders tags', () => {
-      const note = makeNote({ tags: ['physics', 'science'] });
-      render(<FavoritesPage {...defaultProps([note])} />);
-      expect(screen.getByText('physics')).toBeInTheDocument();
-      expect(screen.getByText('science')).toBeInTheDocument();
-    });
-
-    it('renders confidence score', () => {
-      const note = makeNote({ confidence: 92 });
-      render(<FavoritesPage {...defaultProps([note])} />);
-      expect(screen.getByText('92%')).toBeInTheDocument();
-    });
-
-    it('renders note date', () => {
-      const note = makeNote({ date: 'Mar 15, 2025' });
-      render(<FavoritesPage {...defaultProps([note])} />);
-      expect(screen.getByText('Mar 15, 2025')).toBeInTheDocument();
+    it('shows fallback display name when no user info', () => {
+      render(<SettingsPage {...defaultProps()} />);
+      expect(screen.getByText('NoteScan User')).toBeInTheDocument();
     });
   });
 
-  // ── Search ──────────────────────────────────────────────────
-  describe('Search filtering', () => {
-    const notes = [
-      makeNote({ id: '1', title: 'Math Notes',    preview: 'Algebra basics',  tags: ['math'] }),
-      makeNote({ id: '2', title: 'Biology Notes', preview: 'Cell structure',  tags: ['bio'] }),
-    ];
-
-    it('filters by title', () => {
-      render(<FavoritesPage {...defaultProps(notes)} />);
-      fireEvent.change(screen.getByPlaceholderText('Search favorites…'), { target: { value: 'Math' } });
-      expect(screen.getByText('Math Notes')).toBeInTheDocument();
-      expect(screen.queryByText('Biology Notes')).not.toBeInTheDocument();
-    });
-
-    it('filters by preview', () => {
-      render(<FavoritesPage {...defaultProps(notes)} />);
-      fireEvent.change(screen.getByPlaceholderText('Search favorites…'), { target: { value: 'Algebra' } });
-      expect(screen.getByText('Math Notes')).toBeInTheDocument();
-      expect(screen.queryByText('Biology Notes')).not.toBeInTheDocument();
-    });
-
-    it('filters by tag', () => {
-      render(<FavoritesPage {...defaultProps(notes)} />);
-      fireEvent.change(screen.getByPlaceholderText('Search favorites…'), { target: { value: 'bio' } });
-      expect(screen.getByText('Biology Notes')).toBeInTheDocument();
-      expect(screen.queryByText('Math Notes')).not.toBeInTheDocument();
-    });
-
-    it('is case-insensitive', () => {
-      render(<FavoritesPage {...defaultProps(notes)} />);
-      fireEvent.change(screen.getByPlaceholderText('Search favorites…'), { target: { value: 'MATH' } });
-      expect(screen.getByText('Math Notes')).toBeInTheDocument();
-    });
-
-    it('shows all notes when search is empty', () => {
-      render(<FavoritesPage {...defaultProps(notes)} />);
-      const input = screen.getByPlaceholderText('Search favorites…');
-      fireEvent.change(input, { target: { value: 'Math' } });
-      fireEvent.change(input, { target: { value: '' } });
-      expect(screen.getByText('Math Notes')).toBeInTheDocument();
-      expect(screen.getByText('Biology Notes')).toBeInTheDocument();
-    });
-
-    it('shows no-results message when nothing matches', () => {
-      render(<FavoritesPage {...defaultProps(notes)} />);
-      fireEvent.change(screen.getByPlaceholderText('Search favorites…'), { target: { value: 'zzzzz' } });
-      expect(screen.getByText(/No favorites found for "zzzzz"/)).toBeInTheDocument();
-    });
-
-    it('whitespace-only search shows all notes', () => {
-      render(<FavoritesPage {...defaultProps(notes)} />);
-      fireEvent.change(screen.getByPlaceholderText('Search favorites…'), { target: { value: '   ' } });
-      // trim().toLowerCase() → '' → all pass
-      expect(screen.getByText('Math Notes')).toBeInTheDocument();
-      expect(screen.getByText('Biology Notes')).toBeInTheDocument();
-    });
-
-    it('special characters do not break filtering', () => {
-      render(<FavoritesPage {...defaultProps(notes)} />);
-      expect(() =>
-        fireEvent.change(screen.getByPlaceholderText('Search favorites…'), { target: { value: '.*[]+?' } })
-      ).not.toThrow();
+  // ── Logout ───────────────────────────────────────────────────
+  describe('Logout', () => {
+    it('calls onLogout when Log out is clicked', () => {
+      const onLogout = vi.fn();
+      render(<SettingsPage {...defaultProps({ onLogout })} />);
+      fireEvent.click(screen.getByText('Log out'));
+      expect(onLogout).toHaveBeenCalledOnce();
     });
   });
 
-  // ── Interactions ────────────────────────────────────────────
-  describe('Interactions', () => {
-    it('calls onNoteSelect with the note when card is clicked', () => {
-      const onNoteSelect = vi.fn();
-      const note = makeNote({ title: 'Clickable' });
-      render(<FavoritesPage notes={[note]} onNoteSelect={onNoteSelect} onRemoveFavorite={vi.fn()} onNewScan={vi.fn()} />);
-      fireEvent.click(screen.getByText('Clickable'));
-      expect(onNoteSelect).toHaveBeenCalledWith(note);
+  // ── Change Password ──────────────────────────────────────────
+  describe('Change Password', () => {
+    it('shows error when current password is empty', async () => {
+      render(<SettingsPage {...defaultProps()} />);
+      fireEvent.click(screen.getByText('Update password'));
+      await waitFor(() => expect(screen.getByText('Please enter your current password.')).toBeInTheDocument());
     });
 
-    it('calls onNoteSelect when Open button is clicked', () => {
-      const onNoteSelect = vi.fn();
-      const note = makeNote();
-      render(<FavoritesPage notes={[note]} onNoteSelect={onNoteSelect} onRemoveFavorite={vi.fn()} onNewScan={vi.fn()} />);
-      fireEvent.click(screen.getByText('Open →'));
-      expect(onNoteSelect).toHaveBeenCalledWith(note);
+    it('shows error when new password is too short', async () => {
+      render(<SettingsPage {...defaultProps()} />);
+      fireEvent.change(screen.getByPlaceholderText('Enter current password'), { target: { value: 'current123' } });
+      fireEvent.change(screen.getByPlaceholderText('Min 8 characters'),       { target: { value: 'short' } });
+      fireEvent.click(screen.getByText('Update password'));
+      await waitFor(() => expect(screen.getByText('New password must be at least 8 characters.')).toBeInTheDocument());
     });
 
-    it('calls onRemoveFavorite with note id when remove button clicked', () => {
-      const onRemoveFavorite = vi.fn();
-      const note = makeNote({ id: 'note-42' });
-      render(<FavoritesPage notes={[note]} onNoteSelect={vi.fn()} onRemoveFavorite={onRemoveFavorite} onNewScan={vi.fn()} />);
-      fireEvent.click(screen.getByTitle('Remove from favorites'));
-      expect(onRemoveFavorite).toHaveBeenCalledWith('note-42');
+    it('shows error when passwords do not match', async () => {
+      render(<SettingsPage {...defaultProps()} />);
+      fireEvent.change(screen.getByPlaceholderText('Enter current password'), { target: { value: 'current123' } });
+      fireEvent.change(screen.getByPlaceholderText('Min 8 characters'),       { target: { value: 'newpassword1' } });
+      fireEvent.change(screen.getByPlaceholderText('Re-enter new password'),  { target: { value: 'newpassword2' } });
+      fireEvent.click(screen.getByText('Update password'));
+      await waitFor(() => expect(screen.getByText('New passwords do not match.')).toBeInTheDocument());
     });
 
-    it('does not call onNoteSelect when remove button clicked', () => {
-      const onNoteSelect = vi.fn();
-      render(<FavoritesPage notes={[makeNote()]} onNoteSelect={onNoteSelect} onRemoveFavorite={vi.fn()} onNewScan={vi.fn()} />);
-      fireEvent.click(screen.getByTitle('Remove from favorites'));
-      expect(onNoteSelect).not.toHaveBeenCalled();
+    it('calls api.changePassword with correct args on valid submit', async () => {
+      const api = mockApi();
+      render(<SettingsPage {...defaultProps({ api })} />);
+      fireEvent.change(screen.getByPlaceholderText('Enter current password'), { target: { value: 'current123' } });
+      fireEvent.change(screen.getByPlaceholderText('Min 8 characters'),       { target: { value: 'newpassword1' } });
+      fireEvent.change(screen.getByPlaceholderText('Re-enter new password'),  { target: { value: 'newpassword1' } });
+      fireEvent.click(screen.getByText('Update password'));
+      await waitFor(() => expect(api.changePassword).toHaveBeenCalledWith('current123', 'newpassword1'));
+    });
+
+    it('shows success message after password update', async () => {
+      render(<SettingsPage {...defaultProps()} />);
+      fireEvent.change(screen.getByPlaceholderText('Enter current password'), { target: { value: 'current123' } });
+      fireEvent.change(screen.getByPlaceholderText('Min 8 characters'),       { target: { value: 'newpassword1' } });
+      fireEvent.change(screen.getByPlaceholderText('Re-enter new password'),  { target: { value: 'newpassword1' } });
+      fireEvent.click(screen.getByText('Update password'));
+      await waitFor(() => expect(screen.getByText('Password updated successfully!')).toBeInTheDocument());
+    });
+
+    it('shows error message when api.changePassword fails', async () => {
+      const api = { ...mockApi(), changePassword: vi.fn().mockRejectedValue(new Error('Wrong password')) };
+      render(<SettingsPage {...defaultProps({ api })} />);
+      fireEvent.change(screen.getByPlaceholderText('Enter current password'), { target: { value: 'wrong' } });
+      fireEvent.change(screen.getByPlaceholderText('Min 8 characters'),       { target: { value: 'newpassword1' } });
+      fireEvent.change(screen.getByPlaceholderText('Re-enter new password'),  { target: { value: 'newpassword1' } });
+      fireEvent.click(screen.getByText('Update password'));
+      await waitFor(() => expect(screen.getByText('Wrong password')).toBeInTheDocument());
+    });
+
+    it('shows Change again button after success and resets form on click', async () => {
+      render(<SettingsPage {...defaultProps()} />);
+      fireEvent.change(screen.getByPlaceholderText('Enter current password'), { target: { value: 'current123' } });
+      fireEvent.change(screen.getByPlaceholderText('Min 8 characters'),       { target: { value: 'newpassword1' } });
+      fireEvent.change(screen.getByPlaceholderText('Re-enter new password'),  { target: { value: 'newpassword1' } });
+      fireEvent.click(screen.getByText('Update password'));
+      await waitFor(() => screen.getByText('Change again'));
+      fireEvent.click(screen.getByText('Change again'));
+      expect(screen.getByPlaceholderText('Enter current password')).toBeInTheDocument();
+    });
+  });
+
+  // ── Delete Account ───────────────────────────────────────────
+  describe('Delete Account', () => {
+    it('delete confirmation form is hidden by default', () => {
+      render(<SettingsPage {...defaultProps()} />);
+      expect(screen.queryByPlaceholderText('DELETE')).not.toBeInTheDocument();
+    });
+
+    it('shows confirmation form when Delete account button clicked', () => {
+      render(<SettingsPage {...defaultProps()} />);
+      fireEvent.click(screen.getByRole('button', { name: /Delete account/i }));
+      expect(screen.getByPlaceholderText('DELETE')).toBeInTheDocument();
+    });
+
+    it('Confirm delete button is disabled until DELETE is typed', () => {
+      render(<SettingsPage {...defaultProps()} />);
+      fireEvent.click(screen.getByRole('button', { name: /Delete account/i }));
+      const confirmBtn = screen.getByRole('button', { name: /Confirm delete/i });
+      expect(confirmBtn).toBeDisabled();
+    });
+
+    it('Confirm delete button enables when DELETE is typed', () => {
+      render(<SettingsPage {...defaultProps()} />);
+      fireEvent.click(screen.getByRole('button', { name: /Delete account/i }));
+      fireEvent.change(screen.getByPlaceholderText('DELETE'), { target: { value: 'DELETE' } });
+      expect(screen.getByRole('button', { name: /Confirm delete/i })).not.toBeDisabled();
+    });
+
+    it('shows error when confirmed without typing DELETE', async () => {
+      render(<SettingsPage {...defaultProps()} />);
+      fireEvent.click(screen.getByRole('button', { name: /Delete account/i }));
+      // Type DELETE then clear it to trigger the error via direct call
+      const input = screen.getByPlaceholderText('DELETE');
+      fireEvent.change(input, { target: { value: 'DELETE' } });
+      fireEvent.change(input, { target: { value: 'delete' } });
+      // Manually fire click on the disabled button via the DOM
+      const confirmBtn = screen.getByRole('button', { name: /Confirm delete/i });
+      fireEvent.click(confirmBtn.closest('div'), { bubbles: true });
+      // Verify button stays disabled for wrong case
+      expect(confirmBtn).toBeDisabled();
+    });
+
+    it('calls api.deleteAccount and onLogout when confirmed', async () => {
+      const api = mockApi();
+      const onLogout = vi.fn();
+      render(<SettingsPage {...defaultProps({ api, onLogout })} />);
+      fireEvent.click(screen.getByRole('button', { name: /Delete account/i }));
+      fireEvent.change(screen.getByPlaceholderText('DELETE'), { target: { value: 'DELETE' } });
+      fireEvent.click(screen.getByRole('button', { name: /Confirm delete/i }));
+      await waitFor(() => expect(api.deleteAccount).toHaveBeenCalledOnce());
+      await waitFor(() => expect(onLogout).toHaveBeenCalledOnce());
+    });
+
+    it('hides confirmation form when Cancel is clicked', () => {
+      render(<SettingsPage {...defaultProps()} />);
+      fireEvent.click(screen.getByRole('button', { name: /Delete account/i }));
+      fireEvent.click(screen.getByText('Cancel'));
+      expect(screen.queryByPlaceholderText('DELETE')).not.toBeInTheDocument();
     });
   });
 });

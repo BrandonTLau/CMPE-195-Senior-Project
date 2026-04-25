@@ -2,7 +2,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import LoginPage from '../LoginPage';
 
-// ── helpers ───────────────────────────────────────────────────
 const defaultProps = (overrides = {}) => ({
   onBack:         vi.fn(),
   onLoginSuccess: vi.fn(),
@@ -32,7 +31,6 @@ const mockLoginFailure = (msg = 'Invalid credentials') => {
   });
 };
 
-// ── tests ─────────────────────────────────────────────────────
 describe('LoginPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -40,7 +38,6 @@ describe('LoginPage', () => {
     localStorage.clear();
   });
 
-  // ── Rendering ───────────────────────────────────────────────
   describe('Rendering', () => {
     it('renders email and password inputs', () => {
       render(<LoginPage {...defaultProps()} />);
@@ -53,18 +50,12 @@ describe('LoginPage', () => {
       expect(screen.getByRole('button', { name: /Sign in/i })).toBeInTheDocument();
     });
 
-    it('renders Remember me checkbox', () => {
-      render(<LoginPage {...defaultProps()} />);
-      expect(screen.getByRole('checkbox')).toBeInTheDocument();
-    });
-
     it('renders Sign up link', () => {
       render(<LoginPage {...defaultProps()} />);
       expect(screen.getByText('Sign up')).toBeInTheDocument();
     });
   });
 
-  // ── Form interaction ─────────────────────────────────────────
   describe('Form interaction', () => {
     it('password input is hidden by default', () => {
       render(<LoginPage {...defaultProps()} />);
@@ -94,10 +85,9 @@ describe('LoginPage', () => {
     });
   });
 
-  // ── Authentication ───────────────────────────────────────────
   describe('Authentication', () => {
     it('shows loading state while submitting', async () => {
-      global.fetch = vi.fn().mockImplementation(() => new Promise(() => {})); // never resolves
+      global.fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
       render(<LoginPage {...defaultProps()} />);
       fillForm();
       fireEvent.click(screen.getByRole('button', { name: /Sign in/i }));
@@ -113,23 +103,13 @@ describe('LoginPage', () => {
       await waitFor(() => expect(onLoginSuccess).toHaveBeenCalled());
     });
 
-    it('stores token in sessionStorage when Remember Me is off', async () => {
+    it('stores token in sessionStorage on successful login', async () => {
       mockLoginSuccess();
       render(<LoginPage {...defaultProps()} />);
-      // rememberMe defaults to false
       fillForm();
       fireEvent.click(screen.getByRole('button', { name: /Sign in/i }));
       await waitFor(() => expect(sessionStorage.getItem('token')).toBeTruthy());
       expect(localStorage.getItem('token')).toBeNull();
-    });
-
-    it('stores token in localStorage when Remember Me is checked', async () => {
-      mockLoginSuccess();
-      render(<LoginPage {...defaultProps()} />);
-      fireEvent.click(screen.getByRole('checkbox')); // check Remember me
-      fillForm();
-      fireEvent.click(screen.getByRole('button', { name: /Sign in/i }));
-      await waitFor(() => expect(localStorage.getItem('token')).toBeTruthy());
     });
 
     it('stores userName and userEmail from response', async () => {

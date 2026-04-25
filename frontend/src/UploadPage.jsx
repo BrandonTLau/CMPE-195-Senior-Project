@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { runOcr } from "./api/ocrClient";
+import { marked } from 'marked';
 
 //design tokens
 const T = {
@@ -140,6 +141,7 @@ const UploadPage = ({ onBack, onProcess }) => {
   const [uploading,     setUploading]     = useState(false);
   const [error,         setError]         = useState('');
   const [ocrEngine,     setOcrEngine]     = useState('paddleocr');
+  const [timedOut,      setTimedOut]      = useState(false);
 
   const [steps, setSteps] = useState({
     upload:    'pending',
@@ -208,6 +210,96 @@ const UploadPage = ({ onBack, onProcess }) => {
     return data;
   };
 
+  const processNotes = async () => {
+    // Step 1 — Upload
+    setStep('upload', 'active');
+    const saved = await uploadOne(uploadedFiles[0]);
+    sessionStorage.setItem('lastUploadId', saved._id);
+    setStep('upload', 'done');
+
+    const first = uploadedFiles[0];
+    if (first?.file?.type?.startsWith('image/')) {
+
+      // Step 2 — Preprocess
+      setStep('preprocess', 'active');
+      await new Promise(r => setTimeout(r, 400));
+      setStep('preprocess', 'done');
+
+      // Step 3 — OCR
+      setStep('ocr', 'active');
+      try {
+        const ocrData = await runOcr(first.file, ocrEngine);
+        console.log('OCR response:', ocrData);
+
+        const ocrBase = import.meta.env.VITE_OCR_URL || 'http://localhost:8000';
+        const prefixUrl = (url) => url ? (url.startsWith('http') ? url : `${ocrBase}${url}`) : '';
+
+        const rawText = ocrData?.merged_text || ocrData?.text || '';
+        const isChandra = ocrEngine === 'chandra';
+        const displayText = isChandra ? marked(rawText) : rawText;
+
+        // Auto-title: use first non-empty line of OCR text, trimmed to 60 chars
+        const firstLine = rawText.split('\n').map(l => l.trim()).find(l => l.length > 2) || '';
+        const autoTitle = firstLine.replace(/[#*_`>|-]/g, '').trim().slice(0, 60);
+        if (autoTitle) {
+          sessionStorage.setItem('lastOcrAutoTitle', autoTitle);
+        }
+
+        sessionStorage.setItem('lastOcrEngine',      ocrEngine);
+        sessionStorage.setItem('lastOcrOverlayUrl',  prefixUrl(ocrData?.overlay_url));
+        sessionStorage.setItem('lastOcrMergedText',  displayText);
+        sessionStorage.setItem('lastOcrIsHtml',      isChandra ? 'true' : 'false');
+        sessionStorage.setItem('lastOcrBlocks',      JSON.stringify(ocrData?.blocks      || []));
+        sessionStorage.setItem('lastOcrImageUrl',    prefixUrl(ocrData?.image_url || ocrData?.original_url));
+        sessionStorage.setItem('lastOcrImageSize',   JSON.stringify(ocrData?.image_size  || [0, 0]));
+
+        const avgConfidence = ocrData?.items?.length
+          ? Math.round(
+              (ocrData.items.reduce((sum, item) => sum + (item.score || 0), 0) / ocrData.items.length) * 100
+            )
+          : ocrData?.confidence != null
+            ? Math.round(ocrData.confidence * 100)
+            : null;
+        sessionStorage.setItem('lastOcrConfidence', avgConfidence ?? '');
+      } catch (ocrErr) {
+        console.warn('OCR service unavailable, skipping:', ocrErr.message);
+        sessionStorage.removeItem('lastOcrEngine');
+        sessionStorage.removeItem('lastOcrOverlayUrl');
+        sessionStorage.removeItem('lastOcrMergedText');
+        sessionStorage.removeItem('lastOcrIsHtml');
+        sessionStorage.removeItem('lastOcrBlocks');
+        sessionStorage.removeItem('lastOcrImageUrl');
+        sessionStorage.removeItem('lastOcrImageSize');
+        sessionStorage.removeItem('lastOcrConfidence');
+      }
+      setStep('ocr', 'done');
+
+      // Step 4 — Generating results
+      setStep('results', 'active');
+      await new Promise(r => setTimeout(r, 300));
+      setStep('results', 'done');
+
+    } else {
+      // PDF — skip OCR steps
+      setStep('preprocess', 'done');
+      setStep('ocr', 'done');
+      setStep('results', 'active');
+      await new Promise(r => setTimeout(r, 300));
+      setStep('results', 'done');
+      sessionStorage.removeItem('lastOcrEngine');
+      sessionStorage.removeItem('lastOcrOverlayUrl');
+      sessionStorage.removeItem('lastOcrMergedText');
+      sessionStorage.removeItem('lastOcrIsHtml');
+      sessionStorage.removeItem('lastOcrBlocks');
+      sessionStorage.removeItem('lastOcrImageUrl');
+      sessionStorage.removeItem('lastOcrImageSize');
+      sessionStorage.removeItem('lastOcrConfidence');
+    }
+
+    await new Promise(r => setTimeout(r, 400));
+    setShowOverlay(false);
+  };
+
   const handleProcessNotes = async () => {
     setError('');
     if (uploadedFiles.length === 0) { setError('Please add a file.'); return; }
@@ -216,87 +308,31 @@ const UploadPage = ({ onBack, onProcess }) => {
     setShowOverlay(true);
     setUploading(true);
 
+    let aborted = false;
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => {
+        aborted = true;
+        reject(new Error('Processing timed out. Please try again or use a smaller image.'));
+      }, 60000)
+    );
+
+    const safeProcess = async () => {
+      await processNotes();
+      if (!aborted && onProcess) onProcess();
+    };
+
     try {
-      // Step 1 — Upload
-      setStep('upload', 'active');
-      const saved = await uploadOne(uploadedFiles[0]);
-      sessionStorage.setItem('lastUploadId', saved._id);
-      setStep('upload', 'done');
-
-      const first = uploadedFiles[0];
-      if (first?.file?.type?.startsWith('image/')) {
-
-        // Step 2 — Preprocess
-        setStep('preprocess', 'active');
-        await new Promise(r => setTimeout(r, 400));
-        setStep('preprocess', 'done');
-
-        // Step 3 — OCR
-        setStep('ocr', 'active');
-        try {
-          const ocrData = await runOcr(first.file, ocrEngine);
-          console.log('OCR response:', ocrData);
-
-          // Prefix relative URLs with the OCR backend base so they work in production
-          const ocrBase = import.meta.env.VITE_OCR_URL || 'http://localhost:8000';
-          const prefixUrl = (url) => url ? (url.startsWith('http') ? url : `${ocrBase}${url}`) : '';
-
-          sessionStorage.setItem('lastOcrEngine',      ocrEngine);
-          sessionStorage.setItem('lastOcrOverlayUrl',  prefixUrl(ocrData?.overlay_url));
-          sessionStorage.setItem('lastOcrMergedText',  ocrData?.merged_text  || ocrData?.text || '');
-          sessionStorage.setItem('lastOcrBlocks',      JSON.stringify(ocrData?.blocks      || []));
-          sessionStorage.setItem('lastOcrImageUrl',    prefixUrl(ocrData?.image_url || ocrData?.original_url));
-          sessionStorage.setItem('lastOcrImageSize',   JSON.stringify(ocrData?.image_size  || [0, 0]));
-
-          const avgConfidence = ocrData?.items?.length
-            ? Math.round(
-                (ocrData.items.reduce((sum, item) => sum + (item.score || 0), 0) / ocrData.items.length) * 100
-              )
-            : ocrData?.confidence != null
-              ? Math.round(ocrData.confidence * 100)
-              : null;
-          sessionStorage.setItem('lastOcrConfidence', avgConfidence ?? '');
-        } catch (ocrErr) {
-          console.warn('OCR service unavailable, skipping:', ocrErr.message);
-          sessionStorage.removeItem('lastOcrEngine');
-          sessionStorage.removeItem('lastOcrOverlayUrl');
-          sessionStorage.removeItem('lastOcrMergedText');
-          sessionStorage.removeItem('lastOcrBlocks');
-          sessionStorage.removeItem('lastOcrImageUrl');
-          sessionStorage.removeItem('lastOcrImageSize');
-          sessionStorage.removeItem('lastOcrConfidence');
-        }
-        setStep('ocr', 'done');
-
-        // Step 4 — Generating results
-        setStep('results', 'active');
-        await new Promise(r => setTimeout(r, 300));
-        setStep('results', 'done');
-
-      } else {
-        // PDF — skip OCR steps
-        setStep('preprocess', 'done');
-        setStep('ocr', 'done');
-        setStep('results', 'active');
-        await new Promise(r => setTimeout(r, 300));
-        setStep('results', 'done');
-        sessionStorage.removeItem('lastOcrEngine');
-        sessionStorage.removeItem('lastOcrOverlayUrl');
-        sessionStorage.removeItem('lastOcrMergedText');
-        sessionStorage.removeItem('lastOcrBlocks');
-        sessionStorage.removeItem('lastOcrImageUrl');
-        sessionStorage.removeItem('lastOcrImageSize');
-        sessionStorage.removeItem('lastOcrConfidence');
-      }
-
-      await new Promise(r => setTimeout(r, 400));
-      setShowOverlay(false);
-      if (onProcess) onProcess();
-
+      await Promise.race([safeProcess(), timeoutPromise]);
     } catch (e) {
       console.error('handleProcessNotes:', e);
-      setShowOverlay(false);
-      setError(e.message || 'Upload failed.');
+      if (e.message.includes('timed out')) {
+        setTimedOut(true);
+        setTimeout(() => { setShowOverlay(false); if (onBack) onBack(); }, 3000);
+      } else {
+        setShowOverlay(false);
+        setError(e.message || 'Upload failed.');
+      }
     } finally {
       setUploading(false);
     }
@@ -321,13 +357,20 @@ const UploadPage = ({ onBack, onProcess }) => {
           </div>
 
           <div style={{ textAlign:'center' }}>
-            <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 10px' }}>Please Wait</p>
-            <h2 style={{ fontFamily:T.serif, fontSize:32, fontWeight:400, color:T.cream, margin:'0 0 8px', lineHeight:1.1 }}>Processing Your Notes</h2>
+            <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color: timedOut ? T.red : T.amber, margin:'0 0 10px' }}>
+              {timedOut ? 'Timed Out' : 'Please Wait'}
+            </p>
+            <h2 style={{ fontFamily:T.serif, fontSize:32, fontWeight:400, color:T.cream, margin:'0 0 8px', lineHeight:1.1 }}>
+              {timedOut ? 'Processing Took Too Long' : 'Processing Your Notes'}
+            </h2>
             <p style={{ color:T.muted, fontSize:13, margin:0 }}>
-              {steps.ocr     === 'active' ? `Running ${ocrEngine === 'chandra' ? 'Chandra' : 'PaddleOCR'} engine — this is the longest step…` :
-               steps.upload  === 'active' ? 'Uploading your file…'  :
-               steps.results === 'active' ? 'Finalizing results…'   :
-               'Almost there…'}
+              {timedOut
+                ? 'Redirecting you back to the dashboard…'
+                : steps.ocr     === 'active' ? `Running ${ocrEngine === 'chandra' ? 'Chandra' : 'PaddleOCR'} engine — this is the longest step…`
+                : steps.upload  === 'active' ? 'Uploading your file…'
+                : steps.results === 'active' ? 'Finalizing results…'
+                : 'Almost there…'
+              }
             </p>
           </div>
 

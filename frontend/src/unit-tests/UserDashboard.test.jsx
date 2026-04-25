@@ -2,8 +2,6 @@ import { render, screen, fireEvent, waitFor, waitForElementToBeRemoved, within }
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import UserDashboard from '../UserDashboard';
 
-// ── API shape helpers ─────────────────────────────────────────
-// Note: these mirror what the backend returns; toNote() inside the component transforms them
 const apiNote = (overrides = {}) => ({
   _id:            'n1',
   title:          'Test Note',
@@ -25,43 +23,25 @@ const apiFolder = (overrides = {}) => ({
   ...overrides,
 });
 
-// ── Fetch mock ────────────────────────────────────────────────
 const setupFetch = ({ active = [], trash = [], folders = [], patchOk = true, createFolderData } = {}) => {
   global.fetch = vi.fn().mockImplementation((url, opts) => {
     const method = opts?.method || 'GET';
-
-    // Order matters — trash before files
     if (typeof url === 'string' && url.includes('/api/files/trash'))
       return Promise.resolve({ ok: true, json: () => Promise.resolve(trash) });
-
     if (typeof url === 'string' && url.includes('/api/files/') && method === 'PATCH')
-      return Promise.resolve({
-        ok:   patchOk,
-        json: () => Promise.resolve(patchOk ? { success: true } : {}),
-        statusText: patchOk ? 'OK' : 'Server Error',
-      });
-
+      return Promise.resolve({ ok: patchOk, json: () => Promise.resolve(patchOk ? { success: true } : {}), statusText: patchOk ? 'OK' : 'Server Error' });
     if (typeof url === 'string' && url.includes('/api/files/') && method === 'DELETE')
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
-
     if (typeof url === 'string' && url.includes('/api/files'))
       return Promise.resolve({ ok: true, json: () => Promise.resolve(active) });
-
     if (typeof url === 'string' && url.includes('/api/folders') && method === 'POST')
-      return Promise.resolve({
-        ok:   true,
-        json: () => Promise.resolve(createFolderData || { _id: 'f-new', id: 'f-new', name: 'New Folder' }),
-      });
-
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(createFolderData || { _id: 'f-new', id: 'f-new', name: 'New Folder' }) });
     if (typeof url === 'string' && url.includes('/api/folders') && method === 'DELETE')
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
-
     if (typeof url === 'string' && url.includes('/api/folders') && method === 'PATCH')
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ _id: 'f1', id: 'f1', name: 'Renamed' }) });
-
     if (typeof url === 'string' && url.includes('/api/folders'))
       return Promise.resolve({ ok: true, json: () => Promise.resolve(folders) });
-
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
   });
 };
@@ -80,7 +60,6 @@ const renderDashboard = (props = {}) =>
 const waitForLoad = () =>
   waitForElementToBeRemoved(() => screen.queryByText('Loading your notes…'), { timeout: 3000 });
 
-// ── tests ─────────────────────────────────────────────────────
 describe('UserDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -88,7 +67,6 @@ describe('UserDashboard', () => {
     localStorage.clear();
   });
 
-  // ── Loading ──────────────────────────────────────────────────
   describe('Loading state', () => {
     it('shows loading screen while fetching', () => {
       setupFetch();
@@ -104,7 +82,6 @@ describe('UserDashboard', () => {
     });
   });
 
-  // ── Empty state ──────────────────────────────────────────────
   describe('Empty state', () => {
     it('shows empty state when no notes', async () => {
       setupFetch({ active: [] });
@@ -121,7 +98,6 @@ describe('UserDashboard', () => {
     });
   });
 
-  // ── Populated state ──────────────────────────────────────────
   describe('Populated state', () => {
     it('renders note title', async () => {
       setupFetch({ active: [apiNote({ title: 'Chemistry Lab' })] });
@@ -156,7 +132,6 @@ describe('UserDashboard', () => {
       setupFetch({ active: [apiNote({ isFavorite: true })] });
       renderDashboard();
       await waitForLoad();
-      // Favorite indicator SVG is rendered; note count badge appears in sidebar
       const favBadges = screen.getAllByText('1');
       expect(favBadges.length).toBeGreaterThan(0);
     });
@@ -169,7 +144,6 @@ describe('UserDashboard', () => {
     });
   });
 
-  // ── Navigation ───────────────────────────────────────────────
   describe('Sidebar navigation', () => {
     it('renders My Notes nav item as active by default', async () => {
       setupFetch();
@@ -206,17 +180,15 @@ describe('UserDashboard', () => {
       setupFetch({ trash: [apiNote({ _id: 'n1', isDeleted: true }), apiNote({ _id: 'n2', isDeleted: true })] });
       renderDashboard();
       await waitForLoad();
-      // Badge in sidebar nav for Trash
       const trashNav = screen.getByRole('button', { name: /Trash/ });
       expect(within(trashNav).getByText('2')).toBeInTheDocument();
     });
   });
 
-  // ── Search & filter ──────────────────────────────────────────
   describe('Search and filtering', () => {
     const twoNotes = [
-      apiNote({ _id: 'n1', title: 'Physics Notes',   currentContent: { transcribedText: 'Newton laws' },  tags: ['physics'] }),
-      apiNote({ _id: 'n2', title: 'Biology Notes',   currentContent: { transcribedText: 'Cell theory'  }, tags: ['bio']     }),
+      apiNote({ _id: 'n1', title: 'Physics Notes',  currentContent: { transcribedText: 'Newton laws' }, tags: ['physics'] }),
+      apiNote({ _id: 'n2', title: 'Biology Notes',  currentContent: { transcribedText: 'Cell theory'  }, tags: ['bio']    }),
     ];
 
     it('filters notes by title', async () => {
@@ -266,7 +238,6 @@ describe('UserDashboard', () => {
     });
   });
 
-  // ── Sorting ──────────────────────────────────────────────────
   describe('Sorting', () => {
     const unsortedNotes = [
       apiNote({ _id: 'n1', title: 'Zebra Notes', confidence: 70 }),
@@ -296,7 +267,6 @@ describe('UserDashboard', () => {
     });
   });
 
-  // ── Optimistic updates ───────────────────────────────────────
   describe('Optimistic updates — Toggle favorite', () => {
     it('favorite badge count increases immediately after toggling', async () => {
       const note = apiNote({ _id: 'n1', isFavorite: false });
@@ -304,14 +274,10 @@ describe('UserDashboard', () => {
       renderDashboard();
       await waitForLoad();
 
-      // dot menu button is the only button inside the note card initially
       const card = screen.getByText('Test Note').closest('.ud-card');
-      const dotBtn = card.querySelector('button');
-      fireEvent.click(dotBtn);
-
+      fireEvent.click(card.querySelector('button'));
       fireEvent.click(screen.getByText('Add to favorites'));
 
-      // Sidebar favorite count should now show 1
       await waitFor(() => {
         const favNav = screen.getByRole('button', { name: /Favorites/ });
         expect(within(favNav).getByText('1')).toBeInTheDocument();
@@ -325,15 +291,13 @@ describe('UserDashboard', () => {
       await waitForLoad();
 
       const card = screen.getByText('Test Note').closest('.ud-card');
-      const dotBtn = card.querySelector('button');
-      fireEvent.click(dotBtn);
+      fireEvent.click(card.querySelector('button'));
       fireEvent.click(screen.getByText('Add to favorites'));
 
       await waitFor(() => expect(screen.getByText('Failed to update favorite')).toBeInTheDocument());
     });
   });
 
-  // ── Delete / Restore ─────────────────────────────────────────
   describe('Delete and restore', () => {
     it('note is removed from Notes view immediately after trash', async () => {
       setupFetch({ active: [apiNote()] });
@@ -341,10 +305,8 @@ describe('UserDashboard', () => {
       await waitForLoad();
 
       const card = screen.getByText('Test Note').closest('.ud-card');
-      const dotBtn = card.querySelector('button');
-      fireEvent.click(dotBtn);
+      fireEvent.click(card.querySelector('button'));
       fireEvent.click(screen.getByText('Move to Trash'));
-      // Confirm the modal
       fireEvent.click(screen.getByText('Move to Trash', { selector: 'button' }));
 
       await waitFor(() => expect(screen.queryByText('Test Note')).not.toBeInTheDocument());
@@ -388,10 +350,7 @@ describe('UserDashboard', () => {
       expect(screen.getByText('Test Note')).toBeInTheDocument();
       fireEvent.click(screen.getByText('Restore'));
 
-      await waitFor(() => {
-        // after restore, note is removed from trash view
-        expect(screen.queryByText('Test Note')).not.toBeInTheDocument();
-      });
+      await waitFor(() => expect(screen.queryByText('Test Note')).not.toBeInTheDocument());
     });
 
     it('permanent delete removes note entirely', async () => {
@@ -406,12 +365,22 @@ describe('UserDashboard', () => {
     });
 
     it('Empty Trash removes all trashed notes', async () => {
-      setupFetch({ trash: [apiNote({ _id: 'n1', isDeleted: true }), apiNote({ _id: 'n2', isDeleted: true, title: 'Note 2' })] });
+      setupFetch({ trash: [
+        apiNote({ _id: 'n1', isDeleted: true }),
+        apiNote({ _id: 'n2', isDeleted: true, title: 'Note 2' }),
+      ]});
       renderDashboard();
       await waitForLoad();
 
       fireEvent.click(screen.getByRole('button', { name: /Trash/ }));
+
+      // Click Empty Trash button to open modal
       fireEvent.click(screen.getByText('Empty Trash'));
+
+      // Wait for modal to appear then click the confirm button inside it
+      await waitFor(() => expect(screen.getByText('Empty Trash?')).toBeInTheDocument());
+      const allEmptyBtns = screen.getAllByText('Empty Trash');
+      fireEvent.click(allEmptyBtns[allEmptyBtns.length - 1]);
 
       await waitFor(() => {
         expect(screen.queryByText('Test Note')).not.toBeInTheDocument();
@@ -420,7 +389,6 @@ describe('UserDashboard', () => {
     });
   });
 
-  // ── Note click ───────────────────────────────────────────────
   describe('Note click', () => {
     it('calls onNoteSelect when note card body is clicked', async () => {
       const onNoteSelect = vi.fn();
@@ -428,13 +396,11 @@ describe('UserDashboard', () => {
       renderDashboard({ onNoteSelect });
       await waitForLoad();
 
-      const title = screen.getByText('Clickable Note');
-      fireEvent.click(title);
+      fireEvent.click(screen.getByText('Clickable Note'));
       expect(onNoteSelect).toHaveBeenCalled();
     });
   });
 
-  // ── Folder operations ────────────────────────────────────────
   describe('Folder operations', () => {
     it('shows existing folders in FoldersStrip', async () => {
       setupFetch({ folders: [apiFolder({ name: 'Math' })] });
@@ -444,8 +410,8 @@ describe('UserDashboard', () => {
     });
 
     it('selecting a folder filters notes to that folder', async () => {
-      const note1 = apiNote({ _id: 'n1', title: 'In Folder',  folderId: 'f1' });
-      const note2 = apiNote({ _id: 'n2', title: 'No Folder',  folderId: null });
+      const note1 = apiNote({ _id: 'n1', title: 'In Folder', folderId: 'f1' });
+      const note2 = apiNote({ _id: 'n2', title: 'No Folder', folderId: null });
       setupFetch({ active: [note1, note2], folders: [apiFolder({ _id: 'f1', id: 'f1', name: 'Science' })] });
       renderDashboard();
       await waitForLoad();
@@ -456,16 +422,15 @@ describe('UserDashboard', () => {
       expect(screen.queryByText('No Folder')).not.toBeInTheDocument();
     });
 
-   it('deleting a folder removes it from the strip', async () => {
-  setupFetch({ folders: [apiFolder({ name: 'Old Folder' })] });
-  renderDashboard();
-  await waitForLoad();
+    it('deleting a folder removes it from the strip', async () => {
+      setupFetch({ folders: [apiFolder({ name: 'Old Folder' })] });
+      renderDashboard();
+      await waitForLoad();
 
-  const chip = screen.getByText('Old Folder').closest('.ud-folder-chip');
-  const xBtn = chip.querySelector('button');
-  fireEvent.click(xBtn);
+      const chip = screen.getByText('Old Folder').closest('.ud-folder-chip');
+      fireEvent.click(chip.querySelector('button'));
 
-  await waitFor(() => expect(screen.queryByText('Old Folder')).not.toBeInTheDocument(), { timeout: 3000 });
-});
+      await waitFor(() => expect(screen.queryByText('Old Folder')).not.toBeInTheDocument(), { timeout: 3000 });
+    });
   });
 });

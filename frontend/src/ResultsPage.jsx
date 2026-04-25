@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import React, { useState, useRef, useEffect } from 'react';
 
+//Design tokens
 const T = {
   bg:        '#0E1117',
   surface:   '#161B27',
@@ -121,6 +122,10 @@ styleEl.textContent = `
   .ns-editable em,     .ns-editable i { color:#C8C3B5; font-style:italic; }
   .ns-editable p  { margin:0 0 4px; }
   .ns-editable ::selection { background:${T.amberDim}; }
+  .ns-editable table { border-collapse:collapse; width:100%; margin:8px 0; }
+  .ns-editable th, .ns-editable td { border:1px solid ${T.border}; padding:8px 12px; font-size:13px; text-align:left; }
+  .ns-editable th { background:${T.surfaceHi}; font-weight:600; color:${T.amber}; }
+  .ns-editable tr:nth-child(even) td { background:rgba(255,255,255,0.02); }
 
   .ns-title-input {
     font-family:${T.serif}; font-size:38px; font-weight:400;
@@ -279,7 +284,7 @@ function PreviewCard({ card, onEdit, onDelete }) {
         </div>
       </div>
 
-      
+      {/* Edit / Delete overlay — shown on hover */}
       {hovered && (
         <div style={{ position:'absolute', top:8, right:8, display:'flex', gap:5, zIndex:10 }}>
           <button
@@ -306,7 +311,7 @@ function PreviewCard({ card, onEdit, onDelete }) {
   );
 }
 
-function RichTextEditor({ initialText, onSave, onLiveChange, isFullscreen, onToggleFullscreen }) {
+function RichTextEditor({ initialText, initialHtml, onSave, onLiveChange, isFullscreen, onToggleFullscreen }) {
   const editorRef = useRef(null);
   const [editorHTML,    setEditorHTML]    = useState('');
   const [charCount,     setCharCount]     = useState(0);
@@ -315,18 +320,23 @@ function RichTextEditor({ initialText, onSave, onLiveChange, isFullscreen, onTog
 
   useEffect(() => {
     if (!editorRef.current) return;
-    const html = (initialText || '')
-  .replace(/\n{2,}/g, '\n\n')
-  .split('\n\n')
-  .map(para => {
-    const lines = para.split('\n').filter(Boolean);
-    return `<p>${lines.join(' ') || '<br>'}</p>`;
-  })
-  .join('');
+    let html = '';
+    if (initialHtml) {
+      html = initialHtml;
+    } else {
+      html = (initialText || '')
+        .replace(/\n{2,}/g, '\n\n')
+        .split('\n\n')
+        .map(para => {
+          const lines = para.split('\n').filter(Boolean);
+          return `<p>${lines.join(' ') || '<br>'}</p>`;
+        })
+        .join('');
+    }
     setEditorHTML(html);
-    setCharCount(initialText?.length || 0);
+    setCharCount(editorRef.current.innerText?.length || 0);
     editorRef.current.innerHTML = html;
-  }, [initialText]);
+  }, [initialText, initialHtml]);
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape' && isFullscreen) onToggleFullscreen(); };
@@ -454,7 +464,7 @@ function RichTextEditor({ initialText, onSave, onLiveChange, isFullscreen, onTog
   );
 }
 
-
+// ── Dedicated scan view page ──────────────────────────────────
 function ScanViewPage({ src, title, onBack }) {
   const [zoom, setZoom] = useState(0.75);
 
@@ -491,7 +501,7 @@ function ScanViewPage({ src, title, onBack }) {
   );
 }
 
-
+// ── Image pane ────────────────────────────────────────────────
 function ImagePane({ imageUrl, overlayUrl, onExpand }) {
   const src = imageUrl || overlayUrl;
   return (
@@ -528,7 +538,7 @@ const TABS = [
   { id:'quiz',       label:'Quiz',         icon:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
 ];
 
-
+// ── ResultsPage ───────────────────────────────────────────────
 const ResultsPage = ({ onBack, onSave, noteId }) => {
   const [activeTab,        setActiveTab]        = useState('scan_edit');
   const [isSaved,          setIsSaved]          = useState(false);
@@ -582,6 +592,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
 
   const [fileData,            setFileData]            = useState(null);
   const [recognizedText,      setRecognizedText]      = useState('');
+  const [recognizedTextIsHtml,setRecognizedTextIsHtml]= useState(false);
   const [aiSummary,           setAiSummary]           = useState('');
   const [transcriptionEdited, setTranscriptionEdited] = useState(false);
   const [overlayUrl,          setOverlayUrl]          = useState(sessionStorage.getItem('lastOcrOverlayUrl') || '');
@@ -606,16 +617,23 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
       .then((data) => {
         setFileData(data);
         if (data.title) setTitle(data.title);
-        else if (data.originalName) setTitle(data.originalName.replace(/\.[^/.]+$/, ''));
+        else {
+          const autoTitle = sessionStorage.getItem('lastOcrAutoTitle') || '';
+          const fallback  = data.originalName ? data.originalName.replace(/\.[^/.]+$/, '') : 'Untitled';
+          setTitle(autoTitle || fallback);
+          sessionStorage.removeItem('lastOcrAutoTitle');
+        }
         if (data.confidence) setConfidence(data.confidence);
 
         const storedMergedText = !noteId ? sessionStorage.getItem('lastOcrMergedText') : '';
+        const isHtml          = !noteId && sessionStorage.getItem('lastOcrIsHtml') === 'true';
         const resolvedText    = storedMergedText || data.currentContent?.transcribedText || data.extractionData?.rawText || '';
         const resolvedSummary = data.currentContent?.summary || data.aiGeneratedContent?.summary || '';
         const resolvedCards   = data.currentContent?.flashCards || data.aiGeneratedContent?.flashCards || [];
         const learnedMap      = toLearnedMap(cardsRef.current);
 
         setRecognizedText(resolvedText);
+        setRecognizedTextIsHtml(isHtml);
         setAiSummary(resolvedSummary);
         setCards(normalizeFlashcards(resolvedCards, learnedMap));
 
@@ -625,7 +643,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
           setOcrImageUrl(imgUrl);
         }
 
-        
+        // For fresh uploads (no noteId), sessionStorage has fresher data — override the above
         if (!noteId) {
           const ssOverlay = sessionStorage.getItem('lastOcrOverlayUrl');
           if (ssOverlay) setOverlayUrl(ssOverlay);
@@ -745,14 +763,21 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
 
   const getCurrentText = () => liveTextRef.current || recognizedText;
   const getCurrentHtml = () => liveHtmlRef.current || `<p>${recognizedText}</p>`;
+  const getCurrentMarkdown = () => {
+    // For Chandra content, export the original Markdown (preserves table syntax)
+    // rather than plain text which loses table structure
+    const isHtml = sessionStorage.getItem('lastOcrIsHtml') === 'true';
+    if (isHtml) return sessionStorage.getItem('lastOcrMergedText') || getCurrentText();
+    return getCurrentText();
+  };
 
   const handleExportCopy = async () => {
-    await navigator.clipboard.writeText(getCurrentText());
+    await navigator.clipboard.writeText(getCurrentMarkdown());
     setShowExportMenu(false);
   };
 
   const handleExportTXT = () => {
-    const blob = new Blob([getCurrentText()], { type: 'text/plain' });
+    const blob = new Blob([getCurrentMarkdown()], { type: 'text/plain' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href = url; a.download = `${title || 'notes'}.txt`; a.click();
@@ -831,24 +856,43 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
               if (!fileId) { if (onSave) onSave(); return; }
 
               try {
-                // TODO: save title to backend
-                // PATCH /api/files/:fileId/meta  —  body: { title }
+                // Save title
+                await fetch(`/api/files/${fileId}/meta`, {
+                  method: 'PATCH',
+                  headers,
+                  body: JSON.stringify({ title }),
+                });
 
-                // TODO: save transcription to backend
-                // PUT /api/files/:fileId/edit/transcription  —  body: { newText: recognizedText }
+                // Save transcription
+                await fetch(`/api/files/${fileId}/edit/transcription`, {
+                  method: 'PUT',
+                  headers,
+                  body: JSON.stringify({ newText: liveTextRef.current || recognizedText }),
+                });
 
-                // TODO: save AI summary to backend
-                // PUT /api/files/:fileId/edit/summary  —  body: { newText: aiSummary }
+                // Save AI summary
+                if (aiSummary) {
+                  await fetch(`/api/files/${fileId}/edit/summary`, {
+                    method: 'PUT',
+                    headers,
+                    body: JSON.stringify({ newText: aiSummary }),
+                  });
+                }
 
-                // TODO: save flashcards to backend
-                // PUT /api/files/:fileId/edit/flashcards  —  body: { cards: serializeFlashcards(cards) }
+                // Save flashcards
+                if (cards.length) {
+                  await fetch(`/api/files/${fileId}/edit/flashcards`, {
+                    method: 'PUT',
+                    headers,
+                    body: JSON.stringify({ cards: serializeFlashcards(cards) }),
+                  });
+                }
 
+                setIsSaved(true);
+                if (onSave) onSave();
               } catch (err) {
                 console.error('Failed to save notes:', err);
               }
-
-              setIsSaved(true);
-              if (onSave) onSave();
             }}
           >
             {isSaved
@@ -929,7 +973,8 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
                   <div style={{ flex:1, minWidth:0 }}>
                     <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 10px', fontFamily:T.font }}>Recognized Text</p>
                     <RichTextEditor
-                      initialText={recognizedText}
+                      initialText={recognizedTextIsHtml ? '' : recognizedText}
+                      initialHtml={recognizedTextIsHtml ? recognizedText : undefined}
                       isFullscreen={editorFullscreen}
                       onToggleFullscreen={() => setEditorFullscreen(f => !f)}
                       onLiveChange={({ text, html }) => { liveTextRef.current = text; liveHtmlRef.current = html; }}
@@ -947,7 +992,8 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
                 <div style={{ flex:1, minWidth:0 }}>
                   <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 10px', fontFamily:T.font }}>Recognized Text</p>
                   <RichTextEditor
-                    initialText={recognizedText}
+                    initialText={recognizedTextIsHtml ? '' : recognizedText}
+                    initialHtml={recognizedTextIsHtml ? recognizedText : undefined}
                     isFullscreen={editorFullscreen}
                     onToggleFullscreen={() => setEditorFullscreen(f => !f)}
                     onLiveChange={({ text, html }) => { liveTextRef.current = text; liveHtmlRef.current = html; }}
