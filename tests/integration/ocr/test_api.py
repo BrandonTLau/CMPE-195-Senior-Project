@@ -64,7 +64,7 @@ def test_ocr_v5_returns_expected_payload(monkeypatch):
     client = TestClient(app)
 
     res = client.post(
-        '/ocr_api/ocr_v5',
+        '/ocr_api/ocr_v5?engine=paddle',
         files={'file': ('notes.png', _image_bytes(), 'image/png')},
     )
 
