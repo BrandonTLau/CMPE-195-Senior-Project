@@ -2,10 +2,10 @@
 # OCR Backend — Unified Engine (PaddleOCR + Chandra via Datalab Hosted API)
 #
 # Usage:
-#   POST /ocr_api/ocr      ?engine=paddle   (default)
-#   POST /ocr_api/ocr      ?engine=chandra
-#   POST /ocr_api/ocr_v5   ?engine=paddle   (default)
-#   POST /ocr_api/ocr_v5   ?engine=chandra
+#   POST /ocr_api/ocr      ?engine=chandra  (default)
+#   POST /ocr_api/ocr      ?engine=paddle
+#   POST /ocr_api/ocr_v5   ?engine=chandra  (default)
+#   POST /ocr_api/ocr_v5   ?engine=paddle
 #
 # Required environment variables:
 #   CHANDRA_API_KEY            Your Datalab API key (from datalab.to/app/keys)
@@ -15,6 +15,7 @@
 #   CHANDRA_POLL_INTERVAL      2 (seconds, default)
 #   CHANDRA_TIMEOUT_SECONDS    120 (default)
 #   OCR_SKIP_MODEL_LOAD        1 = skip PaddleOCR loading (for tests)
+#   OCR_PADDLE_DISABLED        1 = disable PaddleOCR (used in cloud deployment)
 # =============================================================================
 
 import os
@@ -157,24 +158,13 @@ def run_chandra_api(input_path: Path) -> dict:
         status = result.get("status", "")
 
         if status == "complete":
-            # Debug: print all keys returned by Datalab API
-            print("Datalab result keys:", list(result.keys()))
-            print("parse_quality_score:", result.get("parse_quality_score"))
-
-            # parse_quality_score is 0-5, convert to 0-1 to match paddle format
-            raw_score = result.get("parse_quality_score")
-            if raw_score is not None:
-                quality_score = round(float(raw_score) / 5, 4)
-            else:
-                # Fallback: estimate from markdown length if no score provided
-                markdown = result.get("markdown", "")
-                quality_score = round(min(len(markdown) / 500, 1.0), 4) if markdown else None
-
             return {
-                "markdown":      result.get("markdown", ""),
-                "metadata":      result.get("metadata", {}),
-                "page_count":    result.get("page_count"),
-                "quality_score": quality_score,
+                "markdown":   result.get("markdown", ""),
+                "metadata":   result.get("metadata", {}),
+                "page_count": result.get("page_count"),
+                # parse_quality_score is 0-5, convert to 0-1 to match paddle format
+                "quality_score": round(result["parse_quality_score"] / 5, 4)
+                if result.get("parse_quality_score") is not None else None,
             }
 
         if status == "failed":
@@ -204,8 +194,8 @@ def health():
 async def run_ocr(
     file: UploadFile = File(...),
     engine: str = Query(
-        default="paddle",
-        description="OCR engine: 'paddle' (local) or 'chandra' (Datalab cloud API)",
+        default="chandra",
+        description="OCR engine: 'chandra' (default, cloud API) or 'paddle' (local only)",
     ),
 ):
     engine = engine.strip().lower()
@@ -229,6 +219,14 @@ async def run_ocr(
     # PaddleOCR path
     # ------------------------------------------------------------------
     if engine == "paddle":
+        # Paddle is disabled in cloud deployment (not enough RAM on free tier)
+        if os.getenv("OCR_PADDLE_DISABLED") == "1":
+            return {
+                "error": "PaddleOCR is not available in cloud deployment. Please use Chandra engine.",
+                "engine": "paddle",
+                "disabled": True,
+            }
+
         if filename_lower.endswith(".pdf"):
             return {
                 "error": (
@@ -312,8 +310,8 @@ async def run_ocr(
 async def run_ocr_v5(
     file: UploadFile = File(...),
     engine: str = Query(
-        default="paddle",
-        description="OCR engine: 'paddle' (local) or 'chandra' (Datalab cloud API)",
+        default="chandra",
+        description="OCR engine: 'chandra' (default, cloud API) or 'paddle' (local only)",
     ),
 ):
     engine = engine.strip().lower()
@@ -337,6 +335,14 @@ async def run_ocr_v5(
     # PaddleOCR path
     # ------------------------------------------------------------------
     if engine == "paddle":
+        # Paddle is disabled in cloud deployment (not enough RAM on free tier)
+        if os.getenv("OCR_PADDLE_DISABLED") == "1":
+            return {
+                "error": "PaddleOCR is not available in cloud deployment. Please use Chandra engine.",
+                "engine": "paddle",
+                "disabled": True,
+            }
+
         if filename_lower.endswith(".pdf"):
             return {
                 "error": (
