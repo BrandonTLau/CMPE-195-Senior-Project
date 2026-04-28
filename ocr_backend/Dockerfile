@@ -24,7 +24,10 @@ COPY . ./ocr_backend/
 RUN mkdir -p ocr_backend/uploads ocr_backend/output
  
 EXPOSE 8000
- 
+
+# Disable PaddleOCR in cloud deployment (not enough RAM on free tier)
+ENV OCR_PADDLE_DISABLED=1
+
 # Run as a module from parent directory so "from .ocr_utils import" works
 CMD ["uvicorn", "ocr_backend.app:app", "--host", "0.0.0.0", "--port", "8000"]
  
