@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { runOcr } from "./api/ocrClient";
 import { marked } from 'marked';
 
-//design tokens
 const T = {
   bg:        '#0E1117',
   surface:   '#161B27',
@@ -130,17 +129,13 @@ const StepRow = ({ label, status }) => {
   );
 };
 
-const OCR_ENGINES = [
-  { id: 'paddleocr', label: 'PaddleOCR', sub: 'General purpose' },
-  { id: 'chandra',   label: 'Chandra',   sub: 'Handwriting optimized' },
-];
+const OCR_ENGINE = 'chandra';
 
 const UploadPage = ({ onBack, onProcess }) => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [dragActive,    setDragActive]    = useState(false);
   const [uploading,     setUploading]     = useState(false);
   const [error,         setError]         = useState('');
-  const [ocrEngine,     setOcrEngine]     = useState('paddleocr');
   const [timedOut,      setTimedOut]      = useState(false);
 
   const [steps, setSteps] = useState({
@@ -228,30 +223,26 @@ const UploadPage = ({ onBack, onProcess }) => {
       // Step 3 — OCR
       setStep('ocr', 'active');
       try {
-        const ocrData = await runOcr(first.file, ocrEngine);
+        const ocrData = await runOcr(first.file, OCR_ENGINE);
         console.log('OCR response:', ocrData);
 
         const ocrBase = import.meta.env.VITE_OCR_URL || 'http://localhost:8000';
         const prefixUrl = (url) => url ? (url.startsWith('http') ? url : `${ocrBase}${url}`) : '';
 
         const rawText = ocrData?.merged_text || ocrData?.text || '';
-        const isChandra = ocrEngine === 'chandra';
-        const displayText = isChandra ? marked(rawText) : rawText;
+        const displayText = marked(rawText);
 
-        // Auto-title: use first non-empty line of OCR text, trimmed to 60 chars
         const firstLine = rawText.split('\n').map(l => l.trim()).find(l => l.length > 2) || '';
         const autoTitle = firstLine.replace(/[#*_`>|-]/g, '').trim().slice(0, 60);
-        if (autoTitle) {
-          sessionStorage.setItem('lastOcrAutoTitle', autoTitle);
-        }
+        if (autoTitle) sessionStorage.setItem('lastOcrAutoTitle', autoTitle);
 
-        sessionStorage.setItem('lastOcrEngine',      ocrEngine);
-        sessionStorage.setItem('lastOcrOverlayUrl',  prefixUrl(ocrData?.overlay_url));
-        sessionStorage.setItem('lastOcrMergedText',  displayText);
-        sessionStorage.setItem('lastOcrIsHtml',      isChandra ? 'true' : 'false');
-        sessionStorage.setItem('lastOcrBlocks',      JSON.stringify(ocrData?.blocks      || []));
-        sessionStorage.setItem('lastOcrImageUrl',    prefixUrl(ocrData?.image_url || ocrData?.original_url));
-        sessionStorage.setItem('lastOcrImageSize',   JSON.stringify(ocrData?.image_size  || [0, 0]));
+        sessionStorage.setItem('lastOcrEngine',     OCR_ENGINE);
+        sessionStorage.setItem('lastOcrOverlayUrl', prefixUrl(ocrData?.overlay_url));
+        sessionStorage.setItem('lastOcrMergedText', displayText);
+        sessionStorage.setItem('lastOcrIsHtml',     'true');
+        sessionStorage.setItem('lastOcrBlocks',     JSON.stringify(ocrData?.blocks     || []));
+        sessionStorage.setItem('lastOcrImageUrl',   prefixUrl(ocrData?.image_url || ocrData?.original_url));
+        sessionStorage.setItem('lastOcrImageSize',  JSON.stringify(ocrData?.image_size || [0, 0]));
 
         const avgConfidence = ocrData?.items?.length
           ? Math.round(
@@ -366,7 +357,7 @@ const UploadPage = ({ onBack, onProcess }) => {
             <p style={{ color:T.muted, fontSize:13, margin:0 }}>
               {timedOut
                 ? 'Redirecting you back to the dashboard…'
-                : steps.ocr     === 'active' ? `Running ${ocrEngine === 'chandra' ? 'Chandra' : 'PaddleOCR'} engine — this is the longest step…`
+                : steps.ocr     === 'active' ? 'Running Chandra engine — this is the longest step…'
                 : steps.upload  === 'active' ? 'Uploading your file…'
                 : steps.results === 'active' ? 'Finalizing results…'
                 : 'Almost there…'
@@ -375,10 +366,10 @@ const UploadPage = ({ onBack, onProcess }) => {
           </div>
 
           <div style={{ display:'flex', flexDirection:'column', gap:8, width:'100%', maxWidth:360 }}>
-            <StepRow label="Uploading file"      status={steps.upload}     />
-            <StepRow label="Preprocessing image" status={steps.preprocess} />
-            <StepRow label={`Running ${ocrEngine === 'chandra' ? 'Chandra' : 'PaddleOCR'} engine`} status={steps.ocr} />
-            <StepRow label="Generating results"  status={steps.results}    />
+            <StepRow label="Uploading file"         status={steps.upload}     />
+            <StepRow label="Preprocessing image"    status={steps.preprocess} />
+            <StepRow label="Running Chandra engine" status={steps.ocr}        />
+            <StepRow label="Generating results"     status={steps.results}    />
           </div>
         </div>
       )}
@@ -437,58 +428,6 @@ const UploadPage = ({ onBack, onProcess }) => {
               </div>
             </div>
           )}
-
-          {/* OCR Engine selector */}
-          <div style={{ marginTop:28 }}>
-            <p style={{
-              fontSize:11, fontWeight:700, letterSpacing:1.2,
-              textTransform:'uppercase', color:T.muted,
-              margin:'0 0 10px', fontFamily:T.font,
-            }}>
-              OCR Engine
-            </p>
-            <div style={{
-              display:'flex',
-              background:T.surfaceHi,
-              border:`1px solid ${T.border}`,
-              borderRadius:10,
-              padding:4,
-              gap:4,
-            }}>
-              {OCR_ENGINES.map(({ id, label, sub }) => {
-                const selected = ocrEngine === id;
-                return (
-                  <button
-                    key={id}
-                    onClick={() => setOcrEngine(id)}
-                    disabled={uploading}
-                    style={{
-                      flex:1,
-                      padding:'10px 14px',
-                      border:'none',
-                      borderRadius:7,
-                      fontFamily:T.font,
-                      fontSize:13,
-                      fontWeight: selected ? 700 : 500,
-                      cursor: uploading ? 'not-allowed' : 'pointer',
-                      lineHeight:1.3,
-                      textAlign:'center',
-                      opacity: uploading ? 0.5 : 1,
-                      background: selected ? T.amber : 'transparent',
-                      color: selected ? '#0E1117' : T.muted,
-                      boxShadow: selected ? '0 2px 10px rgba(245,166,35,.3)' : 'none',
-                      transition:'background .2s, color .2s, box-shadow .2s',
-                    }}
-                  >
-                    <div>{label}</div>
-                    <div style={{ fontSize:10, fontWeight:400, marginTop:2, opacity: selected ? 0.7 : 0.5 }}>
-                      {sub}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
 
           <button
             className="up-process"
