@@ -549,7 +549,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
   const [title,            setTitle]            = useState('');
   const [showExportMenu,   setShowExportMenu]   = useState(false);
   const [confidence,       setConfidence]       = useState(null);
-  const [ocrEngine,        setOcrEngine]        = useState(sessionStorage.getItem('lastOcrEngine') || '');
+  const [ocrEngine,        setOcrEngine]        = useState('');
   const [cards,            setCards]            = useState([]);
   const [summaryBusy,      setSummaryBusy]      = useState(false);
   const [flashcardsBusy,   setFlashcardsBusy]   = useState(false);
@@ -557,23 +557,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
   const [summaryError,     setSummaryError]     = useState('');
   const [flashcardsError,  setFlashcardsError]  = useState('');
   const [showScanView,     setShowScanView]     = useState(false);
-  const [quizQuestions,    setQuizQuestions]    = useState([
-    {
-      question: "What is the main topic of the scanned notes?",
-      options: ["Mathematics", "Reading comprehension", "Science experiments", "History"],
-      correctIndex: 1,
-    },
-    {
-      question: "Which of the following best describes the purpose of OCR?",
-      options: ["Translating text between languages", "Converting images of text into editable text", "Summarizing documents automatically", "Storing files in the cloud"],
-      correctIndex: 1,
-    },
-    {
-      question: "What should you do if the recognized text contains errors?",
-      options: ["Delete the file and re-upload", "Edit the text directly in the editor", "Contact support immediately", "Ignore the errors"],
-      correctIndex: 1,
-    },
-  ]);
+  const [quizQuestions,    setQuizQuestions]    = useState([]);
   const [quizBusy,         setQuizBusy]         = useState(false);
   const [quizError,        setQuizError]        = useState('');
   const [quizAnswers,      setQuizAnswers]      = useState({});
@@ -808,7 +792,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
     );
   }
 
-  const engineLabel = ocrEngine === 'chandra' ? 'Chandra' : ocrEngine === 'paddleocr' ? 'PaddleOCR' : '';
+  
 
   return (
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream }}>
@@ -913,15 +897,9 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
           </div>
 
           {/* Confidence + OCR engine pill */}
-          {(confidence !== null || engineLabel) && (
+          {confidence !== null && (
             <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 16px', background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:99, flexShrink:0 }}>
-              {engineLabel && (
-                <span style={{ fontSize:11, fontWeight:700, letterSpacing:1, textTransform:'uppercase', color:T.amber, fontFamily:T.font }}>
-                  {engineLabel}
-                </span>
-              )}
-              {engineLabel && confidence !== null && <div style={{ width:1, height:12, background:T.borderHi, flexShrink:0 }} />}
-              {confidence !== null && <span style={{ fontSize:13, fontWeight:600, color:T.cream }}>{confidence}% Confidence</span>}
+              <span style={{ fontSize:13, fontWeight:600, color:T.cream }}>{confidence}% Confidence</span>
             </div>
           )}
         </div>
