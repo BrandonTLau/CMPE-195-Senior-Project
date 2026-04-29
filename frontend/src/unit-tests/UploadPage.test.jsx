@@ -90,7 +90,9 @@ describe('UploadPage', () => {
     it('shows file size after file is selected', () => {
       render(<UploadPage {...defaultProps} />);
       selectFile(makeImageFile());
-      expect(screen.getByText(/MB/)).toBeInTheDocument();
+      // "MB" appears in both the header ("up to 50 MB") and the file info row
+      // ("0.0 MB · Image") — assert at least one match exists
+      expect(screen.getAllByText(/MB/).length).toBeGreaterThan(0);
     });
 
     it('shows file type "Image" for image files', () => {

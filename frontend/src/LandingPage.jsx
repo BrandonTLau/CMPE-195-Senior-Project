@@ -278,7 +278,7 @@ const LandingPage = ({ onStart, onSignIn }) => {
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:24 }}>
           {[
             { value:'85–90%', label:'OCR Accuracy' },
-            { value:'2',      label:'OCR Engines' },
+            { value:'3',      label:'Study Aids' },
             { value:'< 30s',  label:'Average Processing Time' },
           ].map((stat, i) => (
             <div key={i} style={{ padding:'48px 40px', textAlign:'center' }}>

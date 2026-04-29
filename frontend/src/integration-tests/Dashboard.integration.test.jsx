@@ -1,6 +1,3 @@
-/**
- * Dashboard integration tests
- */
 import { render, screen, fireEvent, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import UserDashboard from '../UserDashboard';
@@ -57,6 +54,13 @@ const renderDashboard = (props = {}) =>
 
 const waitForLoad = () =>
   waitForElementToBeRemoved(() => screen.queryByText('Loading your notes…'), { timeout: 3000 });
+
+// Helper — finds the folder chip element for a given name even when the same
+// text also appears elsewhere (e.g. as a badge on a note card).
+const getFolderChip = (name) =>
+  screen.getAllByText(name)
+    .map(el => el.closest('.ud-folder-chip'))
+    .find(Boolean);
 
 describe('Dashboard Integration', () => {
   beforeEach(() => {
@@ -212,7 +216,9 @@ describe('Dashboard Integration', () => {
       renderDashboard();
       await waitForLoad();
 
-      const chip = screen.getByText('Science').closest('.ud-folder-chip');
+      // "Science" may appear in both the chip and a note card badge —
+      // scope to the chip specifically
+      const chip = getFolderChip('Science');
       expect(within(chip).getByText('0')).toBeInTheDocument();
 
       const card = screen.getByText('Integration Note').closest('.ud-card');
@@ -223,7 +229,7 @@ describe('Dashboard Integration', () => {
       fireEvent.click(modalBtn || scienceEls[scienceEls.length - 1]);
 
       await waitFor(() => {
-        const updatedChip = screen.getByText('Science').closest('.ud-folder-chip');
+        const updatedChip = getFolderChip('Science');
         expect(within(updatedChip).getByText('1')).toBeInTheDocument();
       });
     });
@@ -235,10 +241,13 @@ describe('Dashboard Integration', () => {
       renderDashboard();
       await waitForLoad();
 
-      const chip = screen.getByText('ToDelete').closest('.ud-folder-chip');
+      // "ToDelete" may appear in both the chip and a note card badge —
+      // scope the click to the chip's delete button specifically
+      const chip = getFolderChip('ToDelete');
       fireEvent.click(chip.querySelector('button'));
 
-      await waitFor(() => expect(screen.queryByText('ToDelete')).not.toBeInTheDocument());
+      // Use queryAllByText so multiple matches don't throw
+      await waitFor(() => expect(screen.queryAllByText('ToDelete').length).toBe(0));
       expect(screen.getByText('Integration Note')).toBeInTheDocument();
     });
   });
