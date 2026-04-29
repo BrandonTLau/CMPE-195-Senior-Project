@@ -173,12 +173,13 @@ styleEl.textContent = `
 
   @media print {
     @page { size: A4; margin: 1.2cm 1.5cm; }
-    body * { visibility:hidden; }
+    html, body { background: #fff !important; }
+    body * { visibility:hidden; background: transparent !important; }
     #ns-print-area, #ns-print-area * { visibility:visible; }
     #ns-print-area {
       position:absolute; left:0; top:0; width:100%;
       font-family:Georgia,serif; font-size:12pt; line-height:1.7;
-      color:#111; background:#fff; padding:0; box-sizing:border-box;
+      color:#111; background:#fff !important; padding:0; box-sizing:border-box;
     }
     #ns-print-area h1 { font-size:22pt; margin:0 0 10pt; page-break-after:avoid; }
     #ns-print-area h2 { font-size:16pt; margin:10pt 0 8pt; page-break-after:avoid; }
@@ -186,6 +187,9 @@ styleEl.textContent = `
     #ns-print-area p  { margin:0 0 6pt; orphans:3; widows:3; }
     #ns-print-area ul, #ns-print-area ol { padding-left:18pt; margin:4pt 0; }
     #ns-print-area li { margin-bottom:3pt; }
+    #ns-print-area table { border-collapse:collapse; width:100%; margin:8pt 0; }
+    #ns-print-area th, #ns-print-area td { border:1px solid #ccc; padding:6pt 10pt; font-size:11pt; text-align:left; background:#fff !important; color:#111 !important; }
+    #ns-print-area th { font-weight:bold; background:#f5f5f5 !important; }
   }
 `;
 document.head.appendChild(styleEl);
@@ -198,6 +202,18 @@ if (!printDiv) {
 }
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
+// ── Confidence helper ─────────────────────────────────────────────────────────
+// Safely parses any confidence value the backend might return.
+// Handles: null, undefined, empty string, "undefined" string, NaN,
+// 0–1 decimals (e.g. 0.85 → 85), and 0–100 integers (e.g. 85 → 85).
+const parseConfidence = (val) => {
+  if (val === null || val === undefined || val === '' || val === 'undefined' || val === 'null') return null;
+  const num = Number(val);
+  if (isNaN(num)) return null;
+  // Backend may return a 0–1 decimal or a 0–100 integer
+  return num > 0 && num <= 1 ? Math.round(num * 100) : Math.round(num);
+};
 
 const Icon = ({ d, size = 18, color = 'currentColor', fill = 'none' }) => (
   <svg width={size} height={size} fill={fill} stroke={color} viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
@@ -241,7 +257,7 @@ function serializeFlashcards(cards = []) {
 function CardModal({ onSave, onClose, initialValues }) {
   const [q, setQ] = useState(initialValues?.question || '');
   const [a, setA] = useState(initialValues?.answer   || '');
-  const valid = q.trim() && a.trim();
+  const valid  = q.trim() && a.trim();
   const isEdit = Boolean(initialValues);
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.7)', backdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
@@ -264,8 +280,8 @@ function CardModal({ onSave, onClose, initialValues }) {
 }
 
 function PreviewCard({ card, onEdit, onDelete }) {
-  const [flipped,  setFlipped]  = useState(false);
-  const [hovered,  setHovered]  = useState(false);
+  const [flipped, setFlipped] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const face = { position:'absolute', inset:0, backfaceVisibility:'hidden', WebkitBackfaceVisibility:'hidden', borderRadius:14, border:`1px solid ${T.border}`, display:'flex', flexDirection:'column', padding:'16px 18px', overflow:'hidden' };
   return (
     <div
@@ -283,8 +299,6 @@ function PreviewCard({ card, onEdit, onDelete }) {
           <p style={{ fontSize:13, fontWeight:400, color:T.muted, margin:0, lineHeight:1.5, fontFamily:T.font, display:'-webkit-box', WebkitLineClamp:4, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{card.answer}</p>
         </div>
       </div>
-
-      {/* Edit / Delete overlay — shown on hover */}
       {hovered && (
         <div style={{ position:'absolute', top:8, right:8, display:'flex', gap:5, zIndex:10 }}>
           <button
@@ -464,10 +478,9 @@ function RichTextEditor({ initialText, initialHtml, onSave, onLiveChange, isFull
   );
 }
 
-// ── Dedicated scan view page ──────────────────────────────────
+// dedicated scan view page
 function ScanViewPage({ src, title, onBack }) {
   const [zoom, setZoom] = useState(0.75);
-
   return (
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream, display:'flex', flexDirection:'column', animation:'zoomIn .2s ease both' }}>
       <div style={{ borderBottom:`1px solid ${T.border}`, padding:'0 24px', display:'flex', alignItems:'center', justifyContent:'space-between', height:58, background:T.bg, flexShrink:0 }}>
@@ -501,7 +514,7 @@ function ScanViewPage({ src, title, onBack }) {
   );
 }
 
-// ── Image pane ────────────────────────────────────────────────
+// image pane
 function ImagePane({ imageUrl, overlayUrl, onExpand }) {
   const src = imageUrl || overlayUrl;
   return (
@@ -538,7 +551,9 @@ const TABS = [
   { id:'quiz',       label:'Quiz',         icon:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
 ];
 
-// ── ResultsPage ───────────────────────────────────────────────
+const QUIZ_COMING_SOON = '__coming_soon__';
+
+// results page
 const ResultsPage = ({ onBack, onSave, noteId }) => {
   const [activeTab,        setActiveTab]        = useState('scan_edit');
   const [isSaved,          setIsSaved]          = useState(false);
@@ -569,24 +584,23 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
   const liveHtmlRef   = useRef('');
 
   const fileId = noteId || sessionStorage.getItem('lastUploadId');
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  const token  = localStorage.getItem('token') || sessionStorage.getItem('token');
   const headers = token
     ? { 'Content-Type': 'application/json', 'x-auth-token': token }
     : { 'Content-Type': 'application/json' };
 
-  const [fileData,            setFileData]            = useState(null);
-  const [recognizedText,      setRecognizedText]      = useState('');
-  const [recognizedTextIsHtml,setRecognizedTextIsHtml]= useState(false);
-  const [aiSummary,           setAiSummary]           = useState('');
-  const [transcriptionEdited, setTranscriptionEdited] = useState(false);
-  const [overlayUrl,          setOverlayUrl]          = useState(sessionStorage.getItem('lastOcrOverlayUrl') || '');
-  const [ocrImageUrl,         setOcrImageUrl]         = useState(sessionStorage.getItem('lastOcrImageUrl') || '');
+  const [fileData,             setFileData]             = useState(null);
+  const [recognizedText,       setRecognizedText]       = useState('');
+  const [recognizedTextIsHtml, setRecognizedTextIsHtml] = useState(false);
+  const [aiSummary,            setAiSummary]            = useState('');
+  const [transcriptionEdited,  setTranscriptionEdited]  = useState(false);
+  const [overlayUrl,           setOverlayUrl]           = useState(sessionStorage.getItem('lastOcrOverlayUrl') || '');
+  const [ocrImageUrl,          setOcrImageUrl]          = useState(sessionStorage.getItem('lastOcrImageUrl')   || '');
 
   useEffect(() => { cardsRef.current = cards; }, [cards]);
 
   useEffect(() => {
     if (!fileId) return;
-    // reset block
     if (noteId) {
       setOcrImageUrl('');
       setOverlayUrl('');
@@ -607,7 +621,16 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
           setTitle(autoTitle || fallback);
           sessionStorage.removeItem('lastOcrAutoTitle');
         }
-        if (data.confidence) setConfidence(data.confidence);
+
+        // ── Confidence from API ───────────────────────────────────────────────
+        // Use parseConfidence to safely handle nulls, decimals, and bad strings.
+        const apiConfidence =
+          data.confidence ??
+          data.currentContent?.confidence ??
+          data.extractionData?.confidence ??
+          null;
+        const parsedApiConfidence = parseConfidence(apiConfidence);
+        if (parsedApiConfidence !== null) setConfidence(parsedApiConfidence);
 
         const storedMergedText = !noteId ? sessionStorage.getItem('lastOcrMergedText') : '';
         const isHtml          = !noteId && sessionStorage.getItem('lastOcrIsHtml') === 'true';
@@ -627,14 +650,18 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
           setOcrImageUrl(imgUrl);
         }
 
-        // For fresh uploads (no noteId), sessionStorage has fresher data — override the above
+        // For fresh uploads (no noteId), sessionStorage has fresher data — override above.
         if (!noteId) {
           const ssOverlay = sessionStorage.getItem('lastOcrOverlayUrl');
           if (ssOverlay) setOverlayUrl(ssOverlay);
           const ssImageUrl = sessionStorage.getItem('lastOcrImageUrl');
           if (ssImageUrl) setOcrImageUrl(ssImageUrl);
+
+          // ── Confidence from sessionStorage ────────────────────────────────
           const ssConfidence = sessionStorage.getItem('lastOcrConfidence');
-          if (ssConfidence) setConfidence(Math.round(parseFloat(ssConfidence)));
+          const parsedSsConfidence = parseConfidence(ssConfidence);
+          if (parsedSsConfidence !== null) setConfidence(parsedSsConfidence);
+
           const ssEngine = sessionStorage.getItem('lastOcrEngine');
           if (ssEngine) setOcrEngine(ssEngine);
         }
@@ -654,7 +681,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
   const saveEdit = async (endpoint, payload, onSuccess, setEdited) => {
     if (!fileId) return;
     try {
-      const res  = await fetch(`/api/files/${fileId}/${endpoint}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
+      const res  = await fetch(`/api/files/${fileId}/${endpoint}`, { method:'PUT', headers, body:JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.msg || 'Failed to save changes.');
       if (data.currentContent) { onSuccess(); if (setEdited) setEdited(true); }
@@ -663,7 +690,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
 
   const persistFlashcards = async (nextCards) => {
     if (!fileId) return nextCards;
-    const res  = await fetch(`/api/files/${fileId}/edit/flashcards`, { method: 'PUT', headers, body: JSON.stringify({ cards: serializeFlashcards(nextCards) }) });
+    const res  = await fetch(`/api/files/${fileId}/edit/flashcards`, { method:'PUT', headers, body:JSON.stringify({ cards: serializeFlashcards(nextCards) }) });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.msg || 'Failed to save flashcards.');
     const learnedMap = toLearnedMap(nextCards);
@@ -674,10 +701,10 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
   };
 
   const updateCards = async (updater, { persist = false } = {}) => {
-    const prev    = cardsRef.current;
-    const rawNext = typeof updater === 'function' ? updater(prev) : updater;
+    const prev       = cardsRef.current;
+    const rawNext    = typeof updater === 'function' ? updater(prev) : updater;
     const learnedMap = toLearnedMap(rawNext);
-    const next    = normalizeFlashcards(rawNext, learnedMap);
+    const next       = normalizeFlashcards(rawNext, learnedMap);
     cardsRef.current = next;
     setCards(next);
     setFlashcardsError('');
@@ -701,7 +728,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
     if (contentType === 'all')        setAllBusy(true);
     setSummaryError(''); setFlashcardsError('');
     try {
-      const res  = await fetch(`/api/files/${fileId}/generate`, { method: 'POST', headers, body: JSON.stringify({ contentType, sourceText: recognizedText }) });
+      const res  = await fetch(`/api/files/${fileId}/generate`, { method:'POST', headers, body:JSON.stringify({ contentType, sourceText: recognizedText }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.msg || 'AI generation failed.');
       const learnedMap = toLearnedMap(cardsRef.current);
@@ -723,33 +750,16 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
     }
   };
 
-  const generateQuiz = async () => {
-    if (!fileId) return;
-    if (!recognizedText.trim()) { setQuizError('No OCR text available yet.'); return; }
-    setQuizBusy(true);
-    setQuizError('');
+  const generateQuiz = () => {
     setQuizAnswers({});
     setQuizSubmitted(false);
-    try {
-      const res  = await fetch(`/api/files/${fileId}/generate`, { method: 'POST', headers, body: JSON.stringify({ contentType: 'quiz', sourceText: recognizedText }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.msg || 'Quiz generation failed.');
-      const questions = data.currentContent?.quiz || data.aiGeneratedContent?.quiz || [];
-      setQuizQuestions(questions);
-      if (!questions.length) setQuizError('No quiz questions were returned. Try regenerating.');
-    } catch (err) {
-      console.error('Generate quiz error:', err);
-      setQuizError(err.message);
-    } finally {
-      setQuizBusy(false);
-    }
+    setQuizQuestions([]);
+    setQuizError(QUIZ_COMING_SOON);
   };
 
-  const getCurrentText = () => liveTextRef.current || recognizedText;
-  const getCurrentHtml = () => liveHtmlRef.current || `<p>${recognizedText}</p>`;
+  const getCurrentText     = () => liveTextRef.current || recognizedText;
+  const getCurrentHtml     = () => liveHtmlRef.current || `<p>${recognizedText}</p>`;
   const getCurrentMarkdown = () => {
-    // For Chandra content, export the original Markdown (preserves table syntax)
-    // rather than plain text which loses table structure
     const isHtml = sessionStorage.getItem('lastOcrIsHtml') === 'true';
     if (isHtml) return sessionStorage.getItem('lastOcrMergedText') || getCurrentText();
     return getCurrentText();
@@ -761,7 +771,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
   };
 
   const handleExportTXT = () => {
-    const blob = new Blob([getCurrentMarkdown()], { type: 'text/plain' });
+    const blob = new Blob([getCurrentMarkdown()], { type:'text/plain' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href = url; a.download = `${title || 'notes'}.txt`; a.click();
@@ -779,9 +789,6 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
     }, 100);
   };
 
-  const learnedCount = cards.filter(c => c.learned).length;
-  const pct = cards.length ? Math.round((learnedCount / cards.length) * 100) : 0;
-
   if (showScanView) {
     return (
       <ScanViewPage
@@ -791,8 +798,6 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
       />
     );
   }
-
-  
 
   return (
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream }}>
@@ -838,45 +843,14 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
             style={{ opacity: isSaved ? 0.7 : 1 }}
             onClick={async () => {
               if (!fileId) { if (onSave) onSave(); return; }
-
               try {
-                // Save title
-                await fetch(`/api/files/${fileId}/meta`, {
-                  method: 'PATCH',
-                  headers,
-                  body: JSON.stringify({ title }),
-                });
-
-                // Save transcription
-                await fetch(`/api/files/${fileId}/edit/transcription`, {
-                  method: 'PUT',
-                  headers,
-                  body: JSON.stringify({ newText: liveTextRef.current || recognizedText }),
-                });
-
-                // Save AI summary
-                if (aiSummary) {
-                  await fetch(`/api/files/${fileId}/edit/summary`, {
-                    method: 'PUT',
-                    headers,
-                    body: JSON.stringify({ newText: aiSummary }),
-                  });
-                }
-
-                // Save flashcards
-                if (cards.length) {
-                  await fetch(`/api/files/${fileId}/edit/flashcards`, {
-                    method: 'PUT',
-                    headers,
-                    body: JSON.stringify({ cards: serializeFlashcards(cards) }),
-                  });
-                }
-
+                await fetch(`/api/files/${fileId}/meta`, { method:'PATCH', headers, body:JSON.stringify({ title }) });
+                await fetch(`/api/files/${fileId}/edit/transcription`, { method:'PUT', headers, body:JSON.stringify({ newText: liveTextRef.current || recognizedText }) });
+                if (aiSummary) await fetch(`/api/files/${fileId}/edit/summary`, { method:'PUT', headers, body:JSON.stringify({ newText: aiSummary }) });
+                if (cards.length) await fetch(`/api/files/${fileId}/edit/flashcards`, { method:'PUT', headers, body:JSON.stringify({ cards: serializeFlashcards(cards) }) });
                 setIsSaved(true);
                 if (onSave) onSave();
-              } catch (err) {
-                console.error('Failed to save notes:', err);
-              }
+              } catch (err) { console.error('Failed to save notes:', err); }
             }}
           >
             {isSaved
@@ -895,9 +869,8 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
             <input className="ns-title-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="Enter a title for your notes…" />
             <p style={{ color:T.muted, fontSize:14, margin:0 }}>Your notes have been scanned and processed successfully.</p>
           </div>
-
-          {/* Confidence + OCR engine pill */}
-          {confidence !== null && (
+          {/* Only render the confidence pill when we have a valid, non-NaN value */}
+          {confidence !== null && !isNaN(confidence) && (
             <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 16px', background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:99, flexShrink:0 }}>
               <span style={{ fontSize:13, fontWeight:600, color:T.cream }}>{confidence}% Confidence</span>
             </div>
@@ -910,7 +883,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
             <button key={tab.id}
               className={`ns-tab${activeTab === tab.id ? ' active' : ''}`}
               onClick={() => setActiveTab(tab.id)}
-              style={{ marginBottom:-1, borderBottomLeftRadius:activeTab === tab.id ? 0 : 10, borderBottomRightRadius:activeTab === tab.id ? 0 : 10, borderBottom:activeTab === tab.id ? `1px solid ${T.bg}` : '1px solid transparent' }}
+              style={{ marginBottom:-1, borderBottomLeftRadius:activeTab===tab.id?0:10, borderBottomRightRadius:activeTab===tab.id?0:10, borderBottom:activeTab===tab.id?`1px solid ${T.bg}`:'1px solid transparent' }}
             >
               <Icon d={tab.icon} size={14} color="currentColor" />
               {tab.label}
@@ -932,7 +905,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
               <div style={{ display:'flex', gap:6, marginBottom:20, alignItems:'center', flexWrap:'wrap' }}>
                 {[['both','Both'],['image','Scan'],['editor','Editor']].map(([val, label]) => (
                   <button key={val} onClick={() => setScanEditView(val)}
-                    style={{ padding:'5px 14px', borderRadius:8, fontSize:12, fontWeight:600, fontFamily:T.font, cursor:'pointer', border:`1px solid ${scanEditView===val ? T.amber : T.border}`, background:scanEditView===val ? T.amberDim : 'transparent', color:scanEditView===val ? T.amber : T.muted, transition:'all .15s' }}>
+                    style={{ padding:'5px 14px', borderRadius:8, fontSize:12, fontWeight:600, fontFamily:T.font, cursor:'pointer', border:`1px solid ${scanEditView===val?T.amber:T.border}`, background:scanEditView===val?T.amberDim:'transparent', color:scanEditView===val?T.amber:T.muted, transition:'all .15s' }}>
                     {label}
                   </button>
                 ))}
@@ -944,7 +917,6 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
                   </button>
                 )}
               </div>
-
               {scanEditView === 'both' && (
                 <div style={{ display:'flex', gap:20, alignItems:'flex-start' }}>
                   <ImagePane imageUrl={ocrImageUrl} overlayUrl={overlayUrl} onExpand={() => setShowScanView(true)} />
@@ -961,11 +933,9 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
                   </div>
                 </div>
               )}
-
               {scanEditView === 'image' && (
                 <ImagePane imageUrl={ocrImageUrl} overlayUrl={overlayUrl} onExpand={() => setShowScanView(true)} />
               )}
-
               {scanEditView === 'editor' && (
                 <div style={{ flex:1, minWidth:0 }}>
                   <p style={{ fontSize:11, fontWeight:700, letterSpacing:1.2, textTransform:'uppercase', color:T.muted, margin:'0 0 10px', fontFamily:T.font }}>Recognized Text</p>
@@ -1021,13 +991,11 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
                   Add Card
                 </button>
               </div>
-
               {flashcardsError && (
                 <div style={{ marginBottom:12, padding:'10px 12px', borderRadius:10, border:'1px solid rgba(248,113,113,.35)', background:'rgba(248,113,113,.08)', color:'#FCA5A5', fontSize:13 }}>
                   {flashcardsError}
                 </div>
               )}
-
               {cards.length === 0 ? (
                 <div style={{ background:T.surfaceHi, border:`1px dashed ${T.borderHi}`, borderRadius:14, padding:'28px 24px', textAlign:'center', color:T.muted, marginBottom:28 }}>
                   No flashcards yet. Generate them from the OCR text or add your own card manually.
@@ -1049,40 +1017,63 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
 
           {/* Quiz */}
           {activeTab === 'quiz' && (() => {
-            const q           = quizQuestions[quizCurrent];
+            const q            = quizQuestions[quizCurrent];
             const correctCount = quizQuestions.filter((qq, i) => quizAnswers[i] === (qq.correctIndex ?? qq.correct_index ?? 0)).length;
-            const pct         = quizQuestions.length ? Math.round(correctCount / quizQuestions.length * 100) : 0;
-            const answeredAll = Object.keys(quizAnswers).length === quizQuestions.length;
-            const scoreColor  = pct >= 70 ? T.green : T.amber;
-            const scoreDimColor = pct >= 70 ? T.greenDim : T.amberDim;
-            const scoreBorderColor = pct >= 70 ? 'rgba(52,211,153,.4)' : 'rgba(245,166,35,.4)';
+            const quizPct      = quizQuestions.length ? Math.round(correctCount / quizQuestions.length * 100) : 0;
+            const answeredAll  = Object.keys(quizAnswers).length === quizQuestions.length;
+            const scoreColor   = quizPct >= 70 ? T.green : T.amber;
 
             return (
               <div key="quiz" className="ns-tab-panel">
-
-                {/* Header */}
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:20, flexWrap:'wrap' }}>
                   <p style={{ margin:0, fontSize:13, color:T.muted }}>Generate a multiple choice quiz from your scanned notes.</p>
                   <button
                     className={quizQuestions.length ? 'ns-regen' : 'ns-btn-amber'}
                     onClick={() => { setQuizAnswers({}); setQuizSubmitted(false); setQuizCurrent(0); generateQuiz(); }}
-                    disabled={quizBusy || !recognizedText.trim()}
-                    style={quizQuestions.length ? undefined : { padding:'9px 16px' }}
+                    disabled={quizBusy || !recognizedText.trim() || quizError === QUIZ_COMING_SOON}
+                    style={{
+                      ...(quizQuestions.length ? undefined : { padding:'9px 16px' }),
+                      opacity: quizError === QUIZ_COMING_SOON ? 0.4 : 1,
+                    }}
                   >
                     <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} />
                     {quizBusy ? 'Generating…' : quizQuestions.length ? 'Regenerate Quiz' : 'Generate Quiz'}
                   </button>
                 </div>
 
-                {/* Error */}
-                {quizError && (
-                  <div style={{ marginBottom:16, padding:'10px 12px', borderRadius:10, border:'1px solid rgba(248,113,113,.35)', background:'rgba(248,113,113,.08)', color:'#FCA5A5', fontSize:13 }}>
-                    {quizError}
+                {/* Coming soon state */}
+                {quizError === QUIZ_COMING_SOON && (
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:20, padding:'60px 0' }}>
+                    <div style={{ position:'relative', width:80, height:80 }}>
+                      <div style={{ position:'absolute', inset:0, borderRadius:24, background:T.surfaceHi, border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" size={32} color={T.muted} />
+                      </div>
+                      <div style={{ position:'absolute', top:-8, right:-8, width:28, height:28, borderRadius:99, background:T.amberDim, border:`1px solid rgba(245,166,35,.3)`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <Icon d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" size={14} color={T.amber} />
+                      </div>
+                    </div>
+                    <div style={{ textAlign:'center', maxWidth:320 }}>
+                      <p style={{ fontFamily:T.serif, fontSize:22, fontWeight:400, color:T.cream, margin:'0 0 8px' }}>Quiz coming soon</p>
+                      <p style={{ fontFamily:T.font, fontSize:13, color:T.muted, margin:0, lineHeight:1.7 }}>
+                        Quiz generation is currently in development. In the meantime, try the{' '}
+                        <button onClick={() => setActiveTab('flashcards')} style={{ background:'none', border:'none', cursor:'pointer', color:T.amber, fontFamily:T.font, fontSize:13, fontWeight:600, padding:0 }}>
+                          Flashcards
+                        </button>
+                        {' '}tab to study your notes.
+                      </p>
+                    </div>
                   </div>
                 )}
 
-                {/* Empty state */}
-                {quizQuestions.length === 0 && !quizBusy && (
+                {/* Generic error fallback */}
+                {quizError && quizError !== QUIZ_COMING_SOON && (
+                  <div style={{ marginBottom:16, padding:'10px 12px', borderRadius:10, border:'1px solid rgba(248,113,113,.35)', background:'rgba(248,113,113,.08)', color:'#FCA5A5', fontSize:13 }}>
+                    Something went wrong. Please try again.
+                  </div>
+                )}
+
+                {/* Default empty state */}
+                {quizQuestions.length === 0 && !quizBusy && !quizError && (
                   <div style={{ background:T.surfaceHi, border:`1px dashed ${T.borderHi}`, borderRadius:14, padding:'40px 24px', textAlign:'center', color:T.muted }}>
                     No quiz yet. Click Generate Quiz to create one from your notes.
                   </div>
@@ -1091,7 +1082,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
                 {/* Score screen */}
                 {quizQuestions.length > 0 && quizSubmitted && (
                   <div style={{ background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:14, padding:'48px 32px', textAlign:'center' }}>
-                    <div style={{ fontFamily:T.serif, fontSize:64, fontWeight:400, color:scoreColor, lineHeight:1, marginBottom:8 }}>{pct}%</div>
+                    <div style={{ fontFamily:T.serif, fontSize:64, fontWeight:400, color:scoreColor, lineHeight:1, marginBottom:8 }}>{quizPct}%</div>
                     <p style={{ fontSize:15, color:T.muted, margin:'0 0 24px' }}>{correctCount} out of {quizQuestions.length} correct</p>
                     <div style={{ display:'flex', gap:12, justifyContent:'center', marginBottom:32 }}>
                       <span style={{ padding:'8px 20px', borderRadius:99, fontSize:13, fontWeight:600, background:T.greenDim, color:T.green, border:'1px solid rgba(52,211,153,.3)' }}>{correctCount} correct</span>
@@ -1113,15 +1104,12 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
                 {/* Stepper */}
                 {quizQuestions.length > 0 && !quizSubmitted && q && (
                   <>
-                    {/* Question counter */}
                     <p style={{ fontSize:12, color:T.muted, margin:'0 0 16px', fontFamily:T.font }}>
                       Question {quizCurrent + 1} of {quizQuestions.length}
                       <span style={{ marginLeft:12, color: answeredAll ? T.green : T.muted }}>
                         · {Object.keys(quizAnswers).length} answered
                       </span>
                     </p>
-
-                    {/* Question card */}
                     <div style={{ background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:14, padding:'28px', marginBottom:20, minHeight:300, display:'flex', flexDirection:'column', gap:20 }}>
                       <p style={{ fontSize:16, fontWeight:600, color:T.cream, lineHeight:1.6, margin:0, fontFamily:T.font }}>
                         <span style={{ color:T.amber, marginRight:6 }}>{quizCurrent + 1}.</span>
@@ -1131,21 +1119,9 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
                         {(q.options || q.choices || []).map((opt, oi) => {
                           const isSelected = quizAnswers[quizCurrent] === oi;
                           return (
-                            <button
-                              key={oi}
-                              onClick={() => setQuizAnswers(prev => ({ ...prev, [quizCurrent]: oi }))}
-                              style={{
-                                display:'flex', alignItems:'center', gap:14,
-                                padding:'13px 16px', borderRadius:10,
-                                border:`1px solid ${isSelected ? 'rgba(245,166,35,.4)' : T.border}`,
-                                background: isSelected ? T.amberDim : 'transparent',
-                                color: isSelected ? T.amber : T.muted,
-                                cursor:'pointer', textAlign:'left',
-                                fontFamily:T.font, fontSize:14,
-                                transition:'all .15s',
-                              }}
-                            >
-                              <span style={{ width:26, height:26, borderRadius:'50%', border:`1.5px solid currentColor`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, flexShrink:0 }}>
+                            <button key={oi} onClick={() => setQuizAnswers(prev => ({ ...prev, [quizCurrent]: oi }))}
+                              style={{ display:'flex', alignItems:'center', gap:14, padding:'13px 16px', borderRadius:10, border:`1px solid ${isSelected?'rgba(245,166,35,.4)':T.border}`, background:isSelected?T.amberDim:'transparent', color:isSelected?T.amber:T.muted, cursor:'pointer', textAlign:'left', fontFamily:T.font, fontSize:14, transition:'all .15s' }}>
+                              <span style={{ width:26, height:26, borderRadius:'50%', border:'1.5px solid currentColor', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, flexShrink:0 }}>
                                 {String.fromCharCode(65 + oi)}
                               </span>
                               {opt}
@@ -1154,31 +1130,16 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
                         })}
                       </div>
                     </div>
-
-                    {/* Nav row */}
                     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                      <button
-                        className="ns-btn-ghost"
-                        onClick={() => setQuizCurrent(c => c - 1)}
-                        disabled={quizCurrent === 0}
-                        style={{ opacity: quizCurrent === 0 ? 0.3 : 1 }}
-                      >
-                        <Icon d="M15 19l-7-7 7-7" size={13} />
-                        Previous
+                      <button className="ns-btn-ghost" onClick={() => setQuizCurrent(c => c - 1)} disabled={quizCurrent === 0} style={{ opacity: quizCurrent === 0 ? 0.3 : 1 }}>
+                        <Icon d="M15 19l-7-7 7-7" size={13} /> Previous
                       </button>
-
                       {quizCurrent < quizQuestions.length - 1 ? (
                         <button className="ns-btn-amber" onClick={() => setQuizCurrent(c => c + 1)}>
-                          Next
-                          <Icon d="M9 5l7 7-7 7" size={13} color="#0E1117" />
+                          Next <Icon d="M9 5l7 7-7 7" size={13} color="#0E1117" />
                         </button>
                       ) : (
-                        <button
-                          className="ns-btn-amber"
-                          onClick={() => setQuizSubmitted(true)}
-                          disabled={!answeredAll}
-                          style={{ opacity: !answeredAll ? 0.4 : 1 }}
-                        >
+                        <button className="ns-btn-amber" onClick={() => setQuizSubmitted(true)} disabled={!answeredAll} style={{ opacity: !answeredAll ? 0.4 : 1 }}>
                           <Icon d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" size={13} color="#0E1117" />
                           Submit Quiz
                         </button>
@@ -1186,7 +1147,6 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
                     </div>
                   </>
                 )}
-
               </div>
             );
           })()}
@@ -1198,7 +1158,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
         <CardModal
           onSave={async (q, a) => {
             const newId = makeCardId();
-            await updateCards((prev) => [...prev, { id: newId, cardId: newId, question: q, answer: a, learned: false }], { persist: true });
+            await updateCards((prev) => [...prev, { id:newId, cardId:newId, question:q, answer:a, learned:false }], { persist:true });
             setShowAdd(false);
           }}
           onClose={() => setShowAdd(false)}
@@ -1209,10 +1169,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
         <CardModal
           initialValues={{ question: editingCard.question, answer: editingCard.answer }}
           onSave={async (q, a) => {
-            await updateCards(
-              prev => prev.map(c => c.id === editingCard.id ? { ...c, question: q, answer: a } : c),
-              { persist: true }
-            );
+            await updateCards(prev => prev.map(c => c.id === editingCard.id ? { ...c, question:q, answer:a } : c), { persist:true });
             setEditingCard(null);
           }}
           onClose={() => setEditingCard(null)}

@@ -62,7 +62,7 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 app.mount("/ocr_static", StaticFiles(directory=str(OUTPUT_DIR)), name="ocr_static")
 
 # -----------------------------------------------------------------------------
-# PaddleOCR — lazy loading (same as teammate's structure)
+# PaddleOCR — lazy loading
 # -----------------------------------------------------------------------------
 
 OCR_CFG_PATH  = BASE_DIR / "PaddleOCR.yaml"
@@ -84,9 +84,46 @@ def get_ocr():
 
 DATALAB_API_KEY         = os.getenv("CHANDRA_API_KEY", "").strip()
 DATALAB_ENDPOINT        = "https://www.datalab.to/api/v1/convert"
-CHANDRA_MODE            = os.getenv("CHANDRA_MODE", "fast").strip().lower()
+CHANDRA_MODE            = os.getenv("CHANDRA_MODE", "accurate").strip().lower()
 CHANDRA_POLL_INTERVAL   = float(os.getenv("CHANDRA_POLL_INTERVAL", "2"))
 CHANDRA_TIMEOUT_SECONDS = float(os.getenv("CHANDRA_TIMEOUT_SECONDS", "120"))
+
+
+# =============================================================================
+# Confidence estimation
+# =============================================================================
+
+def estimate_confidence(markdown: str) -> float:
+    """
+    Estimate OCR confidence from extracted text quality when Datalab does not
+    return parse_quality_score. Returns a 0.0–1.0 float.
+
+    Three signals are blended:
+      1. Character quality  — ratio of printable/expected chars vs garbage
+      2. Word coherence     — ratio of plausible words (2–20 chars, has letters)
+      3. Density bonus      — more words = more of the scan was readable
+    """
+    if not markdown or not markdown.strip():
+        return 0.0
+
+    text = markdown.strip()
+
+    # 1. Character quality
+    total_chars = len(text)
+    good_chars  = len(re.findall(r'[a-zA-Z0-9\s\.,!?;:\'\"\-\(\)]', text))
+    char_score  = good_chars / total_chars if total_chars else 0.0
+
+    # 2. Word coherence
+    words      = re.findall(r'\b\w+\b', text)
+    plausible  = [w for w in words if 2 <= len(w) <= 20 and re.search(r'[a-zA-Z]', w)]
+    word_score = len(plausible) / len(words) if words else 0.0
+
+    # 3. Density bonus (capped at 1.0 once 100+ words extracted)
+    density_score = min(len(words) / 100, 1.0)
+
+    # Weighted blend
+    score = (char_score * 0.5) + (word_score * 0.35) + (density_score * 0.15)
+    return round(min(max(score, 0.0), 1.0), 4)
 
 
 # =============================================================================
@@ -111,7 +148,9 @@ def markdown_to_text(markdown: str) -> str:
 def run_chandra_api(input_path: Path) -> dict:
     """
     Call the Datalab hosted Chandra API.
-    Returns a dict with keys: markdown, metadata, page_count, quality_score
+    Returns a dict with keys: markdown, metadata, page_count, quality_score.
+    quality_score is always a 0.0–1.0 float — real from Datalab when available,
+    estimated from text quality otherwise.
     Raises RuntimeError on failure.
     """
     if not DATALAB_API_KEY:
@@ -158,13 +197,24 @@ def run_chandra_api(input_path: Path) -> dict:
         status = result.get("status", "")
 
         if status == "complete":
+            markdown  = result.get("markdown", "")
+            parse_q   = result.get("parse_quality_score")
+
+            # Use real Datalab score when available (0–5 scale → 0–1),
+            # otherwise estimate from extracted text quality.
+            if parse_q is not None:
+                quality_score = round(parse_q / 5, 4)
+                print(f"[Chandra] parse_quality_score from Datalab: {parse_q} → {quality_score}")
+            else:
+                quality_score = estimate_confidence(markdown)
+                print(f"[Chandra] No parse_quality_score returned — estimated: {quality_score}")
+
             return {
-                "markdown":   result.get("markdown", ""),
-                "metadata":   result.get("metadata", {}),
-                "page_count": result.get("page_count"),
-                # parse_quality_score is 0-5, convert to 0-1 to match paddle format
-                "quality_score": round(result["parse_quality_score"] / 5, 4)
-                if result.get("parse_quality_score") is not None else None,
+                "markdown":          markdown,
+                "metadata":          result.get("metadata", {}),
+                "page_count":        result.get("page_count"),
+                "quality_score":     quality_score,
+                "confidence_source": "datalab" if parse_q is not None else "estimated",
             }
 
         if status == "failed":
@@ -219,7 +269,6 @@ async def run_ocr(
     # PaddleOCR path
     # ------------------------------------------------------------------
     if engine == "paddle":
-        # Paddle is disabled in cloud deployment (not enough RAM on free tier)
         if os.getenv("OCR_PADDLE_DISABLED") == "1":
             return {
                 "error": "PaddleOCR is not available in cloud deployment. Please use Chandra engine.",
@@ -262,8 +311,8 @@ async def run_ocr(
             "items":        items,
             "original_url": original_url,
             "debug": {
-                "mode":     "ocr_preprocessed",
-                "raw_path": str(raw_path),
+                "mode":      "ocr_preprocessed",
+                "raw_path":  str(raw_path),
                 "used_path": str(clean_path),
             },
         }
@@ -298,13 +347,14 @@ async def run_ocr(
             "metadata":     metadata,
             "confidence":   result.get("quality_score"),
             "debug": {
-                "mode":         "chandra_datalab_hosted_api",
-                "raw_path":     str(raw_path),
-                "chandra_mode": CHANDRA_MODE,
-                "page_count":   result.get("page_count"),
+                "mode":              "chandra_datalab_hosted_api",
+                "raw_path":          str(raw_path),
+                "chandra_mode":      CHANDRA_MODE,
+                "page_count":        result.get("page_count"),
+                "confidence_score":  result.get("quality_score"),
+                "confidence_source": result.get("confidence_source"),
             },
         }
-
 
 @app.post("/ocr_api/ocr_v5")
 async def run_ocr_v5(
@@ -335,7 +385,6 @@ async def run_ocr_v5(
     # PaddleOCR path
     # ------------------------------------------------------------------
     if engine == "paddle":
-        # Paddle is disabled in cloud deployment (not enough RAM on free tier)
         if os.getenv("OCR_PADDLE_DISABLED") == "1":
             return {
                 "error": "PaddleOCR is not available in cloud deployment. Please use Chandra engine.",
@@ -358,7 +407,7 @@ async def run_ocr_v5(
         except RuntimeError as e:
             raise HTTPException(status_code=503, detail=str(e))
 
-        page   = ocr_client.predict(
+        page = ocr_client.predict(
             str(norm_path),
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
@@ -405,8 +454,8 @@ async def run_ocr_v5(
             "image_size":   image_size,
             "overlay_url":  f"/ocr_static/{overlay_name}",
             "debug": {
-                "mode":     "pp-ocrv5_block_linked",
-                "raw_path": str(raw_path),
+                "mode":      "pp-ocrv5_block_linked",
+                "raw_path":  str(raw_path),
                 "used_path": str(norm_path),
             },
         }
@@ -441,9 +490,11 @@ async def run_ocr_v5(
             "metadata":     metadata,
             "confidence":   result.get("quality_score"),
             "debug": {
-                "mode":         "chandra_datalab_hosted_api",
-                "raw_path":     str(raw_path),
-                "chandra_mode": CHANDRA_MODE,
-                "page_count":   result.get("page_count"),
+                "mode":              "chandra_datalab_hosted_api",
+                "raw_path":          str(raw_path),
+                "chandra_mode":      CHANDRA_MODE,
+                "page_count":        result.get("page_count"),
+                "confidence_score":  result.get("quality_score"),
+                "confidence_source": result.get("confidence_source"),
             },
         }

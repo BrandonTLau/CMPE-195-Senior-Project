@@ -35,6 +35,7 @@ const SignUp = ({ onBack, onSignUpSuccess }) => {
   const [showPassword,        setShowPassword]        = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error,               setError]               = useState('');
+  const [isLoading,           setIsLoading]           = useState(false);
 
   useEffect(() => {
     const body = document.body;
@@ -56,7 +57,10 @@ const SignUp = ({ onBack, onSignUpSuccess }) => {
     document.head.appendChild(link);
 
     const style = document.createElement('style');
-    style.textContent = `@keyframes fadeUp { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }`;
+    style.textContent = `
+      @keyframes fadeUp { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
+      @keyframes spin    { to   { transform: rotate(360deg) } }
+    `;
     document.head.appendChild(style);
 
     return () => {
@@ -74,61 +78,40 @@ const SignUp = ({ onBack, onSignUpSuccess }) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // COMMENTED OUT INITIAL SIGNUP HANDLER; MODIFIED VERSION BELOW
-  /* const handleSignUp = (e) => {
-    e.preventDefault();
-    setError("");
-
-    // Validation
-    if (!formData.fullName.trim()) {
-      setError("Please enter your full name.");
-      return;
-    }
-
-    if (!formData.email.trim()) {
-      setError("Please enter your email address.");
-      return;
-    }
-
-    if (formData.password.length < 8) {
-      setError("Password must be at least 8 characters long.");
-      return;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-
-    // Mock success
-    onSignUpSuccess();
-  }; */
-
-  // MODIFIED SIGNUP HANDLER: NOW TALKS TO BACKEND
   const handleSignUp = async (e) => {
     e.preventDefault();
     setError('');
-    if (!formData.fullName.trim()) { setError('Please enter your full name.'); return; }
-    if (!formData.email.trim()) { setError('Please enter your email address.'); return; }
-    if (formData.password.length < 8) { setError('Password must be at least 8 characters long.'); return; }
-    if (formData.password !== formData.confirmPassword) { setError('Passwords do not match.'); return; }
+    if (!formData.fullName.trim())                      { setError('Please enter your full name.');                  return; }
+    if (!formData.email.trim())                         { setError('Please enter your email address.');              return; }
+    if (formData.password.length < 8)                  { setError('Password must be at least 8 characters long.'); return; }
+    if (formData.password !== formData.confirmPassword) { setError('Passwords do not match.');                      return; }
 
+    setIsLoading(true);
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName: formData.fullName,
-          email:    formData.email,
-          password: formData.password,
+      // Promise.all guarantees the loader is visible for at least 2s,
+      // regardless of how quickly the network request resolves.
+      const [res] = await Promise.all([
+        fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fullName: formData.fullName,
+            email:    formData.email,
+            password: formData.password,
+          }),
         }),
-      });
+        new Promise(resolve => setTimeout(resolve, 2000)),
+      ]);
       const data = await res.json();
       if (!res.ok) { setError(data?.msg || 'Registration failed.'); return; }
-      if (data?.token) sessionStorage.setItem('token', data.token);
-      onSignUpSuccess();
+      // Token intentionally NOT stored — storing it would let the parent
+      // detect an active session and skip straight to the dashboard.
+      // The user should log in manually after signing up.
+      onBack(); // redirect to login
     } catch (err) {
       setError('Could not connect to server. Is the backend running on port 5000?');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -149,6 +132,30 @@ const SignUp = ({ onBack, onSignUpSuccess }) => {
 
   return (
     <div style={{ display:'flex', minHeight:'100vh', width:'100%', overflow:'hidden', fontFamily:T.font, background:T.bg }}>
+
+      {/* ── Loading overlay ── */}
+      {isLoading && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 999,
+          background: 'rgba(14,17,23,0.85)', backdropFilter: 'blur(6px)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 20,
+        }}>
+          <svg width={48} height={48} viewBox="0 0 48 48" fill="none"
+            style={{ animation: 'spin 0.85s linear infinite' }}>
+            <circle cx={24} cy={24} r={20} stroke="rgba(255,255,255,0.08)" strokeWidth={4} />
+            <path d="M24 4a20 20 0 0 1 20 20" stroke={T.amber} strokeWidth={4} strokeLinecap="round" />
+          </svg>
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontFamily: T.serif, fontSize: 22, color: T.cream, margin: '0 0 6px' }}>
+              Creating your account…
+            </p>
+            <p style={{ fontFamily: T.font, fontSize: 13, color: T.muted, margin: 0 }}>
+              This will only take a moment
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Left branding panel ── */}
       <div style={{ flex:1, background:T.surface, borderRight:`1px solid ${T.border}`, padding:'48px',
@@ -172,8 +179,6 @@ const SignUp = ({ onBack, onSignUpSuccess }) => {
           <p style={{ fontFamily:T.font, fontSize:15, color:T.muted, lineHeight:1.7, margin:'0 0 40px' }}>
             Create your account and start converting handwritten notes to digital text instantly.
           </p>
-
-          
         </div>
       </div>
 
@@ -258,12 +263,13 @@ const SignUp = ({ onBack, onSignUpSuccess }) => {
             )}
 
             {/* Submit */}
-            <button type="submit"
+            <button type="submit" disabled={isLoading}
               style={{ background:T.amber, border:'none', color:'#0E1117', borderRadius:10, padding:'12px',
-                fontFamily:T.font, fontSize:14, fontWeight:700, cursor:'pointer', width:'100%',
+                fontFamily:T.font, fontSize:14, fontWeight:700, cursor: isLoading ? 'not-allowed' : 'pointer',
+                opacity: isLoading ? 0.6 : 1, width:'100%',
                 transition:'opacity .2s, transform .15s', marginTop:4 }}
-              onMouseEnter={e => { e.currentTarget.style.opacity='.88'; e.currentTarget.style.transform='translateY(-1px)'; }}
-              onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='none'; }}>
+              onMouseEnter={e => { if (!isLoading) { e.currentTarget.style.opacity='.88'; e.currentTarget.style.transform='translateY(-1px)'; }}}
+              onMouseLeave={e => { e.currentTarget.style.opacity= isLoading ? '0.6' : '1'; e.currentTarget.style.transform='none'; }}>
               Create account
             </button>
           </form>
