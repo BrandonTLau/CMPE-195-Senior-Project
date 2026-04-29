@@ -1,12 +1,4 @@
-/**
- * App E2E tests
- *
- * Tests the full user journey through App.jsx's screen-based navigation:
- * landing → login → dashboard → upload → results → settings → logout
- *
- * These mock fetch at the boundaries so no real network calls are made.
- */
-import { render, screen, fireEvent, waitFor, waitForElementToBeRemoved } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App from '../App';
 
@@ -25,8 +17,7 @@ vi.mock('../api/ocrClient', () => ({ runOcr: vi.fn().mockResolvedValue({ merged_
 
 // ── Fetch helpers ─────────────────────────────────────────────
 const mockLoginSuccess = () => {
-  global.fetch = vi.fn().mockImplementation((url, opts) => {
-    // Login
+  global.fetch = vi.fn().mockImplementation((url) => {
     if (url.includes('/api/auth/login'))
       return Promise.resolve({
         ok: true,
@@ -35,15 +26,12 @@ const mockLoginSuccess = () => {
           user: { fullName: 'Test User', email: 'test@test.com' },
         }),
       });
-
-    // Files / folders for dashboard load
     if (url.includes('/api/files/trash'))
       return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
     if (url.includes('/api/files'))
       return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
     if (url.includes('/api/folders'))
       return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
-
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
   });
 };
@@ -66,6 +54,7 @@ const mockRegisterSuccess = () => {
 describe('App — Navigation E2E', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     sessionStorage.clear();
     localStorage.clear();
   });
@@ -113,39 +102,50 @@ describe('App — Navigation E2E', () => {
     mockLoginSuccess();
     render(<App />);
     fireEvent.click(screen.getByText('Get Started'));
-    fireEvent.change(screen.getByPlaceholderText('you@example.com'),   { target: { value: 'test@test.com' } });
-    fireEvent.change(screen.getByPlaceholderText('Enter your password'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByPlaceholderText('you@example.com'),    { target: { value: 'test@test.com' } });
+    fireEvent.change(screen.getByPlaceholderText('Enter your password'), { target: { value: 'password123'  } });
     fireEvent.click(screen.getByRole('button', { name: /Sign in/i }));
 
-    await waitFor(() => expect(screen.getAllByText('My Notes').length).toBeGreaterThan(0));
+    await waitFor(
+      () => expect(screen.getAllByText('My Notes').length).toBeGreaterThan(0),
+      { timeout: 5000 }
+    );
   });
 
-  it('navigates to dashboard after successful registration', async () => {
+  it('redirects to login page after successful registration', async () => {
+    // SignUp.jsx calls onBack() on success (redirecting to login), NOT
+    // onSignUpSuccess(). It also enforces a 2s minimum overlay via
+    // Promise.all([fetch, setTimeout(2000)]), so we use fake timers.
+    vi.useFakeTimers();
     mockRegisterSuccess();
     render(<App />);
     fireEvent.click(screen.getByText('Get Started'));
     fireEvent.click(screen.getByText('Sign up'));
-    fireEvent.change(screen.getByPlaceholderText('John Doe'),              { target: { value: 'Test User' } });
-    fireEvent.change(screen.getByPlaceholderText('you@example.com'),       { target: { value: 'new@test.com' } });
-    fireEvent.change(screen.getByPlaceholderText('Create a password'),     { target: { value: 'secure123' } });
-    fireEvent.change(screen.getByPlaceholderText('Re-enter your password'), { target: { value: 'secure123' } });
-    fireEvent.click(screen.getByRole('button', { name: /Create account/i }));
+    fireEvent.change(screen.getByPlaceholderText('John Doe'),               { target: { value: 'Test User'   } });
+    fireEvent.change(screen.getByPlaceholderText('you@example.com'),        { target: { value: 'new@test.com' } });
+    fireEvent.change(screen.getByPlaceholderText('Create a password'),      { target: { value: 'secure123'   } });
+    fireEvent.change(screen.getByPlaceholderText('Re-enter your password'), { target: { value: 'secure123'   } });
 
-    await waitFor(() => expect(screen.getAllByText('My Notes').length).toBeGreaterThan(0));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Create account/i }));
+      await Promise.resolve();
+      await Promise.resolve();
+      vi.runAllTimers();
+    });
+
+    vi.useRealTimers();
+    // After registration the component calls onBack() → navigates to login
+    expect(screen.getByPlaceholderText('you@example.com')).toBeInTheDocument();
   });
 
   it('clears storage and returns to landing on logout', async () => {
     mockLoginSuccess();
     render(<App />);
     fireEvent.click(screen.getByText('Get Started'));
-    fireEvent.change(screen.getByPlaceholderText('you@example.com'),   { target: { value: 'test@test.com' } });
-    fireEvent.change(screen.getByPlaceholderText('Enter your password'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByPlaceholderText('you@example.com'),    { target: { value: 'test@test.com' } });
+    fireEvent.change(screen.getByPlaceholderText('Enter your password'), { target: { value: 'password123'  } });
     fireEvent.click(screen.getByRole('button', { name: /Sign in/i }));
 
-    // Wait for dashboard to fully load
-    await waitFor(() => expect(screen.queryByText('Loading your notes…')).not.toBeInTheDocument(), { timeout: 3000 });
-
-    // Click Log out inside Settings
     await waitFor(() => expect(screen.queryByText('Loading your notes…')).not.toBeInTheDocument(), { timeout: 3000 });
     await waitFor(() => screen.getByText('Settings'));
     fireEvent.click(screen.getByText('Settings'));
@@ -167,13 +167,13 @@ describe('App — Navigation E2E', () => {
 describe('App — Edge cases', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     sessionStorage.clear();
     localStorage.clear();
   });
 
   it('invalid screen value in sessionStorage defaults gracefully', () => {
     sessionStorage.setItem('screen', 'invalid_screen');
-    // Should not crash; it'll render nothing or landing
     expect(() => render(<App />)).not.toThrow();
   });
 

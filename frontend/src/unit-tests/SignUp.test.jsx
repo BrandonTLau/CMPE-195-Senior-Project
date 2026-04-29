@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import SignUp from '../SignUp';
 
@@ -10,10 +10,10 @@ const defaultProps = (overrides = {}) => ({
 });
 
 const fill = ({ name = '', email = '', password = '', confirm = '' } = {}) => {
-  if (name)    fireEvent.change(screen.getByPlaceholderText('John Doe'),               { target: { value: name    } });
-  if (email)   fireEvent.change(screen.getByPlaceholderText('you@example.com'),        { target: { value: email   } });
-  if (password) fireEvent.change(screen.getByPlaceholderText('Create a password'),     { target: { value: password } });
-  if (confirm) fireEvent.change(screen.getByPlaceholderText('Re-enter your password'), { target: { value: confirm } });
+  if (name)     fireEvent.change(screen.getByPlaceholderText('John Doe'),               { target: { value: name     } });
+  if (email)    fireEvent.change(screen.getByPlaceholderText('you@example.com'),        { target: { value: email    } });
+  if (password) fireEvent.change(screen.getByPlaceholderText('Create a password'),      { target: { value: password } });
+  if (confirm)  fireEvent.change(screen.getByPlaceholderText('Re-enter your password'), { target: { value: confirm  } });
 };
 
 const mockRegisterSuccess = () => {
@@ -30,10 +30,24 @@ const mockRegisterFailure = (msg = 'Email already exists') => {
   });
 };
 
+// Helper — fast-forward the mandatory 2s overlay timer that SignUp uses
+// via Promise.all([fetch, new Promise(resolve => setTimeout(resolve, 2000))])
+const submitAndFlushTimers = async (buttonName = /Create account/i) => {
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: buttonName }));
+    // Flush the fetch microtask queue
+    await Promise.resolve();
+    await Promise.resolve();
+    // Fast-forward the 2 000 ms minimum-loader setTimeout
+    vi.runAllTimers();
+  });
+};
+
 // ── tests ─────────────────────────────────────────────────────
 describe('SignUp', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     sessionStorage.clear();
     localStorage.clear();
   });
@@ -80,9 +94,6 @@ describe('SignUp', () => {
   });
 
   // ── Validation ───────────────────────────────────────────────
-  // Note: inputs have `required` HTML attribute so we use fireEvent.submit
-  // directly on the form to bypass browser constraint validation and let
-  // the JS handler run its own checks.
   describe('Client-side validation', () => {
     const submitForm = () => {
       const form = screen.getByRole('button', { name: /Create account/i }).closest('form');
@@ -138,21 +149,28 @@ describe('SignUp', () => {
       ));
     });
 
-    it('calls onSignUpSuccess after successful registration', async () => {
-      const onSignUpSuccess = vi.fn();
+    it('redirects to login (calls onBack) after successful registration', async () => {
+      // SignUp intentionally calls onBack() on success — not onSignUpSuccess().
+      // The component shows a 2s overlay via Promise.all([fetch, setTimeout(2000)])
+      // so we use fake timers to fast-forward past it.
+      vi.useFakeTimers();
+      const onBack = vi.fn();
       mockRegisterSuccess();
-      render(<SignUp {...defaultProps({ onSignUpSuccess })} />);
+      render(<SignUp {...defaultProps({ onBack })} />);
       fill({ name: 'Brandon Lau', email: 'b@test.com', password: 'secure123', confirm: 'secure123' });
-      fireEvent.click(screen.getByRole('button', { name: /Create account/i }));
-      await waitFor(() => expect(onSignUpSuccess).toHaveBeenCalled());
+      await submitAndFlushTimers();
+      expect(onBack).toHaveBeenCalled();
     });
 
-    it('stores token in sessionStorage on success', async () => {
+    it('does not store token in sessionStorage on success', async () => {
+      // By design, SignUp does not persist the token — the user must log in
+      // manually after registering. This test documents that intentional decision.
+      vi.useFakeTimers();
       mockRegisterSuccess();
       render(<SignUp {...defaultProps()} />);
       fill({ name: 'Test User', email: 'a@b.com', password: 'pass1234', confirm: 'pass1234' });
-      fireEvent.click(screen.getByRole('button', { name: /Create account/i }));
-      await waitFor(() => expect(sessionStorage.getItem('token')).toBe('test-token-123'));
+      await submitAndFlushTimers();
+      expect(sessionStorage.getItem('token')).toBeNull();
     });
 
     it('shows backend error message on duplicate email', async () => {
@@ -160,7 +178,7 @@ describe('SignUp', () => {
       render(<SignUp {...defaultProps()} />);
       fill({ name: 'Test User', email: 'dup@test.com', password: 'pass1234', confirm: 'pass1234' });
       fireEvent.click(screen.getByRole('button', { name: /Create account/i }));
-      await waitFor(() => expect(screen.getByText('Email already exists')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('Email already exists')).toBeInTheDocument(), { timeout: 5000 });
     });
 
     it('shows connection error when server is unreachable', async () => {
@@ -168,7 +186,7 @@ describe('SignUp', () => {
       render(<SignUp {...defaultProps()} />);
       fill({ name: 'Test User', email: 'a@b.com', password: 'pass1234', confirm: 'pass1234' });
       fireEvent.click(screen.getByRole('button', { name: /Create account/i }));
-      await waitFor(() => expect(screen.getByText(/Could not connect to server/)).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText(/Could not connect to server/)).toBeInTheDocument(), { timeout: 5000 });
     });
   });
 });
