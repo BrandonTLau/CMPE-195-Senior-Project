@@ -34,6 +34,7 @@ function App() {
         <LandingPage
           onStart={() => navigate("login")}
           onSignIn={() => navigate("login")}
+          onSignUp={() => navigate("signup")}
         />
       )}
 

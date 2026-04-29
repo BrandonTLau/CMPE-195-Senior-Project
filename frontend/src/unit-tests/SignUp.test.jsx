@@ -30,16 +30,16 @@ const mockRegisterFailure = (msg = 'Email already exists') => {
   });
 };
 
-// Helper — fast-forward the mandatory 2s overlay timer that SignUp uses
-// via Promise.all([fetch, new Promise(resolve => setTimeout(resolve, 2000))])
-const submitAndFlushTimers = async (buttonName = /Create account/i) => {
+// Helper — advances past both the 2000ms loading timer and the
+// 2500ms onBack timer using advanceTimersByTimeAsync which correctly
+// flushes promises alongside each timer step.
+const submitAndFlushTimers = async () => {
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: buttonName }));
-    // Flush the fetch microtask queue
-    await Promise.resolve();
-    await Promise.resolve();
-    // Fast-forward the 2 000 ms minimum-loader setTimeout
-    vi.runAllTimers();
+    fireEvent.click(screen.getByRole('button', { name: /Create account/i }));
+    // Advance past the 2000ms loading Promise.all timer
+    await vi.advanceTimersByTimeAsync(2000);
+    // Advance past the 2500ms onBack timer
+    await vi.advanceTimersByTimeAsync(2500);
   });
 };
 
@@ -149,10 +149,27 @@ describe('SignUp', () => {
       ));
     });
 
-    it('redirects to login (calls onBack) after successful registration', async () => {
-      // SignUp intentionally calls onBack() on success — not onSignUpSuccess().
-      // The component shows a 2s overlay via Promise.all([fetch, setTimeout(2000)])
-      // so we use fake timers to fast-forward past it.
+    it('shows success screen after registration', async () => {
+      // Advance past the 2000ms loading Promise.all timer to reveal
+      // the success screen. Uses async variant to flush promises too.
+      vi.useFakeTimers();
+      mockRegisterSuccess();
+      render(<SignUp {...defaultProps()} />);
+      fill({ name: 'Brandon Lau', email: 'b@test.com', password: 'secure123', confirm: 'secure123' });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /Create account/i }));
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(screen.getByText('Account created!')).toBeInTheDocument();
+      expect(screen.getByText('Redirecting you to sign in…')).toBeInTheDocument();
+    });
+
+    it('redirects to login (calls onBack) after success screen', async () => {
+      // Advance past both the 2000ms loading timer and the 2500ms
+      // onBack timer. advanceTimersByTimeAsync correctly flushes
+      // promises between each step so the second timer registers.
       vi.useFakeTimers();
       const onBack = vi.fn();
       mockRegisterSuccess();
@@ -163,8 +180,8 @@ describe('SignUp', () => {
     });
 
     it('does not store token in sessionStorage on success', async () => {
-      // By design, SignUp does not persist the token — the user must log in
-      // manually after registering. This test documents that intentional decision.
+      // By design, SignUp does not persist the token — the user must
+      // log in manually after registering.
       vi.useFakeTimers();
       mockRegisterSuccess();
       render(<SignUp {...defaultProps()} />);
