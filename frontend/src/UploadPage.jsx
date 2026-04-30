@@ -84,24 +84,10 @@ styleEl.textContent = `
   @keyframes spin    { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
   @keyframes float   { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-8px) } }
   @keyframes stepIn  { from { opacity:0; transform:translateX(-8px) } to { opacity:1; transform:translateX(0) } }
-  @keyframes errorIn { from { opacity:0; transform:scale(0.96) translateY(12px) } to { opacity:1; transform:scale(1) translateY(0) } }
 `;
 const existingStyle = document.head.querySelector('#up-styles');
 if (existingStyle) existingStyle.remove();
 document.head.appendChild(styleEl);
-
-
-const MAX_FILE_MB    = 50;
-const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
-
-const getTimeoutMs = (fileSizeMB) => {
-  if (fileSizeMB > 25) return 90000;
-  if (fileSizeMB > 10) return 60000;
-  return 30000;
-};
-
-const getToken = () =>
-  localStorage.getItem('token') || sessionStorage.getItem('token');
 
 const Icon = ({ d, size = 18, color = 'currentColor' }) => (
   <svg width={size} height={size} fill="none" stroke={color} viewBox="0 0 24 24" style={{ flexShrink:0 }}>
@@ -145,8 +131,6 @@ const StepRow = ({ label, status }) => {
 
 const OCR_ENGINE = 'chandra';
 
-const STEPS_RESET = { upload:'pending', preprocess:'pending', ocr:'pending', results:'pending' };
-
 const UploadPage = ({ onBack, onProcess }) => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [dragActive,    setDragActive]    = useState(false);
@@ -154,35 +138,24 @@ const UploadPage = ({ onBack, onProcess }) => {
   const [error,         setError]         = useState('');
   const [timedOut,      setTimedOut]      = useState(false);
 
-  const [steps,       setSteps]       = useState(STEPS_RESET);
+  const [steps, setSteps] = useState({
+    upload:    'pending',
+    preprocess:'pending',
+    ocr:       'pending',
+    results:   'pending',
+  });
   const [showOverlay, setShowOverlay] = useState(false);
 
   const setStep = (key, status) =>
     setSteps(prev => ({ ...prev, [key]: status }));
 
-  const resetOverlay = () => {
-    setShowOverlay(false);
-    setTimedOut(false);
-    setSteps(STEPS_RESET);
-  };
-
-  const parseFiles = (files) => {
-    const results = Array.from(files).slice(0, 1).map((file) => {
-      if (file.size > MAX_FILE_BYTES) {
-        setError(`File is too large. Maximum size is ${MAX_FILE_MB}MB.`);
-        return null;
-      }
-      return {
-        file,
-        name: file.name,
-        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-        type: file.type.startsWith('image/') ? 'Image' : file.type === 'application/pdf' ? 'PDF' : 'Unknown',
-      };
-    }).filter(Boolean);
-
-    if (results.length > 0) setError('');
-    return results;
-  };
+  const parseFiles = (files) =>
+    Array.from(files).slice(0, 1).map((file) => ({
+      file,
+      name: file.name,
+      size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+      type: file.type.startsWith('image/') ? 'Image' : file.type === 'application/pdf' ? 'PDF' : 'Unknown',
+    }));
 
   const handleFileUpload = (e) =>
     setUploadedFiles(parseFiles(e.target.files));
@@ -200,15 +173,19 @@ const UploadPage = ({ onBack, onProcess }) => {
       setUploadedFiles(parseFiles(e.dataTransfer.files));
   };
 
-  const removeFile = () => { setUploadedFiles([]); setError(''); };
+  const removeFile = () => setUploadedFiles([]);
 
   const uploadOne = async (fileObj) => {
-    const form = new FormData();
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    const form  = new FormData();
     form.append('file', fileObj.file);
+    const headers = token
+      ? { 'x-auth-token': token, Authorization: `Bearer ${token}` }
+      : {};
 
     const res = await fetch('/api/files/upload', {
       method: 'POST',
-      headers: { 'x-auth-token': getToken() || '' },
+      headers,
       body: form,
     });
 
@@ -228,148 +205,105 @@ const UploadPage = ({ onBack, onProcess }) => {
     return data;
   };
 
-  const deleteOrphanedUpload = (fileId) => {
-    if (!fileId) return;
-    fetch(`/api/files/${fileId}`, {
-      method: 'DELETE',
-      headers: { 'x-auth-token': getToken() || '' },
-    }).catch(err => console.warn('Failed to clean up timed-out upload:', err));
+  // Shared helper — runs OCR and writes all sessionStorage keys
+  const runOcrAndStore = async (file) => {
+    const ocrData = await runOcr(file, OCR_ENGINE);
+    console.log('OCR response:', ocrData);
+
+    const ocrBase   = import.meta.env.VITE_OCR_URL || 'http://localhost:8000';
+    const prefixUrl = (url) => url ? (url.startsWith('http') ? url : `${ocrBase}${url}`) : '';
+
+    const rawText     = ocrData?.merged_text || ocrData?.text || '';
+    const displayText = marked(rawText);
+
+    const firstLine = rawText.split('\n').map(l => l.trim()).find(l => l.length > 2) || '';
+    const autoTitle = firstLine.replace(/[#*_`>|-]/g, '').trim().slice(0, 60);
+    if (autoTitle) sessionStorage.setItem('lastOcrAutoTitle', autoTitle);
+
+    sessionStorage.setItem('lastOcrEngine',     OCR_ENGINE);
+    sessionStorage.setItem('lastOcrOverlayUrl', prefixUrl(ocrData?.overlay_url));
+    sessionStorage.setItem('lastOcrMergedText', displayText);
+    sessionStorage.setItem('lastOcrIsHtml',     'true');
+    sessionStorage.setItem('lastOcrBlocks',     JSON.stringify(ocrData?.blocks   || []));
+    sessionStorage.setItem('lastOcrImageUrl',   prefixUrl(ocrData?.image_url || ocrData?.original_url));
+    sessionStorage.setItem('lastOcrImageSize',  JSON.stringify(ocrData?.image_size || [0, 0]));
+
+    let avgConfidence = null;
+    if (ocrData?.confidence != null && !isNaN(Number(ocrData.confidence))) {
+      avgConfidence = Math.round(Number(ocrData.confidence) * 100);
+    }
+    if (avgConfidence !== null) {
+      sessionStorage.setItem('lastOcrConfidence', String(avgConfidence));
+    } else {
+      sessionStorage.removeItem('lastOcrConfidence');
+    }
   };
 
-  const processNotes = async (abortedRef, uploadedIdRef) => {
-    const bail = () => abortedRef.current;
+  const clearOcrStorage = () => {
+    sessionStorage.removeItem('lastOcrEngine');
+    sessionStorage.removeItem('lastOcrOverlayUrl');
+    sessionStorage.removeItem('lastOcrMergedText');
+    sessionStorage.removeItem('lastOcrIsHtml');
+    sessionStorage.removeItem('lastOcrBlocks');
+    sessionStorage.removeItem('lastOcrImageUrl');
+    sessionStorage.removeItem('lastOcrImageSize');
+    sessionStorage.removeItem('lastOcrConfidence');
+  };
 
+  const processNotes = async () => {
     // Step 1 — Upload
     setStep('upload', 'active');
     const saved = await uploadOne(uploadedFiles[0]);
-    if (bail()) return;
-    uploadedIdRef.current = saved._id;
     sessionStorage.setItem('lastUploadId', saved._id);
     setStep('upload', 'done');
 
     const first = uploadedFiles[0];
-    if (first?.file?.type?.startsWith('image/')) {
 
-      // Step 2 — Preprocess
-      setStep('preprocess', 'active');
-      await new Promise(r => setTimeout(r, 400));
-      if (bail()) return;
-      setStep('preprocess', 'done');
+    // Step 2 — Preprocess (same for images and PDFs)
+    setStep('preprocess', 'active');
+    await new Promise(r => setTimeout(r, 400));
+    setStep('preprocess', 'done');
 
-      // Step 3 — OCR
-      setStep('ocr', 'active');
-      try {
-        const ocrData = await runOcr(first.file, OCR_ENGINE);
-        if (bail()) return;
-        console.log('OCR response:', ocrData);
-
-        const ocrBase = import.meta.env.VITE_OCR_URL || 'http://localhost:8000';
-        const prefixUrl = (url) => url ? (url.startsWith('http') ? url : `${ocrBase}${url}`) : '';
-
-        const rawText     = ocrData?.merged_text || ocrData?.text || '';
-        const displayText = marked(rawText);
-
-        const firstLine = rawText.split('\n').map(l => l.trim()).find(l => l.length > 2) || '';
-        const autoTitle = firstLine.replace(/[#*_`>|-]/g, '').trim().slice(0, 60);
-        if (autoTitle) sessionStorage.setItem('lastOcrAutoTitle', autoTitle);
-
-        sessionStorage.setItem('lastOcrEngine',     OCR_ENGINE);
-        sessionStorage.setItem('lastOcrOverlayUrl', prefixUrl(ocrData?.overlay_url));
-        sessionStorage.setItem('lastOcrMergedText', displayText);
-        sessionStorage.setItem('lastOcrIsHtml',     'true');
-        sessionStorage.setItem('lastOcrBlocks',     JSON.stringify(ocrData?.blocks     || []));
-        sessionStorage.setItem('lastOcrImageUrl',   prefixUrl(ocrData?.image_url || ocrData?.original_url));
-        sessionStorage.setItem('lastOcrImageSize',  JSON.stringify(ocrData?.image_size || [0, 0]));
-
-        // ── Confidence ────────────────────────────────────────────────────────
-        // For Chandra: items is always [], so fall through to ocrData.confidence.
-        // The backend converts parse_quality_score (0–5) → quality_score (0–1).
-        // We multiply by 100 to get a 0–100 integer for display.
-        // Only store in sessionStorage when we actually have a valid number —
-        // storing '' or 'null' causes parseConfidence() in ResultsPage to return
-        // null and hides the pill even when a real value is present later.
-        // Chandra only — use real quality_score from Datalab (0–1 scale).
-        // Pill stays hidden if Datalab doesn't provide a score.
-        let avgConfidence = null;
-        if (ocrData?.confidence != null && !isNaN(Number(ocrData.confidence))) {
-          avgConfidence = Math.round(Number(ocrData.confidence) * 100);
-        }
-
-        if (avgConfidence !== null) {
-          sessionStorage.setItem('lastOcrConfidence', String(avgConfidence));
-        } else {
-          sessionStorage.removeItem('lastOcrConfidence');
-        }
-
-      } catch (ocrErr) {
-        if (bail()) return;
-        console.warn('OCR service unavailable, skipping:', ocrErr.message);
-        sessionStorage.removeItem('lastOcrEngine');
-        sessionStorage.removeItem('lastOcrOverlayUrl');
-        sessionStorage.removeItem('lastOcrMergedText');
-        sessionStorage.removeItem('lastOcrIsHtml');
-        sessionStorage.removeItem('lastOcrBlocks');
-        sessionStorage.removeItem('lastOcrImageUrl');
-        sessionStorage.removeItem('lastOcrImageSize');
-        sessionStorage.removeItem('lastOcrConfidence');
-      }
-      if (bail()) return;
-      setStep('ocr', 'done');
-
-      // Step 4 — Generating results
-      setStep('results', 'active');
-      await new Promise(r => setTimeout(r, 300));
-      if (bail()) return;
-      setStep('results', 'done');
-
-    } else {
-      // PDF — skip OCR steps
-      setStep('preprocess', 'done');
-      if (bail()) return;
-      setStep('ocr', 'done');
-      setStep('results', 'active');
-      await new Promise(r => setTimeout(r, 300));
-      if (bail()) return;
-      setStep('results', 'done');
-      sessionStorage.removeItem('lastOcrEngine');
-      sessionStorage.removeItem('lastOcrOverlayUrl');
-      sessionStorage.removeItem('lastOcrMergedText');
-      sessionStorage.removeItem('lastOcrIsHtml');
-      sessionStorage.removeItem('lastOcrBlocks');
-      sessionStorage.removeItem('lastOcrImageUrl');
-      sessionStorage.removeItem('lastOcrImageSize');
-      sessionStorage.removeItem('lastOcrConfidence');
+    // Step 3 — OCR (runs for both images and PDFs)
+    setStep('ocr', 'active');
+    try {
+      await runOcrAndStore(first.file);
+    } catch (ocrErr) {
+      console.warn('OCR unavailable, skipping:', ocrErr.message);
+      clearOcrStorage();
     }
+    setStep('ocr', 'done');
+
+    // Step 4 — Generating results
+    setStep('results', 'active');
+    await new Promise(r => setTimeout(r, 300));
+    setStep('results', 'done');
 
     await new Promise(r => setTimeout(r, 400));
-    if (!bail()) setShowOverlay(false);
+    setShowOverlay(false);
   };
 
   const handleProcessNotes = async () => {
     setError('');
     if (uploadedFiles.length === 0) { setError('Please add a file.'); return; }
 
-    setSteps(STEPS_RESET);
+    setSteps({ upload:'pending', preprocess:'pending', ocr:'pending', results:'pending' });
     setTimedOut(false);
     setShowOverlay(true);
     setUploading(true);
 
-    const fileSizeMB  = uploadedFiles[0]?.file?.size / (1024 * 1024);
-    const timeoutMs   = getTimeoutMs(fileSizeMB);
-
-    const abortedRef    = { current: false };
-    const uploadedIdRef = { current: null };
+    let aborted = false;
 
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => {
-        abortedRef.current = true;
-        reject(new Error('Processing timed out. Please try again or use a smaller image.'));
-      }, timeoutMs)
+        aborted = true;
+        reject(new Error('Processing timed out. Please try again or use a smaller file.'));
+      }, 60000)
     );
 
     const safeProcess = async () => {
-      await processNotes(abortedRef, uploadedIdRef);
-      if (!abortedRef.current && onProcess) onProcess();
+      await processNotes();
+      if (!aborted && onProcess) onProcess();
     };
 
     try {
@@ -377,8 +311,8 @@ const UploadPage = ({ onBack, onProcess }) => {
     } catch (e) {
       console.error('handleProcessNotes:', e);
       if (e.message.includes('timed out')) {
-        deleteOrphanedUpload(uploadedIdRef.current);
         setTimedOut(true);
+        setTimeout(() => { setShowOverlay(false); if (onBack) onBack(); }, 3000);
       } else {
         setShowOverlay(false);
         setError(e.message || 'Upload failed.');
@@ -388,126 +322,55 @@ const UploadPage = ({ onBack, onProcess }) => {
     }
   };
 
-  const fileSizeMB = uploadedFiles[0]?.file?.size / (1024 * 1024) ?? 0;
-
   return (
     <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.font, color:T.cream }}>
 
-      {/* ── Processing / Timeout overlay ── */}
       {showOverlay && (
         <div style={{
           position:'fixed', inset:0, background:T.bg, zIndex:999,
           display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-          gap:32, padding:'0 24px', animation:'fadeIn .2s ease both',
+          gap:32, animation:'fadeIn .2s ease both',
         }}>
-
-          {timedOut ? (
-
-            /* ── Timeout error state ── */
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:28, maxWidth:420, width:'100%', animation:'errorIn .35s ease both' }}>
-
-              <div style={{ position:'relative', width:80, height:80, flexShrink:0 }}>
-                <div style={{ position:'absolute', inset:0, borderRadius:'50%', background:'rgba(248,113,113,0.08)', border:`2px solid rgba(248,113,113,0.25)` }} />
-                <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <Icon d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" size={34} color={T.red} />
-                </div>
-              </div>
-
-              <div style={{ textAlign:'center' }}>
-                <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.red, margin:'0 0 10px', fontFamily:T.font }}>
-                  Processing Timed Out
-                </p>
-                <h2 style={{ fontFamily:T.serif, fontSize:28, fontWeight:400, color:T.cream, margin:'0 0 12px', lineHeight:1.2 }}>
-                  This is taking too long
-                </h2>
-                <p style={{ color:T.muted, fontSize:13, lineHeight:1.75, margin:0, fontFamily:T.font }}>
-                  The OCR engine didn't respond in time. This can happen with large
-                  or complex images. Try uploading a smaller or clearer image and
-                  try again.
-                </p>
-              </div>
-
-              <div style={{ display:'flex', flexDirection:'column', gap:8, width:'100%' }}>
-                <StepRow label="Uploading file"         status={steps.upload}     />
-                <StepRow label="Preprocessing image"    status={steps.preprocess} />
-                <StepRow label="Running Chandra engine" status={steps.ocr}        />
-                <StepRow label="Generating results"     status={steps.results}    />
-              </div>
-
-              <div style={{ width:'100%', height:1, background:T.border }} />
-
-              <div style={{ display:'flex', gap:10, width:'100%' }}>
-                <button
-                  className="up-btn-ghost"
-                  style={{ flex:1, justifyContent:'center' }}
-                  onClick={resetOverlay}
-                >
-                  <Icon d="M15 19l-7-7 7-7" size={13} />
-                  Back to Upload
-                </button>
-                <button
-                  className="up-btn-amber"
-                  style={{ flex:1, justifyContent:'center', borderRadius:10, padding:'9px 22px' }}
-                  onClick={() => {
-                    resetOverlay();
-                    setTimeout(handleProcessNotes, 80);
-                  }}
-                >
-                  <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={13} color="#0E1117" />
-                  Try Again
-                </button>
-              </div>
-
+          <div style={{ position:'relative', width:80, height:80, animation:'float 3s ease-in-out infinite' }}>
+            <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:`3px solid ${T.border}` }} />
+            <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:`3px solid transparent`, borderTopColor:T.amber, animation:'spin 1s linear infinite' }} />
+            <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:`3px solid transparent`, borderBottomColor:'rgba(245,166,35,.3)', animation:'spin 1.8s linear infinite reverse' }} />
+            <div style={{ position:'absolute', inset:10, borderRadius:'50%', background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={22} color={T.amber} />
             </div>
+          </div>
 
-          ) : (
+          <div style={{ textAlign:'center' }}>
+            <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color: timedOut ? T.red : T.amber, margin:'0 0 10px' }}>
+              {timedOut ? 'Timed Out' : 'Please Wait'}
+            </p>
+            <h2 style={{ fontFamily:T.serif, fontSize:32, fontWeight:400, color:T.cream, margin:'0 0 8px', lineHeight:1.1 }}>
+              {timedOut ? 'Processing Took Too Long' : 'Processing Your Notes'}
+            </h2>
+            <p style={{ color:T.muted, fontSize:13, margin:0 }}>
+              {timedOut
+                ? 'Redirecting you back…'
+                : steps.ocr     === 'active' ? 'Running Chandra engine — this is the longest step…'
+                : steps.upload  === 'active' ? 'Uploading your file…'
+                : steps.results === 'active' ? 'Finalizing results…'
+                : 'Almost there…'
+              }
+            </p>
+          </div>
 
-            /* ── Normal processing state ── */
-            <>
-              <div style={{ position:'relative', width:80, height:80, animation:'float 3s ease-in-out infinite' }}>
-                <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:`3px solid ${T.border}` }} />
-                <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:`3px solid transparent`, borderTopColor:T.amber, animation:'spin 1s linear infinite' }} />
-                <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:`3px solid transparent`, borderBottomColor:'rgba(245,166,35,.3)', animation:'spin 1.8s linear infinite reverse' }} />
-                <div style={{ position:'absolute', inset:10, borderRadius:'50%', background:T.amberDim, border:`1px solid rgba(245,166,35,.2)`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={22} color={T.amber} />
-                </div>
-              </div>
-
-              <div style={{ textAlign:'center' }}>
-                <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 10px', fontFamily:T.font }}>
-                  Please Wait
-                </p>
-                <h2 style={{ fontFamily:T.serif, fontSize:32, fontWeight:400, color:T.cream, margin:'0 0 8px', lineHeight:1.1 }}>
-                  Processing Your Notes
-                </h2>
-                <p style={{ color:T.muted, fontSize:13, margin:0, fontFamily:T.font }}>
-                  {steps.ocr === 'active'
-                    ? fileSizeMB > 10
-                      ? 'Running Chandra engine — large files may take up to a minute…'
-                      : 'Running Chandra engine — this is the longest step…'
-                    : steps.upload  === 'active' ? 'Uploading your file…'
-                    : steps.results === 'active' ? 'Finalizing results…'
-                    : 'Almost there…'}
-                </p>
-              </div>
-
-              <div style={{ display:'flex', flexDirection:'column', gap:8, width:'100%', maxWidth:360 }}>
-                <StepRow label="Uploading file"         status={steps.upload}     />
-                <StepRow label="Preprocessing image"    status={steps.preprocess} />
-                <StepRow label="Running Chandra engine" status={steps.ocr}        />
-                <StepRow label="Generating results"     status={steps.results}    />
-              </div>
-            </>
-
-          )}
+          <div style={{ display:'flex', flexDirection:'column', gap:8, width:'100%', maxWidth:360 }}>
+            <StepRow label="Uploading file"         status={steps.upload}     />
+            <StepRow label="Preprocessing file"     status={steps.preprocess} />
+            <StepRow label="Running Chandra engine" status={steps.ocr}        />
+            <StepRow label="Generating results"     status={steps.results}    />
+          </div>
         </div>
       )}
 
-      {/* ── Page content ── */}
       <div style={{ padding:'48px 40px 0', animation:'fadeUp .4s ease both' }}>
         <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, textTransform:'uppercase', color:T.amber, margin:'0 0 10px' }}>Get Started</p>
         <h1 style={{ fontFamily:T.serif, fontSize:38, fontWeight:400, margin:'0 0 8px', lineHeight:1.1, letterSpacing:'-.4px' }}>Upload Your Notes</h1>
-        <p style={{ color:T.muted, fontSize:14, margin:'0 0 40px' }}>Supports PDF, JPG, JPEG, PNG, and HEIC — up to {MAX_FILE_MB}MB</p>
+        <p style={{ color:T.muted, fontSize:14, margin:'0 0 40px' }}>Supports PDF, JPG, JPEG, PNG, and HEIC</p>
       </div>
 
       <div style={{ padding:'0 40px 64px', animation:'fadeUp .4s ease .1s both' }}>
