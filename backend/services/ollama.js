@@ -321,8 +321,55 @@ async function generateFlashcards(text) {
   return cleanedCards;
 }
 
+function stripHtml(html) {
+  return String(html || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+async function generateQuiz(text) {
+  const cleanText = stripHtml(text); 
+  const context = buildContextWindow(cleanText, Number(process.env.OLLAMA_SOURCE_MAX_CHARS || 7000)); 
+  const count = Math.floor(Math.random() * 5) + 3;
+  const prompt = [
+  `Create ${count} multiple choice quiz questions based strictly on the notes below.`,
+  'Return a JSON array only. No explanation, no markdown, no code fences.',
+  'Each item must follow this exact shape:',
+  '{ "itemId": "q1", "question": "<question based on the notes>", "options": ["<option 1>", "<option 2>", "<option 3>", "<option 4>"], "correctAnswer": "<exact text of correct option>", "explanation": "<one sentence explanation>" }',
+  'Rules:',
+  '- ALL questions must come directly from the notes below, do not invent topics',
+  '- options must have exactly 4 full sentence or phrase answers, NOT letters like A B C D',
+  '- correctAnswer must be the exact text of the correct option copied verbatim',
+  '- explanation must be 1 sentence explaining why the answer is correct',
+  '',
+  'NOTES:',
+  context,
+].join('\n');
+
+  const raw = await callAI(prompt);
+  const parsed = parseJsonPayload(raw);
+  const questions = Array.isArray(parsed) ? parsed : [];
+
+  return questions
+    .map((q, i) => ({
+      itemId:        q.itemId || `q${i + 1}`,
+      question:      String(q.question || '').trim(),
+      options:       Array.isArray(q.options) ? q.options.map(String) : [],
+      correctAnswer: String(q.correctAnswer || '').trim(),
+      explanation:   String(q.explanation || '').trim(),
+    }))
+    .filter(q => q.question && q.options.length === 4 && q.correctAnswer)
+    .slice(0, count);
+}
+
 module.exports = {
   getOllamaConfig,
   generateSummary,
   generateFlashcards,
+  generateQuiz,
 };
