@@ -77,7 +77,7 @@ describe('ResultsPage', () => {
     it('renders the top bar', async () => {
       setupFetch();
       renderResults();
-      await waitFor(() => expect(screen.getByText('Processing Complete')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('OCR Results')).toBeInTheDocument());
     });
 
     it('renders the title from file data', async () => {
@@ -117,7 +117,7 @@ describe('ResultsPage', () => {
     it('renders with noteId prop instead of sessionStorage', async () => {
       setupFetch();
       render(<ResultsPage onBack={vi.fn()} onSave={vi.fn()} noteId="file-1" />);
-      await waitFor(() => expect(screen.getByText('Processing Complete')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('OCR Results')).toBeInTheDocument());
     });
   });
 
