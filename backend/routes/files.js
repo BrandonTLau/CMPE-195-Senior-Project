@@ -14,7 +14,7 @@ const auth = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const UploadedFile = require('../models/UploadedFile');
 const User = require('../models/User');
-const { generateSummary, generateFlashcards, getOllamaConfig } = require('../services/ollama');
+const { generateSummary, generateFlashcards, generateQuiz, getOllamaConfig } = require('../services/ollama');
 
 function requireOwnedFile(file, userId) {
   if (!file) return { err: 'File not found', status: 404 };
@@ -60,7 +60,7 @@ async function applyTextEdit(fileId, userId, field, historyKey, { previousText, 
 }
 
 async function generateRequestedContent(file, userId, contentType, sourceText) {
-  const valid = ['summary', 'flashCards', 'all'];
+  const valid = ['summary', 'flashCards', 'quiz', 'all'];
   if (!valid.includes(contentType)) {
     return { err: `contentType must be one of: ${valid.join(', ')}`, status: 400 };
   }
@@ -86,6 +86,19 @@ async function generateRequestedContent(file, userId, contentType, sourceText) {
 
   try {
     const generated = {};
+    if (contentType === 'quiz' || contentType === 'all') {
+      const questions = await generateQuiz(source);
+      const normalizedQuiz = questions.map((q, i) => ({
+        itemId:        q.itemId || `q${Date.now()}-${i + 1}`,
+        question:      q.question,
+        options:       q.options,
+        correctAnswer: q.correctAnswer,
+        explanation:   q.explanation,
+      }));
+        generated.quiz = normalizedQuiz;
+        file.aiGeneratedContent.quiz = normalizedQuiz;
+        file.currentContent.quiz = normalizedQuiz;
+    }
 
     if (contentType === 'summary' || contentType === 'all') {
       generated.summary = await generateSummary(source);

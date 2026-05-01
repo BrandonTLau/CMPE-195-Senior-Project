@@ -6,6 +6,7 @@
 #   POST /ocr_api/ocr      ?engine=paddle
 #   POST /ocr_api/ocr_v5   ?engine=chandra  (default)
 #   POST /ocr_api/ocr_v5   ?engine=paddle
+#   POST /ocr_api/mock                       (load testing only)
 #
 # Required environment variables:
 #   CHANDRA_API_KEY            Your Datalab API key (from datalab.to/app/keys)
@@ -96,12 +97,12 @@ CHANDRA_TIMEOUT_SECONDS = float(os.getenv("CHANDRA_TIMEOUT_SECONDS", "120"))
 def estimate_confidence(markdown: str) -> float:
     """
     Estimate OCR confidence from extracted text quality when Datalab does not
-    return parse_quality_score. Returns a 0.0–1.0 float.
+    return parse_quality_score. Returns a 0.0-1.0 float.
 
     Three signals are blended:
-      1. Character quality  — ratio of printable/expected chars vs garbage
-      2. Word coherence     — ratio of plausible words (2–20 chars, has letters)
-      3. Density bonus      — more words = more of the scan was readable
+      1. Character quality  - ratio of printable/expected chars vs garbage
+      2. Word coherence     - ratio of plausible words (2-20 chars, has letters)
+      3. Density bonus      - more words = more of the scan was readable
     """
     if not markdown or not markdown.strip():
         return 0.0
@@ -149,7 +150,7 @@ def run_chandra_api(input_path: Path) -> dict:
     """
     Call the Datalab hosted Chandra API.
     Returns a dict with keys: markdown, metadata, page_count, quality_score.
-    quality_score is always a 0.0–1.0 float — real from Datalab when available,
+    quality_score is always a 0.0-1.0 float — real from Datalab when available,
     estimated from text quality otherwise.
     Raises RuntimeError on failure.
     """
@@ -200,11 +201,11 @@ def run_chandra_api(input_path: Path) -> dict:
             markdown  = result.get("markdown", "")
             parse_q   = result.get("parse_quality_score")
 
-            # Use real Datalab score when available (0–5 scale → 0–1),
+            # Use real Datalab score when available (0-5 scale -> 0-1),
             # otherwise estimate from extracted text quality.
             if parse_q is not None:
                 quality_score = round(parse_q / 5, 4)
-                print(f"[Chandra] parse_quality_score from Datalab: {parse_q} → {quality_score}")
+                print(f"[Chandra] parse_quality_score from Datalab: {parse_q} -> {quality_score}")
             else:
                 quality_score = estimate_confidence(markdown)
                 print(f"[Chandra] No parse_quality_score returned — estimated: {quality_score}")
@@ -238,6 +239,45 @@ def run_chandra_api(input_path: Path) -> dict:
 def health():
     """Health check."""
     return {"ok": True}
+
+
+# -----------------------------------------------------------------------------
+# MOCK ENDPOINT — load testing only
+# Accepts the same multipart file upload as /ocr_api/ocr but never calls
+# the Datalab API. Returns instantly with a realistic fake transcription.
+# -----------------------------------------------------------------------------
+@app.post("/ocr_api/mock")
+async def mock_ocr(file: UploadFile = File(...)):
+    """Mock OCR endpoint for load testing. Does not call Chandra/Datalab."""
+    return {
+        "filename":     file.filename,
+        "engine":       "mock",
+        "text": (
+            "Lecture 5: Operating Systems - Process Scheduling\n"
+            "A process is a program in execution. The OS scheduler decides which\n"
+            "process runs next using Round Robin, FCFS, and SJF algorithms.\n"
+            "Context switching saves and restores process state (PCB).\n"
+            "Throughput: number of processes completed per unit time.\n"
+            "Turnaround time = completion time - arrival time.\n"
+            "Waiting time = turnaround time - burst time."
+        ),
+        "merged_text":  "Lecture 5: Operating Systems - Process Scheduling",
+        "markdown":     "# Lecture 5: Operating Systems\n\nA process is a program in execution.",
+        "items":        [],
+        "blocks":       [],
+        "original_url": "",
+        "image_url":    "",
+        "image_size":   [0, 0],
+        "overlay_url":  "",
+        "confidence":   0.95,
+        "metadata":     {},
+        "debug": {
+            "mode":              "mock_for_load_testing",
+            "chandra_mode":      "N/A",
+            "confidence_score":  0.95,
+            "confidence_source": "mock",
+        },
+    }
 
 
 @app.post("/ocr_api/ocr")

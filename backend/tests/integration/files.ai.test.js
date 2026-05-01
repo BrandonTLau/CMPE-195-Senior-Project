@@ -1,3 +1,22 @@
+jest.mock('../../services/ollama', () => ({
+  generateSummary: jest.fn(() => Promise.resolve("MOCK SUMMARY")),
+  generateFlashcards: jest.fn(() =>
+    Promise.resolve([{ question: "Mock Q1", answer: "Mock A1" }])
+  ),
+  generateQuiz: jest.fn(() =>
+    Promise.resolve([
+      {
+        itemId: "q1",
+        question: "Mock Q",
+        options: ["A", "B"],
+        correctAnswer: "A",
+        explanation: "Mock explanation"
+      }
+    ])
+  ),
+  getOllamaConfig: jest.fn(() => ({ model: "mock-model" }))
+}));
+
 const request = require('supertest');
 const buildApp = require('../../app');
 const UploadedFile = require('../../models/UploadedFile');

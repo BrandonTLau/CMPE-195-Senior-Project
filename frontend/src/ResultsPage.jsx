@@ -1050,46 +1050,140 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
 
           {/* Quiz */}
           {activeTab === 'quiz' && (() => {
-            const q            = quizQuestions[quizCurrent];
-            const correctCount = quizQuestions.filter((qq, i) => quizAnswers[i] === (qq.correctIndex ?? qq.correct_index ?? 0)).length;
-            const pct          = quizQuestions.length ? Math.round(correctCount / quizQuestions.length * 100) : 0;
-            const answeredAll  = Object.keys(quizAnswers).length === quizQuestions.length;
-            const scoreColor   = pct >= 70 ? T.green : T.amber;
+  const answeredAll = Object.keys(quizAnswers).length === quizQuestions.length && quizQuestions.length > 0;
+  const q = quizQuestions[quizCurrent];
 
-            return (
-              <div key="quiz" className="ns-tab-panel">
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:20, flexWrap:'wrap' }}>
-                  <p style={{ margin:0, fontSize:13, color:T.muted }}>Generate a multiple choice quiz from your scanned notes.</p>
-                  <button className="ns-btn-amber" disabled style={{ padding:'9px 16px', opacity:0.4 }}>
-                    <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} />
-                    Generate Quiz
+  return (
+    <div key="quiz" className="ns-tab-panel">
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:20, flexWrap:'wrap' }}>
+        <p style={{ margin:0, fontSize:13, color:T.muted }}>Generate a multiple choice quiz from your scanned notes.</p>
+        <button
+          className={quizQuestions.length ? 'ns-regen' : 'ns-btn-amber'}
+          onClick={generateQuiz}
+          disabled={quizBusy || !recognizedText.trim()}
+          style={quizQuestions.length ? undefined : { padding:'9px 16px' }}>
+          {quizBusy
+            ? <Spinner size={12} color={quizQuestions.length ? T.amber : '#0E1117'} />
+            : <Icon d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" size={12} />}
+          {quizBusy ? 'Generating…' : quizQuestions.length ? 'Regenerate Quiz' : 'Generate Quiz'}
+        </button>
+      </div>
+
+      {quizError && (
+        <div style={{ marginBottom:12, padding:'10px 12px', borderRadius:10, border:'1px solid rgba(248,113,113,.35)', background:'rgba(248,113,113,.08)', color:'#FCA5A5', fontSize:13 }}>
+          {quizError}
+        </div>
+      )}
+
+      {quizQuestions.length === 0 && !quizBusy && (
+        <div style={{ background:T.surfaceHi, border:`1px dashed ${T.borderHi}`, borderRadius:14, padding:'28px 24px', textAlign:'center', color:T.muted }}>
+          No quiz yet. Click Generate Quiz when you are ready.
+        </div>
+      )}
+
+      {quizQuestions.length > 0 && !quizSubmitted && q && (
+        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+          {/* Progress */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <span style={{ fontSize:12, color:T.muted, fontFamily:T.font }}>
+              Question {quizCurrent + 1} of {quizQuestions.length}
+            </span>
+            <div style={{ display:'flex', gap:4 }}>
+              {quizQuestions.map((_, i) => (
+                <div key={i} onClick={() => setQuizCurrent(i)} style={{
+                  width:28, height:6, borderRadius:99, cursor:'pointer',
+                  background: quizAnswers[i] !== undefined
+                    ? T.amber
+                    : i === quizCurrent ? T.cream : T.border,
+                  transition:'background .2s'
+                }} />
+              ))}
+            </div>
+          </div>
+
+          {/* Question */}
+          <div style={{ background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:14, padding:'24px 28px' }}>
+            <p style={{ fontFamily:T.serif, fontSize:20, color:T.cream, margin:'0 0 20px', lineHeight:1.4 }}>{q.question}</p>
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              {(q.options || []).map((option, oi) => {
+                const isSelected = quizAnswers[quizCurrent] === option;
+                return (
+                  <button key={oi} onClick={() => {
+                    if (quizSubmitted) return;
+                    setQuizAnswers(prev => ({ ...prev, [quizCurrent]: option }));
+                  }} style={{
+                    textAlign:'left', padding:'12px 16px', borderRadius:10, cursor:'pointer',
+                    fontFamily:T.font, fontSize:14, color: isSelected ? T.amber : T.cream,
+                    background: isSelected ? T.amberDim : T.bg,
+                    border: `1px solid ${isSelected ? T.amber : T.border}`,
+                    transition:'all .15s'
+                  }}>
+                    {option}
                   </button>
-                </div>
+                );
+              })}
+            </div>
+          </div>
 
-                {/* Coming soon state */}
-                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:20, padding:'60px 0' }}>
-                  <div style={{ position:'relative', width:80, height:80 }}>
-                    <div style={{ position:'absolute', inset:0, borderRadius:24, background:T.surfaceHi, border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                      <Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" size={32} color={T.muted} />
-                    </div>
-                    <div style={{ position:'absolute', top:-8, right:-8, width:28, height:28, borderRadius:99, background:T.amberDim, border:`1px solid rgba(245,166,35,.3)`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                      <Icon d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" size={14} color={T.amber} />
-                    </div>
-                  </div>
-                  <div style={{ textAlign:'center', maxWidth:320 }}>
-                    <p style={{ fontFamily:T.serif, fontSize:22, fontWeight:400, color:T.cream, margin:'0 0 8px' }}>Quiz coming soon</p>
-                    <p style={{ fontFamily:T.font, fontSize:13, color:T.muted, margin:0, lineHeight:1.7 }}>
-                      Quiz generation is currently in development. In the meantime, try the{' '}
-                      <button onClick={() => setActiveTab('flashcards')} style={{ background:'none', border:'none', cursor:'pointer', color:T.amber, fontFamily:T.font, fontSize:13, fontWeight:600, padding:0 }}>
-                        Flashcards
-                      </button>
-                      {' '}tab to study your notes.
-                    </p>
-                  </div>
-                </div>
+          {/* Navigation */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <button className="ns-btn-ghost" onClick={() => setQuizCurrent(c => Math.max(0, c - 1))} disabled={quizCurrent === 0} style={{ opacity: quizCurrent === 0 ? 0.4 : 1 }}>
+              <Icon d="M15 19l-7-7 7-7" size={14} /> Previous
+            </button>
+            {quizCurrent < quizQuestions.length - 1 ? (
+              <button className="ns-btn-ghost" onClick={() => setQuizCurrent(c => c + 1)}>
+                Next <Icon d="M9 5l7 7-7 7" size={14} />
+              </button>
+            ) : (
+              <button className="ns-btn-amber" onClick={() => setQuizSubmitted(true)} disabled={!answeredAll} style={{ opacity: answeredAll ? 1 : 0.4 }}>
+                Submit Quiz
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {quizSubmitted && (
+        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+          {/* Score */}
+          <div style={{ background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:14, padding:'24px 28px', textAlign:'center' }}>
+            {(() => {
+              const correct = quizQuestions.filter((qq, i) => quizAnswers[i] === qq.correctAnswer).length;
+              const pct = Math.round(correct / quizQuestions.length * 100);
+              const color = pct >= 70 ? T.green : T.amber;
+              return (
+                <>
+                  <p style={{ fontFamily:T.serif, fontSize:32, color, margin:'0 0 4px' }}>{pct}%</p>
+                  <p style={{ fontFamily:T.font, fontSize:14, color:T.muted, margin:'0 0 16px' }}>{correct} of {quizQuestions.length} correct</p>
+                  <button className="ns-btn-ghost" onClick={() => { setQuizAnswers({}); setQuizSubmitted(false); setQuizCurrent(0); }}>
+                    Retake Quiz
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Review */}
+          {quizQuestions.map((qq, i) => {
+            const userAns = quizAnswers[i];
+            const isCorrect = userAns === qq.correctAnswer;
+            return (
+              <div key={i} style={{ background:T.surfaceHi, border:`1px solid ${isCorrect ? 'rgba(52,211,153,.3)' : 'rgba(248,113,113,.3)'}`, borderRadius:14, padding:'20px 24px' }}>
+                <p style={{ fontFamily:T.font, fontSize:13, fontWeight:600, color: isCorrect ? T.green : '#F87171', margin:'0 0 8px' }}>
+                  {isCorrect ? '✓ Correct' : '✗ Incorrect'}
+                </p>
+                <p style={{ fontFamily:T.serif, fontSize:16, color:T.cream, margin:'0 0 12px' }}>{qq.question}</p>
+                <p style={{ fontSize:13, color:T.muted, margin:'0 0 4px' }}>Your answer: <span style={{ color: isCorrect ? T.green : '#F87171' }}>{userAns || 'Not answered'}</span></p>
+                {!isCorrect && <p style={{ fontSize:13, color:T.muted, margin:'0 0 4px' }}>Correct answer: <span style={{ color:T.green }}>{qq.correctAnswer}</span></p>}
+                {qq.explanation && <p style={{ fontSize:12, color:T.muted, margin:'8px 0 0', fontStyle:'italic' }}>{qq.explanation}</p>}
               </div>
             );
-          })()}
+          })}
+        </div>
+      )}
+    </div>
+  );
+})()}
 
         </div>
       </div>
