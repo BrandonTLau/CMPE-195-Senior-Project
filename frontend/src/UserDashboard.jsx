@@ -120,7 +120,11 @@ const toNote = (file) => ({
   preview:      file.currentContent?.transcribedText || '',
   aiSummary:    file.currentContent?.summary        || null,
   tags:         file.tags      ?? [],
-  confidence:   file.confidence ?? 85,
+  confidence: (() => {
+  const raw = file.extractionData?.extractionAccuracy ?? null;
+  if (raw === null) return null;
+  return raw > 1 ? Math.round(raw) : Math.round(raw * 100);
+})(),
   favorite:     file.isFavorite ?? false,
   deleted:      file.isDeleted  ?? false,
   fileLocation: file.fileLocation || null,
@@ -564,7 +568,7 @@ const NoteCard = ({ note, onOpen, onToggleFavorite, onDelete, onUpdateTags, fold
         <div style={{ marginTop:'auto', paddingTop:10 }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
             <div style={{ display:'flex', alignItems:'center', gap:6, minWidth:0 }}>
-              <ConfidencePill score={note.confidence} />
+              {note.confidence !== null && <ConfidencePill score={note.confidence} />}
               {folderName && (
                 <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, fontWeight:500, color:T.muted, fontFamily:T.font, background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:99, padding:'2px 8px', maxWidth:100, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flexShrink:1 }}>
                   <Icon d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" size={10} color={T.muted} />

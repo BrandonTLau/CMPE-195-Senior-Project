@@ -182,7 +182,11 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     //const files = await UploadedFile.find({ userID: req.user.id })
-    const files = await UploadedFile.find({ userID: req.user.id, isDeleted: { $ne: true } })
+    const files = await UploadedFile.find({ 
+      userID: req.user.id, 
+      isDeleted: { $ne: true },
+    'currentContent.transcribedText': { $ne: '' }
+    })
       .sort({ uploadDate: -1 })
       .select('-editHistory -extractionData.rawText -aiGeneratedContent');
     res.json(files);
@@ -236,12 +240,13 @@ router.patch('/:id/meta', auth, async (req, res) => {
     const access = requireOwnedFile(file, req.user.id);
     if (access) return res.status(access.status).json({ msg: access.err });
 
-    const { title, tags, isFavorite, isDeleted, folderId } = req.body;
+    const { title, tags, isFavorite, isDeleted, folderId, confidence } = req.body;
     if (title !== undefined) file.title = title;
     if (tags !== undefined) file.tags = tags;
     if (isFavorite !== undefined) file.isFavorite = isFavorite;
     if (isDeleted !== undefined) file.isDeleted = isDeleted;
     if (folderId  !== undefined) file.folderId  = folderId;
+    if (confidence !== undefined) file.extractionData.extractionAccuracy = confidence;
     await file.save();
     res.json(file);
   } catch (err) {

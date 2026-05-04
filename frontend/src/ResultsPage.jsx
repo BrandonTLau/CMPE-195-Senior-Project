@@ -355,6 +355,7 @@ function RichTextEditor({ initialText, initialHtml, onSave, onLiveChange, isFull
 
   const handleInput = () => {
     if (!editorRef.current) return;
+    document.execCommand('defaultParagraphSeparator', false, 'p');
     const html = editorRef.current.innerHTML;
     const text = editorRef.current.innerText;
     setEditorHTML(html); setCharCount(text.length); setIsDirty(true); updateFormats();
@@ -363,7 +364,7 @@ function RichTextEditor({ initialText, initialHtml, onSave, onLiveChange, isFull
 
   const handleSave = () => {
     setIsDirty(false);
-    onSave({ newText: editorRef.current?.innerText || '', html: editorHTML, previousText: initialText });
+    onSave({ newText: editorRef.current?.innerHTML || '', html: editorHTML, previousText: ' ' });
   };
 
   const toolbar = (fullscreen = false) => (
@@ -691,6 +692,9 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
   const [ocrImageUrl,         setOcrImageUrl]         = useState(sessionStorage.getItem('lastOcrImageUrl')   || '');
 
   useEffect(() => { cardsRef.current = cards; }, [cards]);
+  useEffect(() => {
+  setIsSaved(false);
+}, [title, recognizedText, aiSummary, cards, quizQuestions]);
 
   useEffect(() => {
     if (!fileId) return;
@@ -703,15 +707,38 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
       })
       .then((data) => {
         setFileData(data);
+        console.log('[Confidence] data.confidence:', data.confidence);
+console.log('[Confidence] extractionAccuracy:', data.extractionData?.extractionAccuracy);
         if (data.title) setTitle(data.title);
         else if (data.originalName) setTitle(data.originalName.replace(/\.[^/.]+$/, ''));
         if (data.confidence) setConfidence(data.confidence);
+        else if (data.extractionData?.extractionAccuracy) setConfidence(data.extractionData.extractionAccuracy);
 
         const storedMergedText = !noteId ? sessionStorage.getItem('lastOcrMergedText') : '';
-        const isHtml           = !noteId && sessionStorage.getItem('lastOcrIsHtml') === 'true';
+        
         const resolvedText    = storedMergedText || data.currentContent?.transcribedText || data.extractionData?.rawText || '';
+        const isHtml = (!noteId && sessionStorage.getItem('lastOcrIsHtml') === 'true') || resolvedText.trim().startsWith('<'); // detect saved HTML
+        setRecognizedText(resolvedText);
+        setRecognizedTextIsHtml(isHtml);
         const resolvedSummary = data.currentContent?.summary || data.aiGeneratedContent?.summary || '';
         const resolvedCards   = data.currentContent?.flashCards || data.aiGeneratedContent?.flashCards || [];
+        const resolvedQuiz = data.currentContent?.quiz || data.aiGeneratedContent?.quiz || [];
+        if (resolvedQuiz.length) {
+          setQuizQuestions(resolvedQuiz);
+          // Restore saved progress if it exists
+          const saved = localStorage.getItem(`quiz_progress_${fileId}`);
+        if (saved) {
+          try {
+            const progress = JSON.parse(saved);
+            // Only restore if questions match what's saved
+        if (progress.quizQuestions?.length === resolvedQuiz.length) {
+          setQuizAnswers(progress.quizAnswers || {});
+          setQuizSubmitted(progress.quizSubmitted || false);
+          setQuizCurrent(progress.quizCurrent || 0);
+        }
+    } catch (e) { /* ignore corrupt data */ }
+  }
+}
         const learnedMap      = toLearnedMap(cardsRef.current);
 
         setRecognizedText(resolvedText);
@@ -831,7 +858,7 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
   const generateQuiz = async () => {
     if (!fileId) return;
     if (!recognizedText.trim()) { setQuizError('No OCR text available yet.'); return; }
-    setQuizBusy(true); setQuizError(''); setQuizAnswers({}); setQuizSubmitted(false);
+    setQuizBusy(true); localStorage.removeItem(`quiz_progress_${fileId}`);setQuizError(''); setQuizAnswers({}); setQuizSubmitted(false); setQuizCurrent(0);
     try {
       const res  = await fetch(`/api/files/${fileId}/generate`, { method:'POST', headers, body:JSON.stringify({ contentType:'quiz', sourceText: recognizedText }) });
       const data = await res.json();
@@ -906,16 +933,23 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
           </div>
           <button className="ns-btn-amber" disabled={isSaved} style={{ opacity: isSaved ? 0.7 : 1 }}
             onClick={async () => {
-              if (!fileId) { if (onSave) onSave(); return; }
-              try {
-                await fetch(`/api/files/${fileId}/meta`, { method:'PATCH', headers, body:JSON.stringify({ title }) });
-                await fetch(`/api/files/${fileId}/edit/transcription`, { method:'PUT', headers, body:JSON.stringify({ newText: liveTextRef.current || recognizedText }) });
-                if (aiSummary) await fetch(`/api/files/${fileId}/edit/summary`, { method:'PUT', headers, body:JSON.stringify({ newText: aiSummary }) });
-                if (cards.length) await fetch(`/api/files/${fileId}/edit/flashcards`, { method:'PUT', headers, body:JSON.stringify({ cards: serializeFlashcards(cards) }) });
-                setIsSaved(true);
-                if (onSave) onSave();
-              } catch (err) { console.error('Failed to save notes:', err); }
-            }}>
+  if (!fileId) { if (onSave) onSave(); return; }
+  try {
+    await fetch(`/api/files/${fileId}/meta`, { method:'PATCH', headers, body:JSON.stringify({ title }) });
+    await fetch(`/api/files/${fileId}/edit/transcription`, { method:'PUT', headers, body:JSON.stringify({ newText: liveHtmlRef.current || recognizedText, previousText: ' ' }) });
+    if (aiSummary) await fetch(`/api/files/${fileId}/edit/summary`, { method:'PUT', headers, body:JSON.stringify({ newText: aiSummary, previousText: ' ' }) });
+    if (cards.length) await fetch(`/api/files/${fileId}/edit/flashcards`, { method:'PUT', headers, body:JSON.stringify({ cards: serializeFlashcards(cards) }) });
+    if (quizQuestions.length) await fetch(`/api/files/${fileId}/edit/flashcards`, { method:'PUT', headers, body:JSON.stringify({ cards: serializeFlashcards(cards) }) });
+    localStorage.setItem(`quiz_progress_${fileId}`, JSON.stringify({
+  quizAnswers,
+  quizSubmitted,
+  quizCurrent,
+  quizQuestions,
+}));
+    setIsSaved(true);
+    if (onSave) onSave();
+  } catch (err) { console.error('Failed to save notes:', err); }
+}}>
             {isSaved
               ? <><Icon d="M5 13l4 4L19 7" size={14} color="#0E1117" />Saved</>
               : <><Icon d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" size={14} color="#0E1117" />Save Notes</>
@@ -933,11 +967,12 @@ const ResultsPage = ({ onBack, onSave, noteId }) => {
             <p style={{ color:T.muted, fontSize:14, margin:0 }}>Your notes have been scanned and processed successfully.</p>
           </div>
           {(confidence !== null || engineLabel) && (
-            <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 16px', background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:99, flexShrink:0 }}>
-              
-              {confidence !== null && <span style={{ fontSize:13, fontWeight:600, color:T.cream }}>{confidence}% Confidence</span>}
-            </div>
-          )}
+  <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 16px', background:T.surfaceHi, border:`1px solid ${T.border}`, borderRadius:99, flexShrink:0 }}>
+    {confidence !== null && <span style={{ fontSize:13, fontWeight:600, color:T.cream }}>
+      {confidence > 1 ? confidence : Math.round(confidence * 100)}% Confidence
+    </span>}
+  </div>
+)}
         </div>
 
         {/* Tab bar */}

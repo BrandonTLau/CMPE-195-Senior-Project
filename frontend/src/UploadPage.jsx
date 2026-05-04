@@ -265,14 +265,33 @@ const UploadPage = ({ onBack, onProcess }) => {
     setStep('preprocess', 'done');
 
     // Step 3 — OCR (runs for both images and PDFs)
-    setStep('ocr', 'active');
-    try {
-      await runOcrAndStore(first.file);
-    } catch (ocrErr) {
-      console.warn('OCR unavailable, skipping:', ocrErr.message);
-      clearOcrStorage();
-    }
-    setStep('ocr', 'done');
+setStep('ocr', 'active');
+try {
+  await runOcrAndStore(first.file);
+
+  // Auto-save confidence score to MongoDB
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  const headers = token
+    ? { 'Content-Type': 'application/json', 'x-auth-token': token }
+    : { 'Content-Type': 'application/json' };
+
+  const savedConfidence = sessionStorage.getItem('lastOcrConfidence');
+  console.log('[UploadPage] savedConfidence:', savedConfidence, 'fileId:', saved._id);
+  if (savedConfidence && saved._id) {
+    const confRes = await fetch(`/api/files/${saved._id}/meta`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ confidence: Number(savedConfidence) }),
+    });
+    const confData = await confRes.json();
+    console.log('[UploadPage] confidence save response:', confRes.status, confData);
+  }
+
+} catch (ocrErr) {
+  console.warn('OCR unavailable, skipping:', ocrErr.message);
+  clearOcrStorage();
+}
+setStep('ocr', 'done');
 
     // Step 4 — Generating results
     setStep('results', 'active');
