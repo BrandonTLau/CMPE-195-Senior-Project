@@ -15,10 +15,24 @@ function App() {
     setScreen(s);
   };
 
-  const handleNoteSelect = (id) => {
+/*   const handleNoteSelect = (id) => {
     sessionStorage.setItem('selectedNoteId', id);
     setSelectedNoteId(id);
     navigate("note_results");
+
+  }; */
+
+  const handleNoteSelect = (noteOrId) => {
+    const id = typeof noteOrId === 'string'
+      ? noteOrId
+      : (noteOrId?._id || noteOrId?.id || null);
+    if (!id) {
+      console.warn('handleNoteSelect called without a valid id:', noteOrId);
+      return;
+    }
+    setSelectedNoteId(id);
+    sessionStorage.setItem('selectedNoteId', id);
+    setScreen('note_results');
   };
 
   const handleLogout = () => {
