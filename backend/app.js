@@ -15,10 +15,12 @@ function buildApp() {
   }));
 
   app.use(express.json({ limit: '10mb' }));
+
+  // LOCAL/RENDER FILE UPLOADS -----------------
   //app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
   // CORS headers to account for .pdf files
-  app.use('/uploads', (req, res, next) => {
+/*   app.use('/uploads', (req, res, next) => {
   const origin = req.headers.origin;
   if (origin) {
     res.setHeader('Access-Control-Allow-Origin', origin);
@@ -26,7 +28,8 @@ function buildApp() {
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   }
   next();
-}, express.static(path.join(__dirname, 'uploads')));
+  }, express.static(path.join(__dirname, 'uploads'))); */
+  // ------------------------------------------
 
   app.use('/api/auth', require('./routes/auth'));
   app.use('/api/files', require('./routes/files'));

@@ -6,3 +6,6 @@ ocr_backend/uploads/
 ocr_backend/output/
 backend/uploads/
 stress-tests/*.json
+# Environment files
+backend/.env
+.env

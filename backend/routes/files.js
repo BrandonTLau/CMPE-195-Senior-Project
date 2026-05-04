@@ -16,6 +16,8 @@ const UploadedFile = require('../models/UploadedFile');
 const User = require('../models/User');
 const { generateSummary, generateFlashcards, generateQuiz, getOllamaConfig } = require('../services/ollama');
 
+const { uploadToS3, getPresignedUrl, deleteFromS3 } = require('../services/s3'); // moves uploads to AWS S3
+
 function requireOwnedFile(file, userId) {
   if (!file) return { err: 'File not found', status: 404 };
   if (file.userID.toString() !== userId) return { err: 'Access denied', status: 403 };
@@ -149,6 +151,9 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
     const userId = req.user.id;
     const uploadId = req.uploadId;
 
+    const s3Key = `${userId}/${uploadId}/${req.file.originalname}`;
+    await uploadToS3(req.file.buffer, s3Key, req.file.mimetype);
+
     const newFile = new UploadedFile({
       uploadId,
       userID: userId,
@@ -156,7 +161,8 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
       fileType: req.file.mimetype.startsWith('image/') ? 'image' : 'pdf',
       mimeType: req.file.mimetype,
       fileSize: req.file.size,
-      fileLocation: path.join('uploads', userId, uploadId, req.file.originalname),
+      //fileLocation: path.join('uploads', userId, uploadId, req.file.originalname), // local upload
+      fileLocation: s3Key, // AWS S3 upload
       folderPath: `${userId}/${uploadId}`,
       contentType: req.file.mimetype === 'application/pdf' ? 'pdf' : 'unknown',
       status: 'uploaded',
@@ -182,7 +188,11 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     //const files = await UploadedFile.find({ userID: req.user.id })
-    const files = await UploadedFile.find({ userID: req.user.id, isDeleted: { $ne: true } })
+    const files = await UploadedFile.find({ 
+      userID: req.user.id, 
+      isDeleted: { $ne: true },
+    'currentContent.transcribedText': { $ne: '' }
+    })
       .sort({ uploadDate: -1 })
       .select('-editHistory -extractionData.rawText -aiGeneratedContent');
     res.json(files);
@@ -218,6 +228,9 @@ router.get('/:id', auth, async (req, res) => {
     const file = await UploadedFile.findById(req.params.id);
     const access = requireOwnedFile(file, req.user.id);
     if (access) return res.status(access.status).json({ msg: access.err });
+
+    const fileObj = file.toObject(); // AWS S3
+    fileObj.fileUrl = await getPresignedUrl(file.fileLocation); // AWS S3
     res.json(file);
   } catch (err) {
     console.error('Get file error:', err.message);
@@ -236,12 +249,13 @@ router.patch('/:id/meta', auth, async (req, res) => {
     const access = requireOwnedFile(file, req.user.id);
     if (access) return res.status(access.status).json({ msg: access.err });
 
-    const { title, tags, isFavorite, isDeleted, folderId } = req.body;
+    const { title, tags, isFavorite, isDeleted, folderId, confidence } = req.body;
     if (title !== undefined) file.title = title;
     if (tags !== undefined) file.tags = tags;
     if (isFavorite !== undefined) file.isFavorite = isFavorite;
     if (isDeleted !== undefined) file.isDeleted = isDeleted;
     if (folderId  !== undefined) file.folderId  = folderId;
+    if (confidence !== undefined) file.extractionData.extractionAccuracy = confidence;
     await file.save();
     res.json(file);
   } catch (err) {
@@ -446,7 +460,8 @@ router.post('/:id/regenerate', auth, (req, res) => {
 // @route   DELETE /api/files/:id
 // ____________________________________________________
 router.delete('/:id', auth, async (req, res) => {
-  try {
+  // LOCAL UPLOAD STORAGE
+/*   try {
     const file = await UploadedFile.findById(req.params.id);
     const access = requireOwnedFile(file, req.user.id);
     if (access) return res.status(access.status).json({ msg: access.err });
@@ -460,7 +475,22 @@ router.delete('/:id', auth, async (req, res) => {
   } catch (err) {
     console.error('Delete error:', err.message);
     res.status(500).json({ msg: 'Server error' });
+  } */
+
+  // AWS S3 STORAGE
+  const file = await UploadedFile.findById(req.params.id);
+  const access = requireOwnedFile(file, req.user.id);
+  if (access) return res.status(access.status).json({ msg: access.err });
+
+  try {
+    await deleteFromS3(file.fileLocation);
+  } catch (s3Err) {
+    console.warn('S3 delete failed (continuing with DB delete):', s3Err.message);
   }
+
+  await UploadedFile.findByIdAndDelete(req.params.id);
+  await User.findByIdAndUpdate(req.user.id, { $pull: { fileUploads: file._id } });
+  res.json({ msg: 'File deleted' });
 });
 
 module.exports = router;

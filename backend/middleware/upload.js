@@ -5,7 +5,7 @@
 
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
+//const fs = require('fs'); // leaving for local upload handling
 const { v4: uuidv4 } = require('uuid');
 
 // ____________________________________________________
@@ -28,7 +28,8 @@ const ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.heic', '.heif'];
 // Create a folder for the specific user if it doesn't exist, 
 // or place in existing folder structure: /<userId>/<uploadId>/ 
 // req.user uuid is populated by the auth middleware before multer run
-const storage = multer.diskStorage({
+// BLOCK COMMENTED CODE BELOW HANDLES FILES UPLOADED TO LOCAL STORAGE
+/* const storage = multer.diskStorage({
   destination(req, file, cb) {
     if (!req.uploadId) req.uploadId = uuidv4();
     const userId = req.user ? req.user.id : 'guest';
@@ -39,13 +40,18 @@ const storage = multer.diskStorage({
   filename(req, file, cb) {
     cb(null, file.originalname);
   },
-});
+}); */
+
+// CODE BELOW HANDLES FILE UPLOADS TO AWS S3 INSTEAD OF LOCAL
+
+const storage = multer.memoryStorage();
 
 // ____________________________________________________
 // FILTER OUT UNSANCTIONED FILE TYPES
 // ____________________________________________________
 // fileBouncer
 const fileFilter = (req, file, cb) => {
+  if (!req.uploadId) req.uploadId = uuidv4(); // for AWS S3 storage
   const ext = path.extname(file.originalname).toLowerCase();
   if (ALLOWED_MIME_TYPES.includes(file.mimetype) || ALLOWED_EXTENSIONS.includes(ext)) {
     return cb(null, true);

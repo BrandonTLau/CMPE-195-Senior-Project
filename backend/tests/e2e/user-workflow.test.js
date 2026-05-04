@@ -88,10 +88,18 @@ describe('End-to-end user workflow', () => {
     const userB = await request(app).post('/api/auth/register')
       .send({ fullName: 'Bob', email: 'bob.iso@example.com', password: 'bobpass123' });
 
-    await request(app).post('/api/files/upload')
+    const uploadA = await request(app).post('/api/files/upload')
       .set('x-auth-token', userA.body.token).attach('file', pdfPath);
-    await request(app).post('/api/files/upload')
+    const uploadB = await request(app).post('/api/files/upload')
       .set('x-auth-token', userB.body.token).attach('file', pdfPath);
+
+    // Add transcribed text so files pass the dashboard filter
+    await request(app).put(`/api/files/${uploadA.body._id}/edit/transcription`)
+      .set('x-auth-token', userA.body.token)
+      .send({ previousText: ' ', newText: 'Alice note text' });
+    await request(app).put(`/api/files/${uploadB.body._id}/edit/transcription`)
+      .set('x-auth-token', userB.body.token)
+      .send({ previousText: ' ', newText: 'Bob note text' });
 
     const aList = await request(app).get('/api/files').set('x-auth-token', userA.body.token);
     const bList = await request(app).get('/api/files').set('x-auth-token', userB.body.token);
