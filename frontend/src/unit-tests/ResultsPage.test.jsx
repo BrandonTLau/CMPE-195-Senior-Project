@@ -162,25 +162,26 @@ describe('ResultsPage', () => {
       await waitFor(() => expect(onSave).toHaveBeenCalled());
     });
 
-    it('shows Saved state after clicking Save Notes', async () => {
-      setupFetch();
-      renderResults();
-      await waitFor(() => screen.getByText('Save Notes'));
-      fireEvent.click(screen.getByText('Save Notes'));
-      await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
-    });
+   it('shows Saved state after clicking Save Notes', async () => {
+  setupFetch();
+  renderResults();
+  await waitFor(() => screen.getByDisplayValue('Test Note')); // wait for data to load
+  fireEvent.click(screen.getByText('Save Notes'));
+  await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
+});
 
-    it('Save Notes button is disabled after saving', async () => {
-      setupFetch();
-      renderResults();
-      await waitFor(() => screen.getByText('Save Notes'));
-      fireEvent.click(screen.getByText('Save Notes'));
-      await waitFor(() => {
-        const savedBtn = screen.getByText('Saved').closest('button');
-        expect(savedBtn).toBeDisabled();
-      });
-    });
+  it('Save Notes button is disabled after saving', async () => {
+  setupFetch();
+  renderResults();
+  await waitFor(() => screen.getByDisplayValue('Test Note')); // wait for data to load
+  fireEvent.click(screen.getByText('Save Notes'));
+  await waitFor(() => {
+    const savedBtn = screen.getByText('Saved').closest('button');
+    expect(savedBtn).toBeDisabled();
   });
+});
+ });
+   
 
   // ── Export menu ──────────────────────────────────────────────
   describe('Export menu', () => {

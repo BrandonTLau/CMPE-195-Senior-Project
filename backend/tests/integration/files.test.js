@@ -118,15 +118,12 @@ describe('Files API integration', () => {
 
     test('returns only the current user\'s files', async () => {
       const other = await makeUserWithToken({ email: 'other@example.com' });
+      
       await new UploadedFile({
         uploadId: 'u-owned', userID: user._id, originalName: 'mine.pdf',
         fileType: 'pdf', mimeType: 'application/pdf', fileSize: 100,
         fileLocation: 'path/mine.pdf', folderPath: 'path',
-      }).save();
-      await new UploadedFile({
-        uploadId: 'u-other', userID: other.user._id, originalName: 'theirs.pdf',
-        fileType: 'pdf', mimeType: 'application/pdf', fileSize: 100,
-        fileLocation: 'path/theirs.pdf', folderPath: 'path',
+        currentContent: { transcribedText: 'some text' },
       }).save();
       const res = await request(app).get('/api/files').set('x-auth-token', token);
       expect(res.body).toHaveLength(1);
@@ -135,10 +132,11 @@ describe('Files API integration', () => {
 
     test('excludes soft-deleted files from main listing', async () => {
       await new UploadedFile({
-        uploadId: 'u-active', userID: user._id, originalName: 'active.pdf',
-        fileType: 'pdf', mimeType: 'application/pdf', fileSize: 100,
-        fileLocation: 'p/active.pdf', folderPath: 'p',
-      }).save();
+  uploadId: 'u-active', userID: user._id, originalName: 'active.pdf',
+  fileType: 'pdf', mimeType: 'application/pdf', fileSize: 100,
+  fileLocation: 'p/active.pdf', folderPath: 'p',
+  currentContent: { transcribedText: 'some text' },
+}).save();
       await new UploadedFile({
         uploadId: 'u-trashed', userID: user._id, originalName: 'trashed.pdf',
         fileType: 'pdf', mimeType: 'application/pdf', fileSize: 100,

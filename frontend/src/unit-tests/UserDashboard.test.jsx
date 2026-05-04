@@ -123,11 +123,11 @@ describe('UserDashboard', () => {
     });
 
     it('renders confidence score', async () => {
-      setupFetch({ active: [apiNote({ confidence: 91 })] });
-      renderDashboard();
-      await waitForLoad();
-      expect(screen.getByText('91%')).toBeInTheDocument();
-    });
+  setupFetch({ active: [apiNote({ extractionData: { extractionAccuracy: 0.91 } })] });
+  renderDashboard();
+  await waitForLoad();
+  expect(screen.getByText('91%')).toBeInTheDocument();
+});
 
     it('renders favorite star indicator for favorited notes', async () => {
       setupFetch({ active: [apiNote({ isFavorite: true })] });
@@ -241,10 +241,10 @@ describe('UserDashboard', () => {
 
   describe('Sorting', () => {
     const unsortedNotes = [
-      apiNote({ _id: 'n1', title: 'Zebra Notes', confidence: 70 }),
-      apiNote({ _id: 'n2', title: 'Apple Notes', confidence: 95 }),
-      apiNote({ _id: 'n3', title: 'Mango Notes', confidence: 85 }),
-    ];
+  apiNote({ _id: 'n1', title: 'Zebra Notes', extractionData: { extractionAccuracy: 0.70 } }),
+  apiNote({ _id: 'n2', title: 'Apple Notes', extractionData: { extractionAccuracy: 0.95 } }),
+  apiNote({ _id: 'n3', title: 'Mango Notes', extractionData: { extractionAccuracy: 0.85 } }),
+];
 
     it('sorts alphabetically A–Z', async () => {
       setupFetch({ active: unsortedNotes });
