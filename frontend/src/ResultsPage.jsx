@@ -200,7 +200,8 @@ if (!printDiv) {
   document.body.appendChild(printDiv);
 }
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+//const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
 const Icon = ({ d, size = 18, color = 'currentColor', fill = 'none' }) => (
   <svg width={size} height={size} fill={fill} stroke={color} viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
