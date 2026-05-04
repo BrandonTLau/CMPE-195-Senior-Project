@@ -463,7 +463,13 @@ const PdfViewer = ({ src }) => {
           window.pdfjsLib.GlobalWorkerOptions.workerSrc =
             'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         }
-        const doc = await window.pdfjsLib.getDocument(src).promise;
+        //const doc = await window.pdfjsLib.getDocument(src).promise;
+        const doc = await window.pdfjsLib.getDocument({
+          url: src,
+          withCredentials: false,
+          cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+          cMapPacked: true,
+        }).promise;
         if (cancelled) return;
         setPdfDoc(doc); setTotalPages(doc.numPages); setPageNum(1); setLoading(false);
       } catch (err) {
