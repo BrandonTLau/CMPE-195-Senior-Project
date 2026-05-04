@@ -26,6 +26,7 @@ function App() {
     const id = typeof noteOrId === 'string'
       ? noteOrId
       : (noteOrId?._id || noteOrId?.id || null);
+    console.log('Opening note:', id); // diagnostics log
     if (!id) {
       console.warn('handleNoteSelect called without a valid id:', noteOrId);
       return;
